@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Upload, ArrowRight, ArrowLeft, Check, AlertCircle } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface FieldMapping {
   targetField: string;
@@ -28,36 +29,19 @@ interface ImportDialogProps {
 
 type Step = "upload" | "mapping" | "preview";
 
-function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length === 0) return { headers: [], rows: [] };
+function parseFile(buffer: ArrayBuffer, fileName: string): { headers: string[]; rows: string[][] } {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const jsonData: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
-  const parseLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if ((char === "," || char === ";") && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
+  if (jsonData.length === 0) return { headers: [], rows: [] };
 
-  const headers = parseLine(lines[0]);
-  const rows = lines.slice(1).map(parseLine);
+  const headers = jsonData[0].map(h => String(h).trim());
+  const rows = jsonData.slice(1)
+    .filter(row => row.some(cell => String(cell).trim()))
+    .map(row => row.map(cell => String(cell).trim()));
+
   return { headers, rows };
 }
 
@@ -75,6 +59,7 @@ export function ImportDialog({
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [fileName, setFileName] = useState("");
+  const [parseError, setParseError] = useState("");
 
   const reset = useCallback(() => {
     setStep("upload");
@@ -82,6 +67,7 @@ export function ImportDialog({
     setRows([]);
     setMapping({});
     setFileName("");
+    setParseError("");
   }, []);
 
   const handleClose = (val: boolean) => {
@@ -89,36 +75,52 @@ export function ImportDialog({
     onOpenChange(val);
   };
 
+  const autoMap = (parsedHeaders: string[]) => {
+    const autoMapping: Record<string, string> = {};
+    for (const field of fields) {
+      const normalize = (s: string) => s.toLowerCase().replace(/[_\s\-().]/g, "");
+      const fieldKey = normalize(field.targetField);
+      const fieldLabel = normalize(field.label);
+
+      const match = parsedHeaders.find(h => {
+        const nh = normalize(h);
+        return nh === fieldKey || nh === fieldLabel ||
+          nh.includes(fieldKey) || fieldKey.includes(nh) ||
+          nh.includes(fieldLabel) || fieldLabel.includes(nh);
+      });
+      if (match) {
+        autoMapping[field.targetField] = match;
+      }
+    }
+    return autoMapping;
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setParseError("");
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const parsed = parseCSV(text);
-      setHeaders(parsed.headers);
-      setRows(parsed.rows);
+      try {
+        const buffer = event.target?.result as ArrayBuffer;
+        const parsed = parseFile(buffer, file.name);
 
-      const autoMapping: Record<string, string> = {};
-      for (const field of fields) {
-        const match = parsed.headers.find(h =>
-          h.toLowerCase().replace(/[_\s-]/g, "").includes(
-            field.targetField.toLowerCase().replace(/[_\s-]/g, "")
-          ) ||
-          field.label.toLowerCase().replace(/[_\s-]/g, "").includes(
-            h.toLowerCase().replace(/[_\s-]/g, "")
-          )
-        );
-        if (match) {
-          autoMapping[field.targetField] = match;
+        if (parsed.headers.length === 0) {
+          setParseError("No data found in the file. Make sure the first row contains column headers.");
+          return;
         }
+
+        setHeaders(parsed.headers);
+        setRows(parsed.rows);
+        setMapping(autoMap(parsed.headers));
+        setStep("mapping");
+      } catch (err) {
+        setParseError(`Failed to read file: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
-      setMapping(autoMapping);
-      setStep("mapping");
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const getMappedData = (): Record<string, string>[] => {
@@ -177,7 +179,7 @@ export function ImportDialog({
               <div className="border-2 border-dashed rounded-md p-8 text-center">
                 <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mb-3">
-                  Select a CSV or Excel-exported CSV file to import
+                  Select an Excel (.xlsx, .xls) or CSV file to import
                 </p>
                 <Input
                   type="file"
@@ -186,12 +188,18 @@ export function ImportDialog({
                   className="max-w-xs mx-auto"
                   data-testid="input-import-file"
                 />
-                {fileName && (
+                {fileName && !parseError && (
                   <p className="text-sm mt-2 text-primary font-medium">{fileName}</p>
+                )}
+                {parseError && (
+                  <div className="flex items-start gap-2 p-3 mt-3 rounded-md bg-destructive/10 text-sm text-left">
+                    <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <span>{parseError}</span>
+                  </div>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Supported formats: CSV (comma or semicolon separated). First row must contain column headers.
+                Supported formats: Excel (.xlsx, .xls) and CSV (comma or semicolon separated). First row must contain column headers.
               </p>
             </div>
           )}
