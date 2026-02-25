@@ -55,6 +55,7 @@ export interface IStorage {
   createLiveryAgreement(agreement: InsertLiveryAgreement): Promise<LiveryAgreement>;
   updateLiveryAgreement(id: string, agreement: Partial<InsertLiveryAgreement>): Promise<LiveryAgreement | undefined>;
   getBoxesWithAgreementStatus(): Promise<any[]>;
+  getAvailableHorses(): Promise<any[]>;
 
   getBillingElements(billed?: boolean): Promise<any[]>;
   getBillingElement(id: string): Promise<BillingElement | undefined>;
@@ -332,6 +333,13 @@ export class DatabaseStorage implements IStorage {
         agreementId: agreement?.id || null,
       };
     });
+  }
+
+  async getAvailableHorses(): Promise<any[]> {
+    const allHorses = await db.select().from(horses).where(eq(horses.status, "active"));
+    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const bookedHorseIds = new Set(activeAgreements.map(a => a.horseId));
+    return allHorses.filter(h => !bookedHorseIds.has(h.id));
   }
 
   async getBillingElements(billed?: boolean): Promise<any[]> {

@@ -234,6 +234,11 @@ export async function registerRoutes(
     res.json(boxes);
   });
 
+  app.get("/api/horses/available", async (_req, res) => {
+    const available = await storage.getAvailableHorses();
+    res.json(available);
+  });
+
   // Billing Elements
   app.get("/api/billing-elements", async (req, res) => {
     const billed = req.query.billed !== undefined ? req.query.billed === "true" : undefined;

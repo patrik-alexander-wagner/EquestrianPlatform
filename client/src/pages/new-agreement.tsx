@@ -36,7 +36,7 @@ export default function NewAgreementPage() {
   });
 
   const { data: horses = [] } = useQuery<any[]>({
-    queryKey: ["/api/horses"],
+    queryKey: ["/api/horses/available"],
   });
 
   const { data: liveryItems = [] } = useQuery<Item[]>({
@@ -48,6 +48,7 @@ export default function NewAgreementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/boxes-with-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horses/available"] });
       setShowCreateDialog(false);
       toast({ title: "Livery agreement created successfully" });
     },
