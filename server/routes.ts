@@ -79,6 +79,11 @@ export async function registerRoutes(
     res.json(horses);
   });
 
+  app.get("/api/horses/available", async (_req, res) => {
+    const available = await storage.getAvailableHorses();
+    res.json(available);
+  });
+
   app.get("/api/horses/:id", async (req, res) => {
     const horse = await storage.getHorse(req.params.id);
     if (!horse) return res.status(404).json({ message: "Horse not found" });
@@ -232,11 +237,6 @@ export async function registerRoutes(
   app.get("/api/boxes-with-status", async (_req, res) => {
     const boxes = await storage.getBoxesWithAgreementStatus();
     res.json(boxes);
-  });
-
-  app.get("/api/horses/available", async (_req, res) => {
-    const available = await storage.getAvailableHorses();
-    res.json(available);
   });
 
   // Billing Elements
