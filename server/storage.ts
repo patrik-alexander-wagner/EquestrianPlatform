@@ -318,7 +318,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBoxesWithAgreementStatus(): Promise<any[]> {
-    const allBoxes = await db.select().from(boxes).where(eq(boxes.type, "box"));
+    const allBoxes = await db.select().from(boxes);
     const allStables = await db.select().from(stables);
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
 
