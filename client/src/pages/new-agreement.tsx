@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Check, X } from "lucide-react";
@@ -19,7 +19,6 @@ import type { Customer, Item } from "@shared/schema";
 export default function NewAgreementPage() {
   const [stableSearch, setStableSearch] = useState("");
   const [boxSearch, setBoxSearch] = useState("");
-  const [availableOnly, setAvailableOnly] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedBox, setSelectedBox] = useState<any>(null);
   const [agreementType, setAgreementType] = useState("permanent");
@@ -65,11 +64,8 @@ export default function NewAgreementPage() {
     if (boxSearch) {
       result = result.filter(b => b.name.toLowerCase().includes(boxSearch.toLowerCase()));
     }
-    if (availableOnly) {
-      result = result.filter(b => b.isAvailable);
-    }
     return result;
-  }, [boxesWithStatus, stableSearch, boxSearch, availableOnly]);
+  }, [boxesWithStatus, stableSearch, boxSearch]);
 
   const groupedByStable = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -92,14 +88,6 @@ export default function NewAgreementPage() {
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         <SearchBar placeholder="Search stable..." value={stableSearch} onChange={setStableSearch} className="w-52" />
         <SearchBar placeholder="Search box..." value={boxSearch} onChange={setBoxSearch} className="w-52" />
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={availableOnly}
-            onCheckedChange={setAvailableOnly}
-            data-testid="switch-available-only"
-          />
-          <Label className="text-sm">Available only</Label>
-        </div>
       </div>
 
       {isLoading ? (
@@ -117,9 +105,9 @@ export default function NewAgreementPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span className="font-medium">{box.name}</span>
-                        <Badge variant={box.isAvailable ? "default" : "secondary"}>
-                          {box.isAvailable ? "Available" : "Occupied"}
-                        </Badge>
+                        {!box.isAvailable && (
+                          <Badge variant="secondary">Occupied</Badge>
+                        )}
                       </div>
                       {box.isAvailable && (
                         <Button
