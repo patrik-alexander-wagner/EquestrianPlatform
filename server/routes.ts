@@ -267,10 +267,43 @@ export async function registerRoutes(
     res.json(invoices);
   });
 
+  app.get("/api/billed-months", async (req, res) => {
+    const agreementIds = (req.query.agreementIds as string || "").split(",").filter(Boolean);
+    const result = await storage.getBilledMonthsForAgreements(agreementIds);
+    res.json(result);
+  });
+
   app.post("/api/invoices", async (req, res) => {
-    const invoice = await storage.createInvoice(req.body);
-    await storage.markBillingElementsAsInvoiced(req.body.customerId, invoice.id);
-    res.json(invoice);
+    try {
+      const { customerId, invoiceDate, totalAmount, status, billingElementIds, liveryItems } = req.body;
+      const invoice = await storage.createInvoice({ customerId, invoiceDate, totalAmount, status });
+
+      if (liveryItems && liveryItems.length > 0) {
+        for (const item of liveryItems) {
+          const created = await storage.createBillingElement({
+            horseId: item.horseId,
+            customerId,
+            boxId: item.boxId,
+            itemId: item.itemId,
+            agreementId: item.agreementId,
+            quantity: 1,
+            price: item.price,
+            transactionDate: invoiceDate,
+            billingMonth: item.billingMonth,
+            billed: true,
+            invoiceId: invoice.id,
+          });
+        }
+      }
+
+      if (billingElementIds && billingElementIds.length > 0) {
+        await storage.markBillingElementsByIds(billingElementIds, invoice.id);
+      }
+
+      res.json(invoice);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Reports

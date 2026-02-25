@@ -65,7 +65,8 @@ export interface IStorage {
   getInvoices(): Promise<any[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
-  markBillingElementsAsInvoiced(customerId: string, invoiceId: string): Promise<void>;
+  markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void>;
+  getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>>;
 
   getReportData(groupBy: string): Promise<any[]>;
 }
@@ -429,10 +430,29 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async markBillingElementsAsInvoiced(customerId: string, invoiceId: string): Promise<void> {
-    await db.update(billingElements)
-      .set({ billed: true, invoiceId })
-      .where(and(eq(billingElements.customerId, customerId), eq(billingElements.billed, false)));
+  async markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void> {
+    for (const id of elementIds) {
+      await db.update(billingElements)
+        .set({ billed: true, invoiceId })
+        .where(eq(billingElements.id, id));
+    }
+  }
+
+  async getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>> {
+    if (agreementIds.length === 0) return {};
+    const allBilled = await db.select().from(billingElements)
+      .where(and(
+        eq(billingElements.billed, true),
+        sql`${billingElements.agreementId} IS NOT NULL`
+      ));
+    const result: Record<string, string[]> = {};
+    for (const el of allBilled) {
+      if (el.agreementId && el.billingMonth) {
+        if (!result[el.agreementId]) result[el.agreementId] = [];
+        result[el.agreementId].push(el.billingMonth);
+      }
+    }
+    return result;
   }
 
   async getReportData(groupBy: string): Promise<any[]> {

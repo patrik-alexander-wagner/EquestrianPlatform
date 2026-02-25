@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,12 +20,30 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { FileText } from "lucide-react";
 import type { Customer } from "@shared/schema";
 
+type LineItem = {
+  key: string;
+  type: "livery" | "billing";
+  description: string;
+  horseName: string;
+  date: string;
+  qty: number;
+  unitPrice: number;
+  amount: number;
+  agreementId?: string;
+  billingElementId?: string;
+  horseId?: string;
+  boxId?: string;
+  itemId?: string;
+  billingMonth?: string;
+};
+
 export default function ToInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [billingMonth, setBillingMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -39,17 +58,41 @@ export default function ToInvoicePage() {
     queryKey: ["/api/billing-elements", "?billed=false"],
   });
 
+  const agreementIds = useMemo(() => agreements.map((a: any) => a.id), [agreements]);
+
+  const { data: billedMonths = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ["/api/billed-months", agreementIds.join(",")],
+    queryFn: async () => {
+      if (agreementIds.length === 0) return {};
+      const res = await fetch(`/api/billed-months?agreementIds=${agreementIds.join(",")}`);
+      return res.json();
+    },
+    enabled: agreementIds.length > 0,
+  });
+
   const generateMutation = useMutation({
-    mutationFn: async (customerId: string) => {
-      const customerAgreements = agreements.filter((a: any) => a.customerId === customerId);
-      const customerBillingElements = billingElements.filter((b: any) => b.customerId === customerId);
+    mutationFn: async ({ customerId, lineItems }: { customerId: string; lineItems: LineItem[] }) => {
+      const selected = lineItems.filter(li => selectedItems.has(li.key));
+      if (selected.length === 0) return;
 
       let total = 0;
-      for (const a of customerAgreements) {
-        total += parseFloat(a.monthlyAmount || "0");
-      }
-      for (const b of customerBillingElements) {
-        total += parseFloat(b.price || "0") * (b.quantity || 1);
+      const billingElementIds: string[] = [];
+      const liveryItems: any[] = [];
+
+      for (const li of selected) {
+        total += li.amount;
+        if (li.type === "billing" && li.billingElementId) {
+          billingElementIds.push(li.billingElementId);
+        } else if (li.type === "livery" && li.agreementId) {
+          liveryItems.push({
+            agreementId: li.agreementId,
+            horseId: li.horseId,
+            boxId: li.boxId,
+            itemId: li.itemId,
+            price: li.unitPrice.toFixed(2),
+            billingMonth: li.billingMonth,
+          });
+        }
       }
 
       return apiRequest("POST", "/api/invoices", {
@@ -57,11 +100,15 @@ export default function ToInvoicePage() {
         invoiceDate: new Date().toISOString().split("T")[0],
         totalAmount: total.toFixed(2),
         status: "pending",
+        billingElementIds,
+        liveryItems,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billed-months"] });
+      setSelectedItems(new Set());
       toast({ title: "Invoice generated successfully" });
     },
   });
@@ -83,31 +130,91 @@ export default function ToInvoicePage() {
       const customerAgreements = agreements.filter((a: any) => a.customerId === id);
       const customerBilling = billingElements.filter((b: any) => b.customerId === id);
 
-      let liveryTotal = 0;
-      customerAgreements.forEach((a: any) => { liveryTotal += parseFloat(a.monthlyAmount || "0"); });
-      let otherTotal = 0;
-      customerBilling.forEach((b: any) => { otherTotal += parseFloat(b.price || "0") * (b.quantity || 1); });
+      const lineItems: LineItem[] = [];
+
+      for (const a of customerAgreements) {
+        const alreadyBilled = billedMonths[a.id]?.includes(billingMonth);
+        if (alreadyBilled) continue;
+        const amount = parseFloat(a.monthlyAmount || "0");
+        lineItems.push({
+          key: `livery-${a.id}-${billingMonth}`,
+          type: "livery",
+          description: a.itemName,
+          horseName: a.horseName,
+          date: billingMonthLabel,
+          qty: 1,
+          unitPrice: amount,
+          amount,
+          agreementId: a.id,
+          horseId: a.horseId,
+          boxId: a.boxId,
+          itemId: a.itemId,
+          billingMonth,
+        });
+      }
+
+      for (const b of customerBilling) {
+        const qty = b.quantity || 1;
+        const unitPrice = parseFloat(b.price || "0");
+        lineItems.push({
+          key: `billing-${b.id}`,
+          type: "billing",
+          description: b.itemName,
+          horseName: b.horseName,
+          date: b.transactionDate,
+          qty,
+          unitPrice,
+          amount: unitPrice * qty,
+          billingElementId: b.id,
+        });
+      }
+
+      const total = lineItems.reduce((sum, li) => sum + li.amount, 0);
 
       return {
         customerId: id,
         customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
-        agreements: customerAgreements,
-        billingElements: customerBilling,
-        liveryTotal,
-        otherTotal,
-        total: liveryTotal + otherTotal,
+        lineItems,
+        total,
       };
     }).filter(c => {
+      if (c.lineItems.length === 0) return false;
       if (!customerSearch) return true;
       return c.customerName.toLowerCase().includes(customerSearch.toLowerCase());
     });
-  }, [customers, agreements, billingElements, customerSearch]);
+  }, [customers, agreements, billingElements, customerSearch, billingMonth, billingMonthLabel, billedMonths]);
+
+  const toggleItem = useCallback((key: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback((customerLineItems: LineItem[]) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      const allSelected = customerLineItems.every(li => next.has(li.key));
+      if (allSelected) {
+        customerLineItems.forEach(li => next.delete(li.key));
+      } else {
+        customerLineItems.forEach(li => next.add(li.key));
+      }
+      return next;
+    });
+  }, []);
+
+  const getSelectedTotal = (lineItems: LineItem[]) => {
+    return lineItems.filter(li => selectedItems.has(li.key)).reduce((sum, li) => sum + li.amount, 0);
+  };
 
   return (
     <div className="p-6">
       <PageHeader
         title="To Invoice"
-        description="Prepare and generate invoices for customers"
+        description="Select billable items and generate invoices for customers"
       />
 
       <div className="flex gap-3 mb-6 flex-wrap items-end">
@@ -135,66 +242,89 @@ export default function ToInvoicePage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {invoiceableCustomers.map((c) => (
-            <Card key={c.customerId}>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-                <CardTitle className="text-lg">{c.customerName}</CardTitle>
-                <Button
-                  onClick={() => generateMutation.mutate(c.customerId)}
-                  disabled={generateMutation.isPending}
-                  data-testid={`button-generate-invoice-${c.customerId}`}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Generate Invoice
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Horse</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {c.agreements.map((a: any) => (
-                      <TableRow key={`agreement-${a.id}`}>
-                        <TableCell>Livery Fee</TableCell>
-                        <TableCell>{a.itemName}</TableCell>
-                        <TableCell>{a.horseName}</TableCell>
-                        <TableCell>{billingMonthLabel}</TableCell>
-                        <TableCell className="text-right">1</TableCell>
-                        <TableCell className="text-right">AED {parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
-                        <TableCell className="text-right">AED {parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
+          {invoiceableCustomers.map((c) => {
+            const allSelected = c.lineItems.length > 0 && c.lineItems.every(li => selectedItems.has(li.key));
+            const someSelected = c.lineItems.some(li => selectedItems.has(li.key));
+            const selectedTotal = getSelectedTotal(c.lineItems);
+
+            return (
+              <Card key={c.customerId}>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) {
+                          const input = el as unknown as HTMLButtonElement;
+                          input.dataset.indeterminate = (!allSelected && someSelected).toString();
+                        }
+                      }}
+                      className={!allSelected && someSelected ? "opacity-70" : ""}
+                      onCheckedChange={() => toggleAll(c.lineItems)}
+                      data-testid={`checkbox-select-all-${c.customerId}`}
+                    />
+                    <CardTitle className="text-lg">{c.customerName}</CardTitle>
+                  </div>
+                  <Button
+                    onClick={() => generateMutation.mutate({ customerId: c.customerId, lineItems: c.lineItems })}
+                    disabled={generateMutation.isPending || !someSelected}
+                    data-testid={`button-generate-invoice-${c.customerId}`}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Generate Invoice
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10"></TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Horse</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Unit Price</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
                       </TableRow>
-                    ))}
-                    {c.billingElements.map((b: any) => (
-                      <TableRow key={`billing-${b.id}`}>
-                        <TableCell>Billing Element</TableCell>
-                        <TableCell>{b.itemName}</TableCell>
-                        <TableCell>{b.horseName}</TableCell>
-                        <TableCell>{b.transactionDate}</TableCell>
-                        <TableCell className="text-right">{b.quantity || 1}</TableCell>
-                        <TableCell className="text-right">AED {parseFloat(b.price || "0").toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          AED {(parseFloat(b.price || "0") * (b.quantity || 1)).toFixed(2)}
-                        </TableCell>
+                    </TableHeader>
+                    <TableBody>
+                      {c.lineItems.map((li) => (
+                        <TableRow key={li.key}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedItems.has(li.key)}
+                              onCheckedChange={() => toggleItem(li.key)}
+                              data-testid={`checkbox-item-${li.key}`}
+                            />
+                          </TableCell>
+                          <TableCell>{li.type === "livery" ? "Livery Fee" : "Billing Element"}</TableCell>
+                          <TableCell>{li.description}</TableCell>
+                          <TableCell>{li.horseName}</TableCell>
+                          <TableCell>{li.date}</TableCell>
+                          <TableCell className="text-right">{li.qty}</TableCell>
+                          <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {someSelected && (
+                        <TableRow>
+                          <TableCell />
+                          <TableCell colSpan={6} className="font-semibold">Selected Total</TableCell>
+                          <TableCell className="text-right font-semibold">AED {selectedTotal.toFixed(2)}</TableCell>
+                        </TableRow>
+                      )}
+                      <TableRow>
+                        <TableCell />
+                        <TableCell colSpan={6} className="font-semibold text-muted-foreground">Grand Total (all items)</TableCell>
+                        <TableCell className="text-right font-semibold text-muted-foreground">AED {c.total.toFixed(2)}</TableCell>
                       </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell colSpan={6} className="font-semibold">Total</TableCell>
-                      <TableCell className="text-right font-semibold">AED {c.total.toFixed(2)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
