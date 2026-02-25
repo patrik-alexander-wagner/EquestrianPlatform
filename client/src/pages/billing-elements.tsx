@@ -20,6 +20,7 @@ export default function BillingElementsPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedAgreementHorse, setSelectedAgreementHorse] = useState<any>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const { toast } = useToast();
 
   const { data: horsesWithAgreements = [], isLoading } = useQuery<any[]>({
@@ -69,6 +70,8 @@ export default function BillingElementsPage() {
   ];
 
   const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
+  const unitPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
+  const totalPrice = unitPrice * quantity;
 
   return (
     <div className="p-6">
@@ -91,7 +94,7 @@ export default function BillingElementsPage() {
         actions={(item) => (
           <Button
             size="sm"
-            onClick={() => { setSelectedAgreementHorse(item); setShowAddDialog(true); }}
+            onClick={() => { setSelectedAgreementHorse(item); setSelectedItemId(""); setQuantity(1); setShowAddDialog(true); }}
             data-testid={`button-add-billing-${item.horseId}`}
           >
             <Plus className="w-4 h-4 mr-1" />
@@ -109,7 +112,16 @@ export default function BillingElementsPage() {
               { key: "customerName", label: "Customer" },
               { key: "itemName", label: "Item" },
               { key: "quantity", label: "Qty" },
-              { key: "price", label: "Price", render: (item: any) => `AED ${parseFloat(item.price).toFixed(2)}` },
+              {
+                key: "unitPrice",
+                label: "Unit Price",
+                render: (item: any) => `AED ${parseFloat(item.price).toFixed(2)}`,
+              },
+              {
+                key: "total",
+                label: "Total",
+                render: (item: any) => `AED ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}`,
+              },
               { key: "transactionDate", label: "Date" },
               {
                 key: "billed",
@@ -137,7 +149,7 @@ export default function BillingElementsPage() {
                   customerId: selectedAgreementHorse.customerId,
                   boxId: selectedAgreementHorse.boxId,
                   itemId: selectedItemId,
-                  quantity: parseInt(fd.get("quantity") as string) || 1,
+                  quantity: quantity,
                   price: fd.get("price"),
                   transactionDate: fd.get("transactionDate"),
                   billed: false,
@@ -171,11 +183,18 @@ export default function BillingElementsPage() {
 
                 <div>
                   <Label>Quantity</Label>
-                  <Input name="quantity" type="number" min="1" defaultValue="1" data-testid="input-billing-quantity" />
+                  <Input
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    value={quantity}
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    data-testid="input-billing-quantity"
+                  />
                 </div>
 
                 <div>
-                  <Label>Price</Label>
+                  <Label>Unit Price (AED)</Label>
                   <Input
                     name="price"
                     type="number"
@@ -185,6 +204,23 @@ export default function BillingElementsPage() {
                     data-testid="input-billing-price"
                   />
                 </div>
+
+                {selectedItem && (
+                  <div className="p-3 rounded-md bg-primary/5 border text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span>Unit Price:</span>
+                      <span>AED {unitPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Quantity:</span>
+                      <span>{quantity}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-1 mt-1">
+                      <span>Total Price:</span>
+                      <span>AED {totalPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <Label>Transaction Date</Label>

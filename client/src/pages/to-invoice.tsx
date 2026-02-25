@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -19,6 +21,10 @@ import type { Customer } from "@shared/schema";
 
 export default function ToInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState("");
+  const [billingMonth, setBillingMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const { toast } = useToast();
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -60,6 +66,13 @@ export default function ToInvoicePage() {
     },
   });
 
+  const billingMonthLabel = useMemo(() => {
+    if (!billingMonth) return "";
+    const [y, m] = billingMonth.split("-");
+    const date = new Date(parseInt(y), parseInt(m) - 1);
+    return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+  }, [billingMonth]);
+
   const invoiceableCustomers = useMemo(() => {
     const customerIds = new Set<string>();
     agreements.forEach((a: any) => customerIds.add(a.customerId));
@@ -97,13 +110,23 @@ export default function ToInvoicePage() {
         description="Prepare and generate invoices for customers"
       />
 
-      <div className="mb-6">
+      <div className="flex gap-3 mb-6 flex-wrap items-end">
         <SearchBar
           placeholder="Search customer..."
           value={customerSearch}
           onChange={setCustomerSearch}
           className="max-w-sm"
         />
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">Billing Month</Label>
+          <Input
+            type="month"
+            value={billingMonth}
+            onChange={(e) => setBillingMonth(e.target.value)}
+            className="w-48"
+            data-testid="input-billing-month"
+          />
+        </div>
       </div>
 
       {invoiceableCustomers.length === 0 ? (
@@ -132,6 +155,9 @@ export default function ToInvoicePage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Horse</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Unit Price</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -141,21 +167,27 @@ export default function ToInvoicePage() {
                         <TableCell>Livery Fee</TableCell>
                         <TableCell>{a.itemName}</TableCell>
                         <TableCell>{a.horseName}</TableCell>
+                        <TableCell>{billingMonthLabel}</TableCell>
+                        <TableCell className="text-right">1</TableCell>
+                        <TableCell className="text-right">AED {parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
                         <TableCell className="text-right">AED {parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
                       </TableRow>
                     ))}
                     {c.billingElements.map((b: any) => (
                       <TableRow key={`billing-${b.id}`}>
                         <TableCell>Billing Element</TableCell>
-                        <TableCell>{b.itemName} x{b.quantity}</TableCell>
+                        <TableCell>{b.itemName}</TableCell>
                         <TableCell>{b.horseName}</TableCell>
+                        <TableCell>{b.transactionDate}</TableCell>
+                        <TableCell className="text-right">{b.quantity || 1}</TableCell>
+                        <TableCell className="text-right">AED {parseFloat(b.price || "0").toFixed(2)}</TableCell>
                         <TableCell className="text-right">
                           AED {(parseFloat(b.price || "0") * (b.quantity || 1)).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell colSpan={3} className="font-semibold">Total</TableCell>
+                      <TableCell colSpan={6} className="font-semibold">Total</TableCell>
                       <TableCell className="text-right font-semibold">AED {c.total.toFixed(2)}</TableCell>
                     </TableRow>
                   </TableBody>
