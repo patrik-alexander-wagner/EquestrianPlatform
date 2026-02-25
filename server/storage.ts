@@ -1,38 +1,473 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
+import { db } from "./db";
+import {
+  users, customers, horses, stables, boxes, items,
+  liveryAgreements, billingElements, invoices,
+  type User, type InsertUser,
+  type Customer, type InsertCustomer,
+  type Horse, type InsertHorse,
+  type Stable, type InsertStable,
+  type Box, type InsertBox,
+  type Item, type InsertItem,
+  type LiveryAgreement, type InsertLiveryAgreement,
+  type BillingElement, type InsertBillingElement,
+  type Invoice, type InsertInvoice,
+} from "@shared/schema";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUsers(): Promise<User[]>;
+
+  getCustomers(search?: string): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
+
+  getHorses(search?: string, customerSearch?: string, stableBoxSearch?: string): Promise<any[]>;
+  getHorse(id: string): Promise<Horse | undefined>;
+  createHorse(horse: InsertHorse): Promise<Horse>;
+  updateHorse(id: string, horse: Partial<InsertHorse>): Promise<Horse | undefined>;
+
+  getStables(): Promise<Stable[]>;
+  getStable(id: string): Promise<Stable | undefined>;
+  createStable(stable: InsertStable): Promise<Stable>;
+  updateStable(id: string, stable: Partial<InsertStable>): Promise<Stable | undefined>;
+  deleteStable(id: string): Promise<boolean>;
+
+  getBoxes(stableSearch?: string, boxSearch?: string): Promise<any[]>;
+  getBox(id: string): Promise<Box | undefined>;
+  createBox(box: InsertBox): Promise<Box>;
+  updateBox(id: string, box: Partial<InsertBox>): Promise<Box | undefined>;
+  deleteBox(id: string): Promise<boolean>;
+
+  getItems(search?: string): Promise<Item[]>;
+  getItem(id: string): Promise<Item | undefined>;
+  createItem(item: InsertItem): Promise<Item>;
+  updateItem(id: string, item: Partial<InsertItem>): Promise<Item | undefined>;
+  getLiveryPackageItems(): Promise<Item[]>;
+  getNonLiveryPackageItems(): Promise<Item[]>;
+
+  getLiveryAgreements(status?: string): Promise<any[]>;
+  getLiveryAgreement(id: string): Promise<LiveryAgreement | undefined>;
+  createLiveryAgreement(agreement: InsertLiveryAgreement): Promise<LiveryAgreement>;
+  updateLiveryAgreement(id: string, agreement: Partial<InsertLiveryAgreement>): Promise<LiveryAgreement | undefined>;
+  getBoxesWithAgreementStatus(): Promise<any[]>;
+
+  getBillingElements(billed?: boolean): Promise<any[]>;
+  getBillingElement(id: string): Promise<BillingElement | undefined>;
+  createBillingElement(element: InsertBillingElement): Promise<BillingElement>;
+  getHorsesWithActiveAgreements(): Promise<any[]>;
+
+  getInvoices(): Promise<any[]>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  markBillingElementsAsInvoiced(customerId: string, invoiceId: string): Promise<void>;
+
+  getReportData(groupBy: string): Promise<any[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
-  }
-
+export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createUser(user: InsertUser): Promise<User> {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async getCustomers(search?: string): Promise<Customer[]> {
+    if (search) {
+      return await db.select().from(customers).where(
+        or(
+          ilike(customers.firstname, `%${search}%`),
+          ilike(customers.lastname, `%${search}%`)
+        )
+      );
+    }
+    return await db.select().from(customers);
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+
+  async createCustomer(customer: InsertCustomer): Promise<Customer> {
+    const [created] = await db.insert(customers).values(customer).returning();
+    return created;
+  }
+
+  async updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set(customer).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async getHorses(search?: string, customerSearch?: string, stableBoxSearch?: string): Promise<any[]> {
+    const allHorses = await db.select().from(horses);
+    const allAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+
+    let result = allHorses.map(horse => {
+      const agreement = allAgreements.find(a => a.horseId === horse.id);
+      const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
+      const box = agreement ? allBoxes.find(b => b.id === agreement.boxId) : null;
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      return {
+        ...horse,
+        customer: customer ? `${customer.firstname} ${customer.lastname}` : null,
+        customerId: customer?.id || null,
+        box: box?.name || null,
+        boxId: box?.id || null,
+        stable: stable?.name || null,
+        stableId: stable?.id || null,
+      };
+    });
+
+    if (search) {
+      result = result.filter(h => h.horseName.toLowerCase().includes(search.toLowerCase()));
+    }
+    if (customerSearch) {
+      result = result.filter(h => h.customer && h.customer.toLowerCase().includes(customerSearch.toLowerCase()));
+    }
+    if (stableBoxSearch) {
+      result = result.filter(h =>
+        (h.stable && h.stable.toLowerCase().includes(stableBoxSearch.toLowerCase())) ||
+        (h.box && h.box.toLowerCase().includes(stableBoxSearch.toLowerCase()))
+      );
+    }
+
+    return result;
+  }
+
+  async getHorse(id: string): Promise<Horse | undefined> {
+    const [horse] = await db.select().from(horses).where(eq(horses.id, id));
+    return horse;
+  }
+
+  async createHorse(horse: InsertHorse): Promise<Horse> {
+    const [created] = await db.insert(horses).values(horse).returning();
+    return created;
+  }
+
+  async updateHorse(id: string, horse: Partial<InsertHorse>): Promise<Horse | undefined> {
+    const [updated] = await db.update(horses).set(horse).where(eq(horses.id, id)).returning();
+    return updated;
+  }
+
+  async getStables(): Promise<Stable[]> {
+    return await db.select().from(stables);
+  }
+
+  async getStable(id: string): Promise<Stable | undefined> {
+    const [stable] = await db.select().from(stables).where(eq(stables.id, id));
+    return stable;
+  }
+
+  async createStable(stable: InsertStable): Promise<Stable> {
+    const [created] = await db.insert(stables).values(stable).returning();
+    return created;
+  }
+
+  async updateStable(id: string, stable: Partial<InsertStable>): Promise<Stable | undefined> {
+    const [updated] = await db.update(stables).set(stable).where(eq(stables.id, id)).returning();
+    return updated;
+  }
+
+  async deleteStable(id: string): Promise<boolean> {
+    const result = await db.delete(stables).where(eq(stables.id, id));
+    return true;
+  }
+
+  async getBoxes(stableSearch?: string, boxSearch?: string): Promise<any[]> {
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+
+    let result = allBoxes.map(box => {
+      const stable = allStables.find(s => s.id === box.stableId);
+      return { ...box, stableName: stable?.name || "Unknown" };
+    });
+
+    if (stableSearch) {
+      result = result.filter(b => b.stableName.toLowerCase().includes(stableSearch.toLowerCase()));
+    }
+    if (boxSearch) {
+      result = result.filter(b => b.name.toLowerCase().includes(boxSearch.toLowerCase()));
+    }
+
+    return result;
+  }
+
+  async getBox(id: string): Promise<Box | undefined> {
+    const [box] = await db.select().from(boxes).where(eq(boxes.id, id));
+    return box;
+  }
+
+  async createBox(box: InsertBox): Promise<Box> {
+    const [created] = await db.insert(boxes).values(box).returning();
+    return created;
+  }
+
+  async updateBox(id: string, box: Partial<InsertBox>): Promise<Box | undefined> {
+    const [updated] = await db.update(boxes).set(box).where(eq(boxes.id, id)).returning();
+    return updated;
+  }
+
+  async deleteBox(id: string): Promise<boolean> {
+    await db.delete(boxes).where(eq(boxes.id, id));
+    return true;
+  }
+
+  async getItems(search?: string): Promise<Item[]> {
+    if (search) {
+      return await db.select().from(items).where(ilike(items.name, `%${search}%`));
+    }
+    return await db.select().from(items);
+  }
+
+  async getItem(id: string): Promise<Item | undefined> {
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    return item;
+  }
+
+  async createItem(item: InsertItem): Promise<Item> {
+    const [created] = await db.insert(items).values(item).returning();
+    return created;
+  }
+
+  async updateItem(id: string, item: Partial<InsertItem>): Promise<Item | undefined> {
+    const [updated] = await db.update(items).set(item).where(eq(items.id, id)).returning();
+    return updated;
+  }
+
+  async getLiveryPackageItems(): Promise<Item[]> {
+    return await db.select().from(items).where(eq(items.isLiveryPackage, true));
+  }
+
+  async getNonLiveryPackageItems(): Promise<Item[]> {
+    return await db.select().from(items).where(eq(items.isLiveryPackage, false));
+  }
+
+  async getLiveryAgreements(status?: string): Promise<any[]> {
+    const allAgreements = status
+      ? await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, status))
+      : await db.select().from(liveryAgreements);
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allItems = await db.select().from(items);
+
+    return allAgreements.map(agreement => {
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const item = allItems.find(i => i.id === agreement.itemId);
+      return {
+        ...agreement,
+        horseName: horse?.horseName || "Unknown",
+        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        boxName: box?.name || "Unknown",
+        stableName: stable?.name || "Unknown",
+        itemName: item?.name || "Unknown",
+      };
+    });
+  }
+
+  async getLiveryAgreement(id: string): Promise<LiveryAgreement | undefined> {
+    const [agreement] = await db.select().from(liveryAgreements).where(eq(liveryAgreements.id, id));
+    return agreement;
+  }
+
+  async createLiveryAgreement(agreement: InsertLiveryAgreement): Promise<LiveryAgreement> {
+    const [created] = await db.insert(liveryAgreements).values(agreement).returning();
+    return created;
+  }
+
+  async updateLiveryAgreement(id: string, agreement: Partial<InsertLiveryAgreement>): Promise<LiveryAgreement | undefined> {
+    const [updated] = await db.update(liveryAgreements).set(agreement).where(eq(liveryAgreements.id, id)).returning();
+    return updated;
+  }
+
+  async getBoxesWithAgreementStatus(): Promise<any[]> {
+    const allBoxes = await db.select().from(boxes).where(eq(boxes.type, "box"));
+    const allStables = await db.select().from(stables);
+    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+
+    return allBoxes.map(box => {
+      const stable = allStables.find(s => s.id === box.stableId);
+      const agreement = activeAgreements.find(a => a.boxId === box.id);
+      return {
+        ...box,
+        stableName: stable?.name || "Unknown",
+        isAvailable: !agreement,
+        agreementId: agreement?.id || null,
+      };
+    });
+  }
+
+  async getBillingElements(billed?: boolean): Promise<any[]> {
+    const query = billed !== undefined
+      ? await db.select().from(billingElements).where(eq(billingElements.billed, billed))
+      : await db.select().from(billingElements);
+
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allItems = await db.select().from(items);
+
+    return query.map(element => {
+      const horse = allHorses.find(h => h.id === element.horseId);
+      const customer = allCustomers.find(c => c.id === element.customerId);
+      const box = allBoxes.find(b => b.id === element.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const item = allItems.find(i => i.id === element.itemId);
+      return {
+        ...element,
+        horseName: horse?.horseName || "Unknown",
+        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        boxName: box?.name || "Unknown",
+        stableName: stable?.name || "Unknown",
+        itemName: item?.name || "Unknown",
+      };
+    });
+  }
+
+  async getBillingElement(id: string): Promise<BillingElement | undefined> {
+    const [element] = await db.select().from(billingElements).where(eq(billingElements.id, id));
+    return element;
+  }
+
+  async createBillingElement(element: InsertBillingElement): Promise<BillingElement> {
+    const [created] = await db.insert(billingElements).values(element).returning();
+    return created;
+  }
+
+  async getHorsesWithActiveAgreements(): Promise<any[]> {
+    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+
+    return activeAgreements.map(agreement => {
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      return {
+        horseId: horse?.id,
+        horseName: horse?.horseName || "Unknown",
+        customerId: customer?.id,
+        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        boxId: box?.id,
+        boxName: box?.name || "Unknown",
+        stableId: stable?.id,
+        stableName: stable?.name || "Unknown",
+        agreementId: agreement.id,
+      };
+    });
+  }
+
+  async getInvoices(): Promise<any[]> {
+    const allInvoices = await db.select().from(invoices).orderBy(desc(invoices.invoiceDate));
+    const allCustomers = await db.select().from(customers);
+
+    return allInvoices.map(invoice => {
+      const customer = allCustomers.find(c => c.id === invoice.customerId);
+      return {
+        ...invoice,
+        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+      };
+    });
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice;
+  }
+
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const [created] = await db.insert(invoices).values(invoice).returning();
+    return created;
+  }
+
+  async markBillingElementsAsInvoiced(customerId: string, invoiceId: string): Promise<void> {
+    await db.update(billingElements)
+      .set({ billed: true, invoiceId })
+      .where(and(eq(billingElements.customerId, customerId), eq(billingElements.billed, false)));
+  }
+
+  async getReportData(groupBy: string): Promise<any[]> {
+    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const allCustomers = await db.select().from(customers);
+    const allItems = await db.select().from(items);
+    const allBillingElements = await db.select().from(billingElements);
+
+    if (groupBy === "customer") {
+      const grouped: Record<string, any> = {};
+      for (const agreement of activeAgreements) {
+        const customer = allCustomers.find(c => c.id === agreement.customerId);
+        const key = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+        if (!grouped[key]) {
+          grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
+        }
+        grouped[key].horseCount++;
+        const amount = parseFloat(agreement.monthlyAmount || "0");
+        grouped[key].liveryRevenue += amount;
+        grouped[key].totalRevenue += amount;
+      }
+      for (const el of allBillingElements) {
+        const customer = allCustomers.find(c => c.id === el.customerId);
+        const key = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+        if (!grouped[key]) {
+          grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
+        }
+        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
+        grouped[key].otherRevenue += amount;
+        grouped[key].totalRevenue += amount;
+      }
+      return Object.values(grouped);
+    } else {
+      const grouped: Record<string, any> = {};
+      for (const agreement of activeAgreements) {
+        const month = agreement.startDate?.substring(0, 7) || "Unknown";
+        if (!grouped[month]) {
+          grouped[month] = { label: month, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
+        }
+        grouped[month].horseCount++;
+        const amount = parseFloat(agreement.monthlyAmount || "0");
+        grouped[month].liveryRevenue += amount;
+        grouped[month].totalRevenue += amount;
+      }
+      for (const el of allBillingElements) {
+        const month = el.transactionDate?.substring(0, 7) || "Unknown";
+        if (!grouped[month]) {
+          grouped[month] = { label: month, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
+        }
+        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
+        grouped[month].otherRevenue += amount;
+        grouped[month].totalRevenue += amount;
+      }
+      return Object.values(grouped).sort((a, b) => a.label.localeCompare(b.label));
+    }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

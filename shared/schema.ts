@@ -1,18 +1,136 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const customers = pgTable("customers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
+  firstname: text("firstname").notNull(),
+  lastname: text("lastname").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  status: text("status").notNull().default("active"),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true });
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Customer = typeof customers.$inferSelect;
+
+export const horses = pgTable("horses", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
+  horseName: text("horse_name").notNull(),
+  passportName: text("passport_name"),
+  passportNumber: text("passport_number"),
+  sex: text("sex"),
+  size: text("size"),
+  color: text("color"),
+  breed: text("breed"),
+  dateOfBirth: text("date_of_birth"),
+  comments: text("comments"),
+  status: text("status").notNull().default("active"),
+});
+
+export const insertHorseSchema = createInsertSchema(horses).omit({ id: true });
+export type InsertHorse = z.infer<typeof insertHorseSchema>;
+export type Horse = typeof horses.$inferSelect;
+
+export const stables = pgTable("stables", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("active"),
+});
+
+export const insertStableSchema = createInsertSchema(stables).omit({ id: true });
+export type InsertStable = z.infer<typeof insertStableSchema>;
+export type Stable = typeof stables.$inferSelect;
+
+export const boxes = pgTable("boxes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("box"),
+  stableId: uuid("stable_id").notNull().references(() => stables.id),
+  status: text("status").notNull().default("active"),
+});
+
+export const insertBoxSchema = createInsertSchema(boxes).omit({ id: true });
+export type InsertBox = z.infer<typeof insertBoxSchema>;
+export type Box = typeof boxes.$inferSelect;
+
+export const items = pgTable("items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
+  name: text("name").notNull(),
+  category: text("category"),
+  base: numeric("base"),
+  price: numeric("price"),
+  status: text("status").notNull().default("active"),
+  isLiveryPackage: boolean("is_livery_package").notNull().default(false),
+});
+
+export const insertItemSchema = createInsertSchema(items).omit({ id: true });
+export type InsertItem = z.infer<typeof insertItemSchema>;
+export type Item = typeof items.$inferSelect;
+
+export const liveryAgreements = pgTable("livery_agreements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  referenceNumber: text("reference_number").notNull(),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  boxId: uuid("box_id").notNull().references(() => boxes.id),
+  itemId: uuid("item_id").notNull().references(() => items.id),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date"),
+  type: text("type").notNull().default("permanent"),
+  status: text("status").notNull().default("active"),
+  notes: text("notes"),
+  checkoutReason: text("checkout_reason"),
+  monthlyAmount: numeric("monthly_amount"),
+});
+
+export const insertLiveryAgreementSchema = createInsertSchema(liveryAgreements).omit({ id: true });
+export type InsertLiveryAgreement = z.infer<typeof insertLiveryAgreementSchema>;
+export type LiveryAgreement = typeof liveryAgreements.$inferSelect;
+
+export const billingElements = pgTable("billing_elements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  boxId: uuid("box_id").notNull().references(() => boxes.id),
+  itemId: uuid("item_id").notNull().references(() => items.id),
+  quantity: integer("quantity").notNull().default(1),
+  base: numeric("base"),
+  price: numeric("price").notNull(),
+  transactionDate: text("transaction_date").notNull(),
+  billed: boolean("billed").notNull().default(false),
+  invoiceId: uuid("invoice_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBillingElementSchema = createInsertSchema(billingElements).omit({ id: true, createdAt: true });
+export type InsertBillingElement = z.infer<typeof insertBillingElementSchema>;
+export type BillingElement = typeof billingElements.$inferSelect;
+
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  invoiceDate: text("invoice_date").notNull(),
+  totalAmount: numeric("total_amount").notNull(),
+  status: text("status").notNull().default("pending"),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;

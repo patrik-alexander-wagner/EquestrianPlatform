@@ -1,0 +1,300 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { PageHeader } from "@/components/page-header";
+import { DataTable } from "@/components/data-table";
+import { SearchBar } from "@/components/search-bar";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Plus, MoreVertical, Trash2, Upload } from "lucide-react";
+import type { Stable } from "@shared/schema";
+
+export default function BoxesPage() {
+  const [stableSearch, setStableSearch] = useState("");
+  const [boxSearch, setBoxSearch] = useState("");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [editingBox, setEditingBox] = useState<any>(null);
+  const [selectedStableId, setSelectedStableId] = useState("");
+  const [selectedType, setSelectedType] = useState("box");
+  const [importStableId, setImportStableId] = useState("");
+  const { toast } = useToast();
+
+  const queryParams = new URLSearchParams();
+  if (stableSearch) queryParams.set("stableSearch", stableSearch);
+  if (boxSearch) queryParams.set("boxSearch", boxSearch);
+  const qs = queryParams.toString();
+
+  const { data: boxes = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/boxes", qs ? `?${qs}` : ""],
+  });
+
+  const { data: stables = [] } = useQuery<Stable[]>({
+    queryKey: ["/api/stables"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/boxes", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes"] });
+      setShowCreateDialog(false);
+      toast({ title: "Box created successfully" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("PATCH", `/api/boxes/${data.id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes"] });
+      setShowEditDialog(false);
+      toast({ title: "Box updated successfully" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/boxes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes"] });
+      toast({ title: "Box deleted successfully" });
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/boxes/import", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes"] });
+      setShowImportDialog(false);
+      toast({ title: "Boxes imported successfully" });
+    },
+  });
+
+  const typeLabels: Record<string, string> = {
+    box: "Box",
+    tack_room: "Tack Room",
+    storage_room: "Storage Room",
+  };
+
+  const columns = [
+    { key: "name", label: "Box Name" },
+    {
+      key: "type",
+      label: "Type",
+      render: (item: any) => (
+        <Badge variant="outline">{typeLabels[item.type] || item.type}</Badge>
+      ),
+    },
+    { key: "stableName", label: "Parent Stable" },
+    { key: "status", label: "Status", render: (item: any) => <StatusBadge status={item.status} /> },
+  ];
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!importStableId) {
+      toast({ title: "Please select a parent stable first", variant: "destructive" });
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split("\n").filter(l => l.trim());
+        if (lines.length < 2) return;
+        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+        const data = lines.slice(1).map(line => {
+          const values = line.split(",").map(v => v.trim());
+          const obj: any = { stableId: importStableId, status: "active", type: "box" };
+          headers.forEach((h, i) => {
+            if (h.includes("name") || h.includes("box")) obj.name = values[i];
+            else if (h.includes("type")) obj.type = values[i] || "box";
+          });
+          if (!obj.name) obj.name = values[0] || "Unknown";
+          return obj;
+        });
+        importMutation.mutate({ boxes: data });
+      } catch {
+        toast({ title: "Failed to parse file", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="p-6">
+      <PageHeader
+        title="Boxes"
+        description="Manage boxes, tack rooms, and storage rooms"
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-boxes">
+              <Upload className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+            <Button onClick={() => setShowCreateDialog(true)} data-testid="button-new-box">
+              <Plus className="w-4 h-4 mr-2" />
+              New Box
+            </Button>
+          </>
+        }
+      />
+
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <SearchBar placeholder="Search stable..." value={stableSearch} onChange={setStableSearch} className="w-52" />
+        <SearchBar placeholder="Search box..." value={boxSearch} onChange={setBoxSearch} className="w-52" />
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={boxes}
+        isLoading={isLoading}
+        actions={(item) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" data-testid={`button-actions-box-${item.id}`}>
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => { setEditingBox(item); setShowEditDialog(true); }}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => deleteMutation.mutate(item.id)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      />
+
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Box</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              createMutation.mutate({
+                name: fd.get("name"),
+                type: selectedType,
+                stableId: selectedStableId,
+                status: "active",
+              });
+            }}
+          >
+            <div className="space-y-4">
+              <div>
+                <Label>Box Name</Label>
+                <Input name="name" required data-testid="input-box-name" />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select value={selectedType} onValueChange={setSelectedType}>
+                  <SelectTrigger data-testid="select-box-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="box">Box</SelectItem>
+                    <SelectItem value="tack_room">Tack Room</SelectItem>
+                    <SelectItem value="storage_room">Storage Room</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Parent Stable</Label>
+                <Select value={selectedStableId} onValueChange={setSelectedStableId}>
+                  <SelectTrigger data-testid="select-box-stable">
+                    <SelectValue placeholder="Select stable..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stables.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="mt-4">
+              <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-box">Create</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Box</DialogTitle>
+          </DialogHeader>
+          {editingBox && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateMutation.mutate({
+                  id: editingBox.id,
+                  name: fd.get("name"),
+                  status: fd.get("status"),
+                });
+              }}
+            >
+              <div className="space-y-4">
+                <div>
+                  <Label>Box Name</Label>
+                  <Input name="name" defaultValue={editingBox.name} required data-testid="input-edit-box-name" />
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Input name="status" defaultValue={editingBox.status} data-testid="input-edit-box-status" />
+                </div>
+              </div>
+              <DialogFooter className="mt-4">
+                <Button type="submit" disabled={updateMutation.isPending} data-testid="button-submit-edit-box">Save</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Boxes from CSV</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Parent Stable (required)</Label>
+              <Select value={importStableId} onValueChange={setImportStableId}>
+                <SelectTrigger data-testid="select-import-stable">
+                  <SelectValue placeholder="Select stable..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {stables.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Upload a CSV file with columns: Box Name, Type
+            </p>
+            <Input type="file" accept=".csv,.txt" onChange={handleImport} data-testid="input-import-boxes-file" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
