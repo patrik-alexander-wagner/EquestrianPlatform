@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
@@ -5,10 +6,25 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Trash2 } from "lucide-react";
+import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
+import { Trash2, FileText, Eye, Download } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+function formatBillingMonth(billingMonth: string | null | undefined): string {
+  if (!billingMonth) return "-";
+  const [y, m] = billingMonth.split("-");
+  const date = new Date(parseInt(y), parseInt(m) - 1);
+  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+}
 
 export default function InvoicesPage() {
   const { toast } = useToast();
+  const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
@@ -27,11 +43,34 @@ export default function InvoicesPage() {
     },
   });
 
+  const handlePdfAction = async (invoiceId: string, action: "view" | "download") => {
+    setLoadingPdf(invoiceId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/details`);
+      if (!res.ok) throw new Error("Failed to load invoice details");
+      const details = await res.json();
+      if (action === "view") {
+        viewInvoicePDF(details);
+      } else {
+        downloadInvoicePDF(details);
+      }
+    } catch {
+      toast({ title: "Failed to generate PDF", variant: "destructive" });
+    } finally {
+      setLoadingPdf(null);
+    }
+  };
+
   const columns = [
     { key: "id", label: "Invoice ID", render: (item: any) => item.id.substring(0, 8) + "..." },
     { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
     { key: "customerName", label: "Customer" },
-    { key: "invoiceDate", label: "Invoice Date" },
+    { key: "invoiceDate", label: "Created Date" },
+    {
+      key: "billingMonth",
+      label: "Invoice Month",
+      render: (item: any) => formatBillingMonth(item.billingMonth),
+    },
     {
       key: "totalAmount",
       label: "Total Amount",
@@ -61,19 +100,50 @@ export default function InvoicesPage() {
         isLoading={isLoading}
         emptyMessage="No invoices yet"
         actions={(item) => (
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => {
-              if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
-                deleteMutation.mutate(item.id);
-              }
-            }}
-            disabled={deleteMutation.isPending}
-            data-testid={`button-delete-invoice-${item.id}`}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={loadingPdf === item.id}
+                  data-testid={`button-pdf-${item.id}`}
+                >
+                  <FileText className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => handlePdfAction(item.id, "view")}
+                  data-testid={`button-view-pdf-${item.id}`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handlePdfAction(item.id, "download")}
+                  data-testid={`button-download-pdf-${item.id}`}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
+                  deleteMutation.mutate(item.id);
+                }
+              }}
+              disabled={deleteMutation.isPending}
+              data-testid={`button-delete-invoice-${item.id}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
         )}
       />
     </div>

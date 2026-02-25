@@ -51,12 +51,23 @@ shared/
 - livery_agreements, billing_elements, invoices
 
 ## Key Features
+- Currency: AED throughout
 - Sidebar navigation matching requirements order
 - Pagination (25 rows/page) on all lists
 - Search/filter on all list pages
-- CSV import for customers, horses, boxes, items
+- Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
 - Livery agreement creation via box grid view
-- Billing element management for horses with active agreements
-- Invoice generation per customer
+- Billing element management for horses with active agreements (unit price + total display)
+- Invoice generation per customer with selectable line items (checkboxes + select all)
+- Livery packages only billable for months within agreement active period
+- Pro-rating by quarter-month for partial months (start/end mid-month)
+- Billing month tracking to prevent duplicate livery billing
+- PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
+- Invoice deletion (temporary feature) with billing element unbilling
 - Livery reports with bar charts (by month/customer)
 - Livery package configuration in settings
+- "Base" field = quantity unit; no seeding on startup
+
+## Dependencies
+- jspdf + jspdf-autotable - PDF generation for invoices
+- xlsx - Excel/CSV file parsing for imports

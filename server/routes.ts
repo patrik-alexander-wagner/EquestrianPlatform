@@ -267,6 +267,12 @@ export async function registerRoutes(
     res.json(invoices);
   });
 
+  app.get("/api/invoices/:id/details", async (req, res) => {
+    const details = await storage.getInvoiceDetails(req.params.id);
+    if (!details) return res.status(404).json({ message: "Invoice not found" });
+    res.json(details);
+  });
+
   app.get("/api/billed-months", async (req, res) => {
     const agreementIds = (req.query.agreementIds as string || "").split(",").filter(Boolean);
     const result = await storage.getBilledMonthsForAgreements(agreementIds);
@@ -275,8 +281,8 @@ export async function registerRoutes(
 
   app.post("/api/invoices", async (req, res) => {
     try {
-      const { customerId, invoiceDate, totalAmount, status, billingElementIds, liveryItems } = req.body;
-      const invoice = await storage.createInvoice({ customerId, invoiceDate, totalAmount, status });
+      const { customerId, invoiceDate, billingMonth, totalAmount, status, billingElementIds, liveryItems } = req.body;
+      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status });
 
       if (liveryItems && liveryItems.length > 0) {
         for (const item of liveryItems) {

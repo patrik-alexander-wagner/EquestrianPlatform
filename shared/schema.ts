@@ -129,6 +129,7 @@ export const invoices = pgTable("invoices", {
   netsuiteId: text("netsuite_id"),
   customerId: uuid("customer_id").notNull().references(() => customers.id),
   invoiceDate: text("invoice_date").notNull(),
+  billingMonth: text("billing_month"),
   totalAmount: numeric("total_amount").notNull(),
   status: text("status").notNull().default("pending"),
 });

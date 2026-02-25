@@ -64,6 +64,7 @@ export interface IStorage {
 
   getInvoices(): Promise<any[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoiceDetails(id: string): Promise<any>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   deleteInvoice(id: string): Promise<boolean>;
   markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void>;
@@ -424,6 +425,39 @@ export class DatabaseStorage implements IStorage {
   async getInvoice(id: string): Promise<Invoice | undefined> {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
     return invoice;
+  }
+
+  async getInvoiceDetails(id: string): Promise<any> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    if (!invoice) return null;
+
+    const customer = await this.getCustomer(invoice.customerId);
+    const linkedElements = await db.select().from(billingElements).where(eq(billingElements.invoiceId, id));
+    const allHorses = await db.select().from(horses);
+    const allItems = await db.select().from(items);
+
+    const lineItems = linkedElements.map(el => {
+      const horse = allHorses.find(h => h.id === el.horseId);
+      const item = allItems.find(i => i.id === el.itemId);
+      return {
+        description: item?.name || "Unknown",
+        horseName: horse?.horseName || "Unknown",
+        billDate: el.transactionDate,
+        quantity: el.quantity,
+        unit: item?.base ? `${item.base}` : "Each",
+        unitPrice: parseFloat(el.price || "0"),
+        amount: parseFloat(el.price || "0") * (el.quantity || 1),
+        isLivery: !!el.agreementId,
+        billingMonth: el.billingMonth,
+      };
+    });
+
+    return {
+      ...invoice,
+      customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+      customerNumber: customer?.netsuiteId || "",
+      lineItems,
+    };
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {

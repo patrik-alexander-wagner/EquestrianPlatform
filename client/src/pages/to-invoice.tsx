@@ -150,6 +150,7 @@ export default function ToInvoicePage() {
       return apiRequest("POST", "/api/invoices", {
         customerId,
         invoiceDate: new Date().toISOString().split("T")[0],
+        billingMonth,
         totalAmount: total.toFixed(2),
         status: "pending",
         billingElementIds,
