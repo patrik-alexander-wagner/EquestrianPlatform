@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 import { StatusBadge } from "@/components/status-badge";
+import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -53,40 +54,23 @@ export default function CustomersPage() {
     },
   ];
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").filter(l => l.trim());
-        if (lines.length < 2) {
-          toast({ title: "File must have a header row and data", variant: "destructive" });
-          return;
-        }
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-        const data = lines.slice(1).map(line => {
-          const values = line.split(",").map(v => v.trim());
-          const obj: any = {};
-          headers.forEach((h, i) => {
-            if (h.includes("first")) obj.firstname = values[i];
-            else if (h.includes("last")) obj.lastname = values[i];
-            else if (h.includes("phone")) obj.phone = values[i];
-            else if (h.includes("email")) obj.email = values[i];
-            else if (h.includes("status")) obj.status = values[i] || "active";
-          });
-          if (!obj.firstname) obj.firstname = values[0] || "Unknown";
-          if (!obj.lastname) obj.lastname = values[1] || "Unknown";
-          if (!obj.status) obj.status = "active";
-          return obj;
-        });
-        importMutation.mutate({ customers: data });
-      } catch {
-        toast({ title: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsText(file);
+  const importFields = [
+    { targetField: "firstname", label: "First Name", required: true },
+    { targetField: "lastname", label: "Last Name", required: true },
+    { targetField: "phone", label: "Phone" },
+    { targetField: "email", label: "Email" },
+    { targetField: "status", label: "Status" },
+  ];
+
+  const handleImport = (data: Record<string, string>[]) => {
+    const mapped = data.map(row => ({
+      firstname: row.firstname || "Unknown",
+      lastname: row.lastname || "Unknown",
+      phone: row.phone || null,
+      email: row.email || null,
+      status: row.status || "active",
+    }));
+    importMutation.mutate({ customers: mapped });
   };
 
   return (
@@ -164,19 +148,14 @@ export default function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Customers from CSV</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Upload a CSV file with columns: First Name, Last Name, Phone, Email
-            </p>
-            <Input type="file" accept=".csv,.txt" onChange={handleImport} data-testid="input-import-file" />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        title="Import Customers"
+        fields={importFields}
+        onImport={handleImport}
+        isPending={importMutation.isPending}
+      />
     </div>
   );
 }

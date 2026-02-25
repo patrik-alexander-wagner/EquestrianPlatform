@@ -4,11 +4,9 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 import { StatusBadge } from "@/components/status-badge";
+import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
@@ -47,34 +45,24 @@ export default function ItemsPage() {
     { key: "status", label: "Status", render: (item: Item) => <StatusBadge status={item.status} /> },
   ];
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").filter(l => l.trim());
-        if (lines.length < 2) return;
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-        const data = lines.slice(1).map(line => {
-          const values = line.split(",").map(v => v.trim());
-          const obj: any = { status: "active", isLiveryPackage: false };
-          headers.forEach((h, i) => {
-            if (h.includes("name") || h.includes("item")) obj.name = values[i];
-            else if (h.includes("category")) obj.category = values[i];
-            else if (h.includes("base")) obj.base = values[i];
-            else if (h.includes("price")) obj.price = values[i];
-          });
-          if (!obj.name) obj.name = values[0] || "Unknown";
-          return obj;
-        });
-        importMutation.mutate({ items: data });
-      } catch {
-        toast({ title: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsText(file);
+  const importFields = [
+    { targetField: "name", label: "Item Name", required: true },
+    { targetField: "category", label: "Category" },
+    { targetField: "base", label: "Base Price" },
+    { targetField: "price", label: "Selling Price" },
+    { targetField: "status", label: "Status" },
+  ];
+
+  const handleImport = (data: Record<string, string>[]) => {
+    const mapped = data.map(row => ({
+      name: row.name || "Unknown",
+      category: row.category || null,
+      base: row.base || null,
+      price: row.price || null,
+      status: row.status || "active",
+      isLiveryPackage: false,
+    }));
+    importMutation.mutate({ items: mapped });
   };
 
   return (
@@ -96,19 +84,14 @@ export default function ItemsPage() {
 
       <DataTable columns={columns} data={items} isLoading={isLoading} />
 
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Items from CSV</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Upload a CSV file with columns: Item Name, Category, Base, Price
-            </p>
-            <Input type="file" accept=".csv,.txt" onChange={handleImport} data-testid="input-import-items-file" />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        title="Import Items"
+        fields={importFields}
+        onImport={handleImport}
+        isPending={importMutation.isPending}
+      />
     </div>
   );
 }

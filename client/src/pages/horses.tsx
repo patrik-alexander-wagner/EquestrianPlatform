@@ -4,11 +4,11 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 import { StatusBadge } from "@/components/status-badge";
+import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -78,36 +78,30 @@ export default function HorsesPage() {
     },
   ];
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").filter(l => l.trim());
-        if (lines.length < 2) return;
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-        const data = lines.slice(1).map(line => {
-          const values = line.split(",").map(v => v.trim());
-          const obj: any = { status: "active" };
-          headers.forEach((h, i) => {
-            if (h.includes("name") || h.includes("horse")) obj.horseName = values[i];
-            else if (h.includes("breed")) obj.breed = values[i];
-            else if (h.includes("birth") || h.includes("dob")) obj.dateOfBirth = values[i];
-            else if (h.includes("sex")) obj.sex = values[i];
-            else if (h.includes("color")) obj.color = values[i];
-            else if (h.includes("size")) obj.size = values[i];
-          });
-          if (!obj.horseName) obj.horseName = values[0] || "Unknown";
-          return obj;
-        });
-        importMutation.mutate({ horses: data });
-      } catch {
-        toast({ title: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsText(file);
+  const importFields = [
+    { targetField: "horseName", label: "Horse Name", required: true },
+    { targetField: "breed", label: "Breed" },
+    { targetField: "dateOfBirth", label: "Date of Birth" },
+    { targetField: "sex", label: "Sex" },
+    { targetField: "color", label: "Color" },
+    { targetField: "size", label: "Size" },
+    { targetField: "passportName", label: "Passport Name" },
+    { targetField: "passportNumber", label: "Passport Number" },
+  ];
+
+  const handleImport = (data: Record<string, string>[]) => {
+    const mapped = data.map(row => ({
+      horseName: row.horseName || "Unknown",
+      breed: row.breed || null,
+      dateOfBirth: row.dateOfBirth || null,
+      sex: row.sex || null,
+      color: row.color || null,
+      size: row.size || null,
+      passportName: row.passportName || null,
+      passportNumber: row.passportNumber || null,
+      status: "active",
+    }));
+    importMutation.mutate({ horses: mapped });
   };
 
   return (
@@ -271,19 +265,14 @@ export default function HorsesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Horses from CSV</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Upload a CSV file with columns: Horse Name, Breed, Date of Birth, Sex, Color, Size
-            </p>
-            <Input type="file" accept=".csv,.txt" onChange={handleImport} data-testid="input-import-horses-file" />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        title="Import Horses"
+        fields={importFields}
+        onImport={handleImport}
+        isPending={importMutation.isPending}
+      />
     </div>
   );
 }

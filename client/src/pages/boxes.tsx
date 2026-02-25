@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 import { StatusBadge } from "@/components/status-badge";
+import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -95,36 +96,23 @@ export default function BoxesPage() {
     { key: "status", label: "Status", render: (item: any) => <StatusBadge status={item.status} /> },
   ];
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importFields = [
+    { targetField: "name", label: "Box Name", required: true },
+    { targetField: "type", label: "Type (box / tack_room / storage_room)" },
+  ];
+
+  const handleImport = (data: Record<string, string>[]) => {
     if (!importStableId) {
       toast({ title: "Please select a parent stable first", variant: "destructive" });
       return;
     }
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").filter(l => l.trim());
-        if (lines.length < 2) return;
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-        const data = lines.slice(1).map(line => {
-          const values = line.split(",").map(v => v.trim());
-          const obj: any = { stableId: importStableId, status: "active", type: "box" };
-          headers.forEach((h, i) => {
-            if (h.includes("name") || h.includes("box")) obj.name = values[i];
-            else if (h.includes("type")) obj.type = values[i] || "box";
-          });
-          if (!obj.name) obj.name = values[0] || "Unknown";
-          return obj;
-        });
-        importMutation.mutate({ boxes: data });
-      } catch {
-        toast({ title: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsText(file);
+    const mapped = data.map(row => ({
+      name: row.name || "Unknown",
+      type: row.type || "box",
+      stableId: importStableId,
+      status: "active",
+    }));
+    importMutation.mutate({ boxes: mapped });
   };
 
   return (
@@ -269,32 +257,29 @@ export default function BoxesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import Boxes from CSV</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Parent Stable (required)</Label>
-              <Select value={importStableId} onValueChange={setImportStableId}>
-                <SelectTrigger data-testid="select-import-stable">
-                  <SelectValue placeholder="Select stable..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {stables.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Upload a CSV file with columns: Box Name, Type
-            </p>
-            <Input type="file" accept=".csv,.txt" onChange={handleImport} data-testid="input-import-boxes-file" />
+      <ImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        title="Import Boxes"
+        fields={importFields}
+        onImport={handleImport}
+        isPending={importMutation.isPending}
+        extraSelectors={
+          <div>
+            <Label>Parent Stable (required for all imported boxes)</Label>
+            <Select value={importStableId} onValueChange={setImportStableId}>
+              <SelectTrigger data-testid="select-import-stable" className="mt-1">
+                <SelectValue placeholder="Select stable..." />
+              </SelectTrigger>
+              <SelectContent>
+                {stables.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </DialogContent>
-      </Dialog>
+        }
+      />
     </div>
   );
 }
