@@ -56,7 +56,7 @@ export default function CurrentAgreementsPage() {
     {
       key: "monthlyAmount",
       label: "Monthly Amount",
-      render: (item: any) => item.monthlyAmount ? `$${parseFloat(item.monthlyAmount).toFixed(2)}` : "-",
+      render: (item: any) => item.monthlyAmount ? `AED ${parseFloat(item.monthlyAmount).toFixed(2)}` : "-",
     },
   ];
 

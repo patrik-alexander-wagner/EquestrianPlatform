@@ -16,7 +16,7 @@ export default function InvoicesPage() {
     {
       key: "totalAmount",
       label: "Total Amount",
-      render: (item: any) => `$${parseFloat(item.totalAmount).toFixed(2)}`,
+      render: (item: any) => `AED ${parseFloat(item.totalAmount).toFixed(2)}`,
     },
     {
       key: "status",

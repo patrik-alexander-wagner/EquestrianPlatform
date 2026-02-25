@@ -208,7 +208,7 @@ export default function NewAgreementPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {liveryItems.map(i => (
-                        <SelectItem key={i.id} value={i.id}>{i.name} (${i.price}/mo)</SelectItem>
+                        <SelectItem key={i.id} value={i.id}>{i.name} (AED {i.price}/mo)</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

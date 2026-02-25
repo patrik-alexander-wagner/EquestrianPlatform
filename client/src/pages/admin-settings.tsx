@@ -104,7 +104,7 @@ export default function AdminSettingsPage() {
                     )}
                   </div>
                   <span className="text-sm text-muted-foreground">
-                    {item.price ? `$${item.price}` : "-"}
+                    {item.price ? `AED ${item.price}` : "-"}
                   </span>
                 </div>
               ))}

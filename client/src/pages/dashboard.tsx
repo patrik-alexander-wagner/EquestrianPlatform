@@ -114,7 +114,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-medium">
-                      {agreement.monthlyAmount ? `$${parseFloat(agreement.monthlyAmount).toFixed(2)}/mo` : "-"}
+                      {agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toFixed(2)}/mo` : "-"}
                     </p>
                     <p className="text-sm text-muted-foreground">{agreement.stableName} / {agreement.boxName}</p>
                   </div>

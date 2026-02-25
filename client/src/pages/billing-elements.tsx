@@ -109,7 +109,7 @@ export default function BillingElementsPage() {
               { key: "customerName", label: "Customer" },
               { key: "itemName", label: "Item" },
               { key: "quantity", label: "Qty" },
-              { key: "price", label: "Price", render: (item: any) => `$${parseFloat(item.price).toFixed(2)}` },
+              { key: "price", label: "Price", render: (item: any) => `AED ${parseFloat(item.price).toFixed(2)}` },
               { key: "transactionDate", label: "Date" },
               {
                 key: "billed",
@@ -162,7 +162,7 @@ export default function BillingElementsPage() {
                     <SelectContent>
                       {nonLiveryItems.map(i => (
                         <SelectItem key={i.id} value={i.id}>
-                          {i.name} {i.base ? `(base: ${i.base})` : ""} {i.price ? `- $${i.price}` : ""}
+                          {i.name} {i.base ? `(base: ${i.base})` : ""} {i.price ? `- AED ${i.price}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

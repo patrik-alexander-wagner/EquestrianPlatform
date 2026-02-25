@@ -44,19 +44,7 @@ export default function ItemsPage() {
     {
       key: "price",
       label: "Price",
-      render: (item: Item) => item.price ? `$${item.price}` : "-",
-    },
-    {
-      key: "unitPrice",
-      label: "Unit Price",
-      render: (item: Item) => {
-        const base = item.base ? parseFloat(item.base) : 0;
-        const price = item.price ? parseFloat(item.price) : 0;
-        if (base > 0 && price > 0) {
-          return `$${(price / base).toFixed(2)}`;
-        }
-        return "-";
-      },
+      render: (item: Item) => item.price ? `AED ${item.price}` : "-",
     },
     {
       key: "isLiveryPackage",

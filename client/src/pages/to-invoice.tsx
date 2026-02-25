@@ -141,7 +141,7 @@ export default function ToInvoicePage() {
                         <TableCell>Livery Fee</TableCell>
                         <TableCell>{a.itemName}</TableCell>
                         <TableCell>{a.horseName}</TableCell>
-                        <TableCell className="text-right">${parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
+                        <TableCell className="text-right">AED {parseFloat(a.monthlyAmount || "0").toFixed(2)}</TableCell>
                       </TableRow>
                     ))}
                     {c.billingElements.map((b: any) => (
@@ -150,13 +150,13 @@ export default function ToInvoicePage() {
                         <TableCell>{b.itemName} x{b.quantity}</TableCell>
                         <TableCell>{b.horseName}</TableCell>
                         <TableCell className="text-right">
-                          ${(parseFloat(b.price || "0") * (b.quantity || 1)).toFixed(2)}
+                          AED {(parseFloat(b.price || "0") * (b.quantity || 1)).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell colSpan={3} className="font-semibold">Total</TableCell>
-                      <TableCell className="text-right font-semibold">${c.total.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold">AED {c.total.toFixed(2)}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
