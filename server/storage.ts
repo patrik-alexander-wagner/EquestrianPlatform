@@ -65,6 +65,7 @@ export interface IStorage {
   getInvoices(): Promise<any[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  deleteInvoice(id: string): Promise<boolean>;
   markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void>;
   getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>>;
 
@@ -453,6 +454,16 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result;
+  }
+
+  async deleteInvoice(id: string): Promise<boolean> {
+    await db.delete(billingElements)
+      .where(and(eq(billingElements.invoiceId, id), sql`${billingElements.agreementId} IS NOT NULL`));
+    await db.update(billingElements)
+      .set({ billed: false, invoiceId: null })
+      .where(eq(billingElements.invoiceId, id));
+    await db.delete(invoices).where(eq(invoices.id, id));
+    return true;
   }
 
   async getReportData(groupBy: string): Promise<any[]> {

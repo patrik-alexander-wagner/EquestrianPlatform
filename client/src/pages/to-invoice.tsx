@@ -29,6 +29,7 @@ type LineItem = {
   qty: number;
   unitPrice: number;
   amount: number;
+  proRateLabel?: string;
   agreementId?: string;
   billingElementId?: string;
   horseId?: string;
@@ -36,6 +37,57 @@ type LineItem = {
   itemId?: string;
   billingMonth?: string;
 };
+
+function getQuarter(day: number): number {
+  if (day <= 7) return 1;
+  if (day <= 14) return 2;
+  if (day <= 22) return 3;
+  return 4;
+}
+
+function getProRateFraction(agreement: any, billingMonth: string): { fraction: number; label: string } {
+  const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
+  const monthStart = new Date(bmYear, bmMonth - 1, 1);
+  const monthEnd = new Date(bmYear, bmMonth, 0);
+
+  const startDate = agreement.startDate ? new Date(agreement.startDate) : null;
+  const endDate = agreement.endDate ? new Date(agreement.endDate) : null;
+
+  let startFraction = 0;
+  let endFraction = 4;
+
+  if (startDate && startDate.getFullYear() === bmYear && startDate.getMonth() + 1 === bmMonth && startDate.getDate() > 1) {
+    startFraction = getQuarter(startDate.getDate()) - 1;
+  }
+
+  if (endDate && endDate.getFullYear() === bmYear && endDate.getMonth() + 1 === bmMonth && endDate.getDate() < monthEnd.getDate()) {
+    endFraction = getQuarter(endDate.getDate());
+  }
+
+  const quarters = endFraction - startFraction;
+  if (quarters >= 4) return { fraction: 1, label: "" };
+  if (quarters <= 0) return { fraction: 0, label: "" };
+  return { fraction: quarters / 4, label: `${quarters}/4 month` };
+}
+
+function isMonthInAgreementRange(agreement: any, billingMonth: string): boolean {
+  const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
+  const bmDate = new Date(bmYear, bmMonth - 1, 1);
+  const bmEnd = new Date(bmYear, bmMonth, 0);
+
+  if (agreement.startDate) {
+    const start = new Date(agreement.startDate);
+    if (start > bmEnd) return false;
+  }
+
+  if (agreement.endDate) {
+    const end = new Date(agreement.endDate);
+    const bmStart = new Date(bmYear, bmMonth - 1, 1);
+    if (end < bmStart) return false;
+  }
+
+  return true;
+}
 
 export default function ToInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState("");
@@ -51,7 +103,7 @@ export default function ToInvoicePage() {
   });
 
   const { data: agreements = [] } = useQuery<any[]>({
-    queryKey: ["/api/livery-agreements", "?status=active"],
+    queryKey: ["/api/livery-agreements"],
   });
 
   const { data: billingElements = [] } = useQuery<any[]>({
@@ -89,7 +141,7 @@ export default function ToInvoicePage() {
             horseId: li.horseId,
             boxId: li.boxId,
             itemId: li.itemId,
-            price: li.unitPrice.toFixed(2),
+            price: li.amount.toFixed(2),
             billingMonth: li.billingMonth,
           });
         }
@@ -120,31 +172,43 @@ export default function ToInvoicePage() {
     return date.toLocaleString("en-US", { month: "long", year: "numeric" });
   }, [billingMonth]);
 
+  const activeAgreements = useMemo(() => {
+    return agreements.filter((a: any) => a.status === "active" || a.status === "ended");
+  }, [agreements]);
+
   const invoiceableCustomers = useMemo(() => {
     const customerIds = new Set<string>();
-    agreements.forEach((a: any) => customerIds.add(a.customerId));
+    activeAgreements.forEach((a: any) => customerIds.add(a.customerId));
     billingElements.forEach((b: any) => customerIds.add(b.customerId));
 
     return Array.from(customerIds).map(id => {
       const customer = customers.find(c => c.id === id);
-      const customerAgreements = agreements.filter((a: any) => a.customerId === id);
+      const customerAgreements = activeAgreements.filter((a: any) => a.customerId === id);
       const customerBilling = billingElements.filter((b: any) => b.customerId === id);
 
       const lineItems: LineItem[] = [];
 
       for (const a of customerAgreements) {
+        if (!isMonthInAgreementRange(a, billingMonth)) continue;
         const alreadyBilled = billedMonths[a.id]?.includes(billingMonth);
         if (alreadyBilled) continue;
-        const amount = parseFloat(a.monthlyAmount || "0");
+
+        const monthlyAmount = parseFloat(a.monthlyAmount || "0");
+        const { fraction, label } = getProRateFraction(a, billingMonth);
+        if (fraction <= 0) continue;
+
+        const amount = monthlyAmount * fraction;
+
         lineItems.push({
           key: `livery-${a.id}-${billingMonth}`,
           type: "livery",
-          description: a.itemName,
+          description: a.itemName + (label ? ` (${label})` : ""),
           horseName: a.horseName,
           date: billingMonthLabel,
           qty: 1,
-          unitPrice: amount,
+          unitPrice: monthlyAmount,
           amount,
+          proRateLabel: label,
           agreementId: a.id,
           horseId: a.horseId,
           boxId: a.boxId,
@@ -182,7 +246,7 @@ export default function ToInvoicePage() {
       if (!customerSearch) return true;
       return c.customerName.toLowerCase().includes(customerSearch.toLowerCase());
     });
-  }, [customers, agreements, billingElements, customerSearch, billingMonth, billingMonthLabel, billedMonths]);
+  }, [customers, activeAgreements, billingElements, customerSearch, billingMonth, billingMonthLabel, billedMonths]);
 
   const toggleItem = useCallback((key: string) => {
     setSelectedItems(prev => {
@@ -253,12 +317,6 @@ export default function ToInvoicePage() {
                   <div className="flex items-center gap-3">
                     <Checkbox
                       checked={allSelected}
-                      ref={(el) => {
-                        if (el) {
-                          const input = el as unknown as HTMLButtonElement;
-                          input.dataset.indeterminate = (!allSelected && someSelected).toString();
-                        }
-                      }}
                       className={!allSelected && someSelected ? "opacity-70" : ""}
                       onCheckedChange={() => toggleAll(c.lineItems)}
                       data-testid={`checkbox-select-all-${c.customerId}`}

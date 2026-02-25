@@ -306,6 +306,15 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/invoices/:id", async (req, res) => {
+    try {
+      await storage.deleteInvoice(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Reports
   app.get("/api/reports/livery", async (req, res) => {
     const groupBy = (req.query.groupBy as string) || "month";
