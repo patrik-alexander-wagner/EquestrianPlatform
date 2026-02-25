@@ -161,7 +161,9 @@ export default function BillingElementsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {nonLiveryItems.map(i => (
-                        <SelectItem key={i.id} value={i.id}>{i.name} (${i.price})</SelectItem>
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.name} {i.base ? `(base: ${i.base})` : ""} {i.price ? `- $${i.price}` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

@@ -45,6 +45,7 @@ export interface IStorage {
   getItems(search?: string): Promise<Item[]>;
   getItem(id: string): Promise<Item | undefined>;
   createItem(item: InsertItem): Promise<Item>;
+  createItemsBulk(itemsList: InsertItem[]): Promise<Item[]>;
   updateItem(id: string, item: Partial<InsertItem>): Promise<Item | undefined>;
   getLiveryPackageItems(): Promise<Item[]>;
   getNonLiveryPackageItems(): Promise<Item[]>;
@@ -247,6 +248,18 @@ export class DatabaseStorage implements IStorage {
   async createItem(item: InsertItem): Promise<Item> {
     const [created] = await db.insert(items).values(item).returning();
     return created;
+  }
+
+  async createItemsBulk(itemsList: InsertItem[]): Promise<Item[]> {
+    if (itemsList.length === 0) return [];
+    const batchSize = 100;
+    const results: Item[] = [];
+    for (let i = 0; i < itemsList.length; i += batchSize) {
+      const batch = itemsList.slice(i, i + batchSize);
+      const created = await db.insert(items).values(batch).returning();
+      results.push(...created);
+    }
+    return results;
   }
 
   async updateItem(id: string, item: Partial<InsertItem>): Promise<Item | undefined> {

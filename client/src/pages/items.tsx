@@ -28,13 +28,36 @@ export default function ItemsPage() {
       setShowImportDialog(false);
       toast({ title: "Items imported successfully" });
     },
+    onError: (error: any) => {
+      toast({ title: "Import failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const columns = [
     { key: "name", label: "Item Name" },
     { key: "category", label: "Category", render: (item: Item) => item.category || "-" },
-    { key: "base", label: "Base", render: (item: Item) => item.base ? `$${item.base}` : "-" },
-    { key: "price", label: "Price", render: (item: Item) => item.price ? `$${item.price}` : "-" },
+    {
+      key: "base",
+      label: "Base (Qty Unit)",
+      render: (item: Item) => item.base ? item.base : "-",
+    },
+    {
+      key: "price",
+      label: "Price",
+      render: (item: Item) => item.price ? `$${item.price}` : "-",
+    },
+    {
+      key: "unitPrice",
+      label: "Unit Price",
+      render: (item: Item) => {
+        const base = item.base ? parseFloat(item.base) : 0;
+        const price = item.price ? parseFloat(item.price) : 0;
+        if (base > 0 && price > 0) {
+          return `$${(price / base).toFixed(2)}`;
+        }
+        return "-";
+      },
+    },
     {
       key: "isLiveryPackage",
       label: "Type",
@@ -48,8 +71,9 @@ export default function ItemsPage() {
   const importFields = [
     { targetField: "name", label: "Item Name", required: true },
     { targetField: "category", label: "Category" },
-    { targetField: "base", label: "Base Price" },
-    { targetField: "price", label: "Selling Price" },
+    { targetField: "base", label: "Base (Qty Unit)" },
+    { targetField: "price", label: "Price" },
+    { targetField: "netsuiteId", label: "NetSuite ID" },
     { targetField: "status", label: "Status" },
   ];
 
@@ -59,6 +83,7 @@ export default function ItemsPage() {
       category: row.category || null,
       base: row.base || null,
       price: row.price || null,
+      netsuiteId: row.netsuiteId || null,
       status: row.status || "active",
       isLiveryPackage: false,
     }));
@@ -69,7 +94,7 @@ export default function ItemsPage() {
     <div className="p-6">
       <PageHeader
         title="Items"
-        description="Items and service items (read-only, synced from NetSuite)"
+        description="Items and service items. Base = quantity unit for pricing, Price = total price for that base quantity."
         actions={
           <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-items">
             <Upload className="w-4 h-4 mr-2" />

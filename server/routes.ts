@@ -196,12 +196,8 @@ export async function registerRoutes(
 
   app.post("/api/items/import", async (req, res) => {
     const { items: data } = req.body;
-    const results = [];
-    for (const i of data) {
-      const created = await storage.createItem(i);
-      results.push(created);
-    }
-    res.json(results);
+    const results = await storage.createItemsBulk(data);
+    res.json({ imported: results.length });
   });
 
   app.patch("/api/items/:id", async (req, res) => {
