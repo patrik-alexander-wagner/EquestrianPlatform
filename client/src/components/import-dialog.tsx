@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Upload, ArrowRight, ArrowLeft, Check, AlertCircle } from "lucide-react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import Papa from "papaparse";
 
 interface FieldMapping {
   targetField: string;
@@ -29,19 +30,40 @@ interface ImportDialogProps {
 
 type Step = "upload" | "mapping" | "preview";
 
-function parseFile(buffer: ArrayBuffer, fileName: string): { headers: string[]; rows: string[][] } {
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const jsonData: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+async function parseFile(buffer: ArrayBuffer, fileName: string): Promise<{ headers: string[]; rows: string[][] }> {
+  const ext = fileName.split(".").pop()?.toLowerCase();
 
-  if (jsonData.length === 0) return { headers: [], rows: [] };
+  if (ext === "csv" || ext === "txt") {
+    const text = new TextDecoder().decode(buffer);
+    const result = Papa.parse<string[]>(text, { skipEmptyLines: true });
+    const data = result.data;
+    if (data.length === 0) return { headers: [], rows: [] };
+    const headers = data[0].map((h: string) => String(h).trim());
+    const rows = data.slice(1)
+      .filter((row: string[]) => row.some((cell: string) => String(cell).trim()))
+      .map((row: string[]) => row.map((cell: string) => String(cell).trim()));
+    return { headers, rows };
+  }
 
-  const headers = jsonData[0].map(h => String(h).trim());
-  const rows = jsonData.slice(1)
-    .filter(row => row.some(cell => String(cell).trim()))
-    .map(row => row.map(cell => String(cell).trim()));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return { headers: [], rows: [] };
 
+  const data: string[][] = [];
+  worksheet.eachRow((row) => {
+    const values = (row.values as (ExcelJS.CellValue | undefined)[]).slice(1);
+    data.push(values.map((cell) => {
+      if (cell === null || cell === undefined) return "";
+      if (typeof cell === "object" && "text" in cell) return String((cell as ExcelJS.CellRichTextValue).text).trim();
+      if (typeof cell === "object" && "result" in cell) return String((cell as ExcelJS.CellFormulaValue).result ?? "").trim();
+      return String(cell).trim();
+    }));
+  });
+
+  if (data.length === 0) return { headers: [], rows: [] };
+  const headers = data[0];
+  const rows = data.slice(1).filter((row) => row.some((cell) => cell));
   return { headers, rows };
 }
 
@@ -102,10 +124,10 @@ export function ImportDialog({
     setParseError("");
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const buffer = event.target?.result as ArrayBuffer;
-        const parsed = parseFile(buffer, file.name);
+        const parsed = await parseFile(buffer, file.name);
 
         if (parsed.headers.length === 0) {
           setParseError("No data found in the file. Make sure the first row contains column headers.");
