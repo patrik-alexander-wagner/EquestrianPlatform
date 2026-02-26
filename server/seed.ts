@@ -92,7 +92,7 @@ export async function seedDatabase() {
     },
   ]);
 
-  await storage.createUser({ username: "admin", password: "admin123" });
+  await storage.createUser({ username: "admin", password: process.env.SEED_ADMIN_PASSWORD ?? "admin123" });
 
   console.log("Database seeded successfully");
 }
