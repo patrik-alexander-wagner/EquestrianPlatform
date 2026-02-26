@@ -23,8 +23,12 @@ export async function registerRoutes(
 
   // Users
   app.get("/api/users", async (_req, res) => {
-    const users = await storage.getUsers();
-    res.json(users);
+    try {
+      const users = await storage.getUsers();
+      res.json(users);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/users", async (req, res) => {
@@ -39,15 +43,23 @@ export async function registerRoutes(
 
   // Customers
   app.get("/api/customers", async (req, res) => {
-    const search = req.query.search as string | undefined;
-    const customers = await storage.getCustomers(search);
-    res.json(customers);
+    try {
+      const search = req.query.search as string | undefined;
+      const customers = await storage.getCustomers(search);
+      res.json(customers);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/customers/:id", async (req, res) => {
-    const customer = await storage.getCustomer(req.params.id);
-    if (!customer) return res.status(404).json({ message: "Customer not found" });
-    res.json(customer);
+    try {
+      const customer = await storage.getCustomer(req.params.id);
+      if (!customer) return res.status(404).json({ message: "Customer not found" });
+      res.json(customer);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/customers", async (req, res) => {
@@ -61,33 +73,49 @@ export async function registerRoutes(
   });
 
   app.post("/api/customers/import", async (req, res) => {
-    const { customers: data } = req.body;
-    const results = [];
-    for (const c of data) {
-      const created = await storage.createCustomer(c);
-      results.push(created);
+    try {
+      const { customers: data } = req.body;
+      const results = [];
+      for (const c of data) {
+        const created = await storage.createCustomer(c);
+        results.push(created);
+      }
+      res.json(results);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
-    res.json(results);
   });
 
   // Horses
   app.get("/api/horses", async (req, res) => {
-    const search = req.query.search as string | undefined;
-    const customerSearch = req.query.customerSearch as string | undefined;
-    const stableBoxSearch = req.query.stableBoxSearch as string | undefined;
-    const horses = await storage.getHorses(search, customerSearch, stableBoxSearch);
-    res.json(horses);
+    try {
+      const search = req.query.search as string | undefined;
+      const customerSearch = req.query.customerSearch as string | undefined;
+      const stableBoxSearch = req.query.stableBoxSearch as string | undefined;
+      const horses = await storage.getHorses(search, customerSearch, stableBoxSearch);
+      res.json(horses);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/horses/available", async (_req, res) => {
-    const available = await storage.getAvailableHorses();
-    res.json(available);
+    try {
+      const available = await storage.getAvailableHorses();
+      res.json(available);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/horses/:id", async (req, res) => {
-    const horse = await storage.getHorse(req.params.id);
-    if (!horse) return res.status(404).json({ message: "Horse not found" });
-    res.json(horse);
+    try {
+      const horse = await storage.getHorse(req.params.id);
+      if (!horse) return res.status(404).json({ message: "Horse not found" });
+      res.json(horse);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/horses", async (req, res) => {
@@ -101,25 +129,37 @@ export async function registerRoutes(
   });
 
   app.patch("/api/horses/:id", async (req, res) => {
-    const horse = await storage.updateHorse(req.params.id, req.body);
-    if (!horse) return res.status(404).json({ message: "Horse not found" });
-    res.json(horse);
+    try {
+      const horse = await storage.updateHorse(req.params.id, req.body);
+      if (!horse) return res.status(404).json({ message: "Horse not found" });
+      res.json(horse);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/horses/import", async (req, res) => {
-    const { horses: data } = req.body;
-    const results = [];
-    for (const h of data) {
-      const created = await storage.createHorse(h);
-      results.push(created);
+    try {
+      const { horses: data } = req.body;
+      const results = [];
+      for (const h of data) {
+        const created = await storage.createHorse(h);
+        results.push(created);
+      }
+      res.json(results);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
-    res.json(results);
   });
 
   // Stables
   app.get("/api/stables", async (_req, res) => {
-    const stables = await storage.getStables();
-    res.json(stables);
+    try {
+      const stables = await storage.getStables();
+      res.json(stables);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/stables", async (req, res) => {
@@ -133,22 +173,34 @@ export async function registerRoutes(
   });
 
   app.patch("/api/stables/:id", async (req, res) => {
-    const stable = await storage.updateStable(req.params.id, req.body);
-    if (!stable) return res.status(404).json({ message: "Stable not found" });
-    res.json(stable);
+    try {
+      const stable = await storage.updateStable(req.params.id, req.body);
+      if (!stable) return res.status(404).json({ message: "Stable not found" });
+      res.json(stable);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.delete("/api/stables/:id", async (req, res) => {
-    await storage.deleteStable(req.params.id);
-    res.json({ success: true });
+    try {
+      await storage.deleteStable(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Boxes
   app.get("/api/boxes", async (req, res) => {
-    const stableSearch = req.query.stableSearch as string | undefined;
-    const boxSearch = req.query.boxSearch as string | undefined;
-    const boxes = await storage.getBoxes(stableSearch, boxSearch);
-    res.json(boxes);
+    try {
+      const stableSearch = req.query.stableSearch as string | undefined;
+      const boxSearch = req.query.boxSearch as string | undefined;
+      const boxes = await storage.getBoxes(stableSearch, boxSearch);
+      res.json(boxes);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/boxes", async (req, res) => {
@@ -162,60 +214,96 @@ export async function registerRoutes(
   });
 
   app.patch("/api/boxes/:id", async (req, res) => {
-    const box = await storage.updateBox(req.params.id, req.body);
-    if (!box) return res.status(404).json({ message: "Box not found" });
-    res.json(box);
+    try {
+      const box = await storage.updateBox(req.params.id, req.body);
+      if (!box) return res.status(404).json({ message: "Box not found" });
+      res.json(box);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.delete("/api/boxes/:id", async (req, res) => {
-    await storage.deleteBox(req.params.id);
-    res.json({ success: true });
+    try {
+      await storage.deleteBox(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/boxes/import", async (req, res) => {
-    const { boxes: data } = req.body;
-    const results = [];
-    for (const b of data) {
-      const created = await storage.createBox(b);
-      results.push(created);
+    try {
+      const { boxes: data } = req.body;
+      const results = [];
+      for (const b of data) {
+        const created = await storage.createBox(b);
+        results.push(created);
+      }
+      res.json(results);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
-    res.json(results);
   });
 
   // Items
   app.get("/api/items", async (req, res) => {
-    const search = req.query.search as string | undefined;
-    const items = await storage.getItems(search);
-    res.json(items);
+    try {
+      const search = req.query.search as string | undefined;
+      const items = await storage.getItems(search);
+      res.json(items);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/items/livery-packages", async (_req, res) => {
-    const items = await storage.getLiveryPackageItems();
-    res.json(items);
+    try {
+      const items = await storage.getLiveryPackageItems();
+      res.json(items);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/items/non-livery-packages", async (_req, res) => {
-    const items = await storage.getNonLiveryPackageItems();
-    res.json(items);
+    try {
+      const items = await storage.getNonLiveryPackageItems();
+      res.json(items);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/items/import", async (req, res) => {
-    const { items: data } = req.body;
-    const results = await storage.createItemsBulk(data);
-    res.json({ imported: results.length });
+    try {
+      const { items: data } = req.body;
+      const results = await storage.createItemsBulk(data);
+      res.json({ imported: results.length });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.patch("/api/items/:id", async (req, res) => {
-    const item = await storage.updateItem(req.params.id, req.body);
-    if (!item) return res.status(404).json({ message: "Item not found" });
-    res.json(item);
+    try {
+      const item = await storage.updateItem(req.params.id, req.body);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      res.json(item);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Livery Agreements
   app.get("/api/livery-agreements", async (req, res) => {
-    const status = req.query.status as string | undefined;
-    const agreements = await storage.getLiveryAgreements(status);
-    res.json(agreements);
+    try {
+      const status = req.query.status as string | undefined;
+      const agreements = await storage.getLiveryAgreements(status);
+      res.json(agreements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/livery-agreements", async (req, res) => {
@@ -229,21 +317,33 @@ export async function registerRoutes(
   });
 
   app.patch("/api/livery-agreements/:id", async (req, res) => {
-    const agreement = await storage.updateLiveryAgreement(req.params.id, req.body);
-    if (!agreement) return res.status(404).json({ message: "Agreement not found" });
-    res.json(agreement);
+    try {
+      const agreement = await storage.updateLiveryAgreement(req.params.id, req.body);
+      if (!agreement) return res.status(404).json({ message: "Agreement not found" });
+      res.json(agreement);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/boxes-with-status", async (_req, res) => {
-    const boxes = await storage.getBoxesWithAgreementStatus();
-    res.json(boxes);
+    try {
+      const boxes = await storage.getBoxesWithAgreementStatus();
+      res.json(boxes);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Billing Elements
   app.get("/api/billing-elements", async (req, res) => {
-    const billed = req.query.billed !== undefined ? req.query.billed === "true" : undefined;
-    const elements = await storage.getBillingElements(billed);
-    res.json(elements);
+    try {
+      const billed = req.query.billed !== undefined ? req.query.billed === "true" : undefined;
+      const elements = await storage.getBillingElements(billed);
+      res.json(elements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/billing-elements", async (req, res) => {
@@ -257,26 +357,42 @@ export async function registerRoutes(
   });
 
   app.get("/api/horses-with-agreements", async (_req, res) => {
-    const horses = await storage.getHorsesWithActiveAgreements();
-    res.json(horses);
+    try {
+      const horses = await storage.getHorsesWithActiveAgreements();
+      res.json(horses);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Invoices
   app.get("/api/invoices", async (_req, res) => {
-    const invoices = await storage.getInvoices();
-    res.json(invoices);
+    try {
+      const invoices = await storage.getInvoices();
+      res.json(invoices);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/invoices/:id/details", async (req, res) => {
-    const details = await storage.getInvoiceDetails(req.params.id);
-    if (!details) return res.status(404).json({ message: "Invoice not found" });
-    res.json(details);
+    try {
+      const details = await storage.getInvoiceDetails(req.params.id);
+      if (!details) return res.status(404).json({ message: "Invoice not found" });
+      res.json(details);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.get("/api/billed-months", async (req, res) => {
-    const agreementIds = (req.query.agreementIds as string || "").split(",").filter(Boolean);
-    const result = await storage.getBilledMonthsForAgreements(agreementIds);
-    res.json(result);
+    try {
+      const agreementIds = (req.query.agreementIds as string || "").split(",").filter(Boolean);
+      const result = await storage.getBilledMonthsForAgreements(agreementIds);
+      res.json(result);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   app.post("/api/invoices", async (req, res) => {
@@ -323,22 +439,30 @@ export async function registerRoutes(
 
   // Reports
   app.get("/api/reports/livery", async (req, res) => {
-    const groupBy = (req.query.groupBy as string) || "month";
-    const data = await storage.getReportData(groupBy);
-    res.json(data);
+    try {
+      const groupBy = (req.query.groupBy as string) || "month";
+      const data = await storage.getReportData(groupBy);
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // Settings - Livery Package Configuration
   app.post("/api/settings/livery-packages", async (req, res) => {
-    const { itemIds } = req.body;
-    const allItems = await storage.getItems();
-    for (const item of allItems) {
-      const isPackage = itemIds.includes(item.id);
-      if (item.isLiveryPackage !== isPackage) {
-        await storage.updateItem(item.id, { isLiveryPackage: isPackage });
+    try {
+      const { itemIds } = req.body;
+      const allItems = await storage.getItems();
+      for (const item of allItems) {
+        const isPackage = itemIds.includes(item.id);
+        if (item.isLiveryPackage !== isPackage) {
+          await storage.updateItem(item.id, { isLiveryPackage: isPackage });
+        }
       }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
-    res.json({ success: true });
   });
 
   return httpServer;
