@@ -356,6 +356,16 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/billing-elements/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteBillingElement(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Billing element not found" });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   app.get("/api/horses-with-agreements", async (_req, res) => {
     try {
       const horses = await storage.getHorsesWithActiveAgreements();

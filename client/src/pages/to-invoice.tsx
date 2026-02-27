@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import type { Customer } from "@shared/schema";
 
 type LineItem = {
@@ -163,6 +163,17 @@ export default function ToInvoicePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/billed-months"] });
       setSelectedItems(new Set());
       toast({ title: "Invoice generated successfully" });
+    },
+  });
+
+  const deleteBillingMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/billing-elements/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
+      toast({ title: "Billing element deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete billing element", variant: "destructive" });
     },
   });
 
@@ -345,6 +356,7 @@ export default function ToInvoicePage() {
                         <TableHead className="text-right">Qty</TableHead>
                         <TableHead className="text-right">Unit Price</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -364,6 +376,20 @@ export default function ToInvoicePage() {
                           <TableCell className="text-right">{li.qty}</TableCell>
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
+                          <TableCell>
+                            {li.type === "billing" && li.billingElementId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => deleteBillingMutation.mutate(li.billingElementId!)}
+                                disabled={deleteBillingMutation.isPending}
+                                data-testid={`button-delete-billing-${li.billingElementId}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                       {someSelected && (
@@ -371,12 +397,14 @@ export default function ToInvoicePage() {
                           <TableCell />
                           <TableCell colSpan={6} className="font-semibold">Selected Total</TableCell>
                           <TableCell className="text-right font-semibold">AED {selectedTotal.toFixed(2)}</TableCell>
+                          <TableCell />
                         </TableRow>
                       )}
                       <TableRow>
                         <TableCell />
                         <TableCell colSpan={6} className="font-semibold text-muted-foreground">Grand Total (all items)</TableCell>
                         <TableCell className="text-right font-semibold text-muted-foreground">AED {c.total.toFixed(2)}</TableCell>
+                        <TableCell />
                       </TableRow>
                     </TableBody>
                   </Table>

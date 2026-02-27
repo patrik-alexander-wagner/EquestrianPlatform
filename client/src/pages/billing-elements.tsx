@@ -186,16 +186,11 @@ export default function BillingElementsPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                createMutation.mutate({
-                  horseId: selectedAgreementHorse.horseId,
-                  customerId: selectedAgreementHorse.customerId,
-                  boxId: selectedAgreementHorse.boxId,
-                  itemId: selectedItemId,
-                  quantity: quantity,
-                  price: finalSellingPrice,
-                  transactionDate: transactionDate,
-                  billed: false,
-                });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                }
               }}
             >
               <div className="space-y-4">
@@ -328,7 +323,23 @@ export default function BillingElementsPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice} data-testid="button-submit-billing">
+                <Button
+                  type="button"
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice}
+                  data-testid="button-submit-billing"
+                  onClick={() => {
+                    createMutation.mutate({
+                      horseId: selectedAgreementHorse.horseId,
+                      customerId: selectedAgreementHorse.customerId,
+                      boxId: selectedAgreementHorse.boxId,
+                      itemId: selectedItemId,
+                      quantity: quantity,
+                      price: finalSellingPrice,
+                      transactionDate: transactionDate,
+                      billed: false,
+                    });
+                  }}
+                >
                   Save
                 </Button>
               </DialogFooter>
