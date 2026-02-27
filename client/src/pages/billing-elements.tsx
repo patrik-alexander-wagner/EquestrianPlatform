@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus } from "lucide-react";
@@ -25,6 +24,8 @@ export default function BillingElementsPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedAgreementHorse, setSelectedAgreementHorse] = useState<any>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
+  const [itemDropdownOpen, setItemDropdownOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [finalSellingPrice, setFinalSellingPrice] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayString());
@@ -51,6 +52,16 @@ export default function BillingElementsPage() {
       toast({ title: "Billing element added successfully" });
     },
   });
+
+  const filteredItems = useMemo(() => {
+    if (!itemSearch.trim()) return nonLiveryItems;
+    const search = itemSearch.toLowerCase();
+    return nonLiveryItems.filter((i: Item) =>
+      i.name.toLowerCase().includes(search) ||
+      (i.department && i.department.toLowerCase().includes(search)) ||
+      (i.location && i.location.toLowerCase().includes(search))
+    );
+  }, [nonLiveryItems, itemSearch]);
 
   const filteredHorses = useMemo(() => {
     let result = horsesWithAgreements;
@@ -101,6 +112,8 @@ export default function BillingElementsPage() {
   const openDialog = (horse: any) => {
     setSelectedAgreementHorse(horse);
     setSelectedItemId("");
+    setItemSearch("");
+    setItemDropdownOpen(false);
     setQuantity(1);
     setFinalSellingPrice("");
     setTransactionDate(getTodayString());
@@ -192,20 +205,66 @@ export default function BillingElementsPage() {
                   <div>Location: <strong>{selectedAgreementHorse.stableName} / {selectedAgreementHorse.boxName}</strong></div>
                 </div>
 
-                <div>
+                <div className="relative">
                   <Label>Item</Label>
-                  <Select value={selectedItemId} onValueChange={handleItemChange}>
-                    <SelectTrigger data-testid="select-billing-item">
-                      <SelectValue placeholder="Select item..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {nonLiveryItems.map(i => (
-                        <SelectItem key={i.id} value={i.id}>
-                          {i.name} {i.price ? `- AED ${i.price}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-item-search"
+                      placeholder="Search items by name, department, or location..."
+                      value={selectedItem && !itemDropdownOpen ? `${selectedItem.name}${selectedItem.price ? ` - AED ${selectedItem.price}` : ""}` : itemSearch}
+                      onChange={(e) => {
+                        setItemSearch(e.target.value);
+                        setItemDropdownOpen(true);
+                        if (selectedItemId) {
+                          setSelectedItemId("");
+                          setFinalSellingPrice("");
+                        }
+                      }}
+                      onFocus={() => setItemDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setItemDropdownOpen(false), 200)}
+                    />
+                    {selectedItemId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => {
+                          setSelectedItemId("");
+                          setItemSearch("");
+                          setFinalSellingPrice("");
+                          setItemDropdownOpen(true);
+                        }}
+                        data-testid="button-clear-item"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {itemDropdownOpen && !selectedItemId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {filteredItems.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No items found</div>
+                      ) : (
+                        filteredItems.map(i => (
+                          <button
+                            type="button"
+                            key={i.id}
+                            data-testid={`item-option-${i.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => {
+                              handleItemChange(i.id);
+                              setItemSearch("");
+                              setItemDropdownOpen(false);
+                            }}
+                          >
+                            <div className="font-medium">{i.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {i.price ? `AED ${i.price}` : "No price"}{i.department ? ` · ${i.department}` : ""}{i.location ? ` · ${i.location}` : ""}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {selectedItem && (
