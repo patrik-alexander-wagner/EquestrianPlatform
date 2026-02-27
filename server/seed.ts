@@ -42,14 +42,14 @@ export async function seedDatabase() {
   ]).returning();
 
   const createdItems = await db.insert(items).values([
-    { name: "Full Livery Package", category: "Livery", base: "800", price: "1200", status: "active", isLiveryPackage: true },
-    { name: "Part Livery Package", category: "Livery", base: "500", price: "750", status: "active", isLiveryPackage: true },
-    { name: "DIY Livery Package", category: "Livery", base: "300", price: "450", status: "active", isLiveryPackage: true },
-    { name: "Farrier Service", category: "Services", base: "80", price: "120", status: "active", isLiveryPackage: false },
-    { name: "Veterinary Check", category: "Services", base: "100", price: "150", status: "active", isLiveryPackage: false },
-    { name: "Saddle Fitting", category: "Equipment", base: "50", price: "75", status: "active", isLiveryPackage: false },
-    { name: "Feed Supplement", category: "Feed", base: "30", price: "45", status: "active", isLiveryPackage: false },
-    { name: "Arena Booking", category: "Facilities", base: "20", price: "35", status: "active", isLiveryPackage: false },
+    { name: "Full Livery Package", unitFactor: "1", price: "1200", department: "Livery", status: "active", isLiveryPackage: true },
+    { name: "Part Livery Package", unitFactor: "1", price: "750", department: "Livery", status: "active", isLiveryPackage: true },
+    { name: "DIY Livery Package", unitFactor: "1", price: "450", department: "Livery", status: "active", isLiveryPackage: true },
+    { name: "Farrier Service", unitFactor: "1", price: "120", department: "Services", status: "active", isLiveryPackage: false },
+    { name: "Veterinary Check", unitFactor: "1", price: "150", department: "Services", status: "active", isLiveryPackage: false },
+    { name: "Saddle Fitting", unitFactor: "1", price: "75", department: "Equipment", status: "active", isLiveryPackage: false },
+    { name: "Feed Supplement", unitFactor: "1", price: "45", department: "Feed", status: "active", isLiveryPackage: false },
+    { name: "Arena Booking", unitFactor: "1", price: "35", department: "Facilities", status: "active", isLiveryPackage: false },
   ]).returning();
 
   const allBoxes = await storage.getBoxes();

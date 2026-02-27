@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,11 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus } from "lucide-react";
 import type { Item } from "@shared/schema";
+
+function getTodayString() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
 
 export default function BillingElementsPage() {
   const [horseSearch, setHorseSearch] = useState("");
@@ -21,6 +26,8 @@ export default function BillingElementsPage() {
   const [selectedAgreementHorse, setSelectedAgreementHorse] = useState<any>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [finalSellingPrice, setFinalSellingPrice] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayString());
   const { toast } = useToast();
 
   const { data: horsesWithAgreements = [], isLoading } = useQuery<any[]>({
@@ -70,8 +77,35 @@ export default function BillingElementsPage() {
   ];
 
   const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
-  const unitPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
-  const totalPrice = unitPrice * quantity;
+  const itemPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
+  const itemUnitFactor = selectedItem?.unitFactor ? parseFloat(selectedItem.unitFactor) : 1;
+  const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * quantity : 0;
+
+  const handleItemChange = (val: string) => {
+    setSelectedItemId(val);
+    const item = nonLiveryItems.find(i => i.id === val);
+    const price = item?.price ? parseFloat(item.price) : 0;
+    const uf = item?.unitFactor ? parseFloat(item.unitFactor) : 1;
+    const computed = uf > 0 ? (price / uf) * quantity : 0;
+    setFinalSellingPrice(computed.toFixed(2));
+  };
+
+  const handleQuantityChange = (newQty: number) => {
+    setQuantity(newQty);
+    if (selectedItem) {
+      const computed = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * newQty : 0;
+      setFinalSellingPrice(computed.toFixed(2));
+    }
+  };
+
+  const openDialog = (horse: any) => {
+    setSelectedAgreementHorse(horse);
+    setSelectedItemId("");
+    setQuantity(1);
+    setFinalSellingPrice("");
+    setTransactionDate(getTodayString());
+    setShowAddDialog(true);
+  };
 
   return (
     <div className="p-6">
@@ -94,7 +128,7 @@ export default function BillingElementsPage() {
         actions={(item) => (
           <Button
             size="sm"
-            onClick={() => { setSelectedAgreementHorse(item); setSelectedItemId(""); setQuantity(1); setShowAddDialog(true); }}
+            onClick={() => openDialog(item)}
             data-testid={`button-add-billing-${item.horseId}`}
           >
             <Plus className="w-4 h-4 mr-1" />
@@ -113,14 +147,9 @@ export default function BillingElementsPage() {
               { key: "itemName", label: "Item" },
               { key: "quantity", label: "Qty" },
               {
-                key: "unitPrice",
-                label: "Unit Price",
+                key: "price",
+                label: "Selling Price",
                 render: (item: any) => `AED ${parseFloat(item.price).toFixed(2)}`,
-              },
-              {
-                key: "total",
-                label: "Total",
-                render: (item: any) => `AED ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}`,
               },
               { key: "transactionDate", label: "Date" },
               {
@@ -138,20 +167,20 @@ export default function BillingElementsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Billing Element</DialogTitle>
+            <DialogDescription>Add a billable item for the selected horse</DialogDescription>
           </DialogHeader>
           {selectedAgreementHorse && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const fd = new FormData(e.currentTarget);
                 createMutation.mutate({
                   horseId: selectedAgreementHorse.horseId,
                   customerId: selectedAgreementHorse.customerId,
                   boxId: selectedAgreementHorse.boxId,
                   itemId: selectedItemId,
                   quantity: quantity,
-                  price: fd.get("price"),
-                  transactionDate: fd.get("transactionDate"),
+                  price: finalSellingPrice,
+                  transactionDate: transactionDate,
                   billed: false,
                 });
               }}
@@ -165,70 +194,82 @@ export default function BillingElementsPage() {
 
                 <div>
                   <Label>Item</Label>
-                  <Select value={selectedItemId} onValueChange={(val) => {
-                    setSelectedItemId(val);
-                  }}>
+                  <Select value={selectedItemId} onValueChange={handleItemChange}>
                     <SelectTrigger data-testid="select-billing-item">
                       <SelectValue placeholder="Select item..." />
                     </SelectTrigger>
                     <SelectContent>
                       {nonLiveryItems.map(i => (
                         <SelectItem key={i.id} value={i.id}>
-                          {i.name} {i.base ? `(base: ${i.base})` : ""} {i.price ? `- AED ${i.price}` : ""}
+                          {i.name} {i.price ? `- AED ${i.price}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
+                {selectedItem && (
+                  <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span>Unit Factor:</span>
+                      <span>{itemUnitFactor}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Base Price (per unit factor):</span>
+                      <span>AED {itemPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Label>Quantity</Label>
                   <Input
-                    name="quantity"
                     type="number"
                     min="1"
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                     data-testid="input-billing-quantity"
                   />
                 </div>
 
-                <div>
-                  <Label>Unit Price (AED)</Label>
-                  <Input
-                    name="price"
-                    type="number"
-                    step="0.01"
-                    defaultValue={selectedItem?.price || ""}
-                    key={selectedItemId}
-                    data-testid="input-billing-price"
-                  />
-                </div>
-
                 {selectedItem && (
-                  <div className="p-3 rounded-md bg-primary/5 border text-sm space-y-1">
-                    <div className="flex justify-between">
-                      <span>Unit Price:</span>
-                      <span>AED {unitPrice.toFixed(2)}</span>
+                  <div className="flex gap-4 items-end">
+                    <div className="flex-1">
+                      <Label className="text-muted-foreground">Computed Price</Label>
+                      <Input
+                        type="text"
+                        value={`AED ${computedSellingPrice.toFixed(2)}`}
+                        readOnly
+                        className="bg-muted"
+                        data-testid="text-computed-price"
+                      />
                     </div>
-                    <div className="flex justify-between">
-                      <span>Quantity:</span>
-                      <span>{quantity}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold border-t pt-1 mt-1">
-                      <span>Total Price:</span>
-                      <span>AED {totalPrice.toFixed(2)}</span>
+                    <div className="flex-1">
+                      <Label>Final Selling Price</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={finalSellingPrice}
+                        onChange={(e) => setFinalSellingPrice(e.target.value)}
+                        data-testid="input-final-selling-price"
+                      />
                     </div>
                   </div>
                 )}
 
                 <div>
                   <Label>Transaction Date</Label>
-                  <Input name="transactionDate" type="date" required data-testid="input-billing-date" />
+                  <Input
+                    type="date"
+                    value={transactionDate}
+                    onChange={(e) => setTransactionDate(e.target.value)}
+                    required
+                    data-testid="input-billing-date"
+                  />
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={createMutation.isPending || !selectedItemId} data-testid="button-submit-billing">
+                <Button type="submit" disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice} data-testid="button-submit-billing">
                   Save
                 </Button>
               </DialogFooter>

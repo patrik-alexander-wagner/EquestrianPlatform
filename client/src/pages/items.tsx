@@ -35,16 +35,23 @@ export default function ItemsPage() {
 
   const columns = [
     { key: "name", label: "Item Name" },
-    { key: "category", label: "Category", render: (item: Item) => item.category || "-" },
+    { key: "department", label: "Department", render: (item: Item) => item.department || "-" },
+    { key: "class", label: "Class", render: (item: Item) => item.class || "-" },
+    { key: "location", label: "Location", render: (item: Item) => item.location || "-" },
     {
-      key: "base",
-      label: "Base (Qty Unit)",
-      render: (item: Item) => item.base ? item.base : "-",
+      key: "unitFactor",
+      label: "Unit Factor",
+      render: (item: Item) => item.unitFactor ? item.unitFactor : "-",
     },
     {
       key: "price",
       label: "Price",
       render: (item: Item) => item.price ? `AED ${item.price}` : "-",
+    },
+    {
+      key: "averageCost",
+      label: "Avg Cost",
+      render: (item: Item) => item.averageCost ? `AED ${item.averageCost}` : "-",
     },
     {
       key: "isLiveryPackage",
@@ -53,27 +60,41 @@ export default function ItemsPage() {
         ? <Badge variant="default">Livery Package</Badge>
         : <Badge variant="outline">Service/Item</Badge>,
     },
-    { key: "status", label: "Status", render: (item: Item) => <StatusBadge status={item.status} /> },
+    {
+      key: "isInactive",
+      label: "Active",
+      render: (item: Item) => item.isInactive
+        ? <Badge variant="secondary">Inactive</Badge>
+        : <StatusBadge status="active" />,
+    },
   ];
 
   const importFields = [
     { targetField: "name", label: "Item Name", required: true },
-    { targetField: "category", label: "Category" },
-    { targetField: "base", label: "Base (Qty Unit)" },
+    { targetField: "unitFactor", label: "Unit Factor" },
     { targetField: "price", label: "Price" },
+    { targetField: "averageCost", label: "Average Cost" },
+    { targetField: "department", label: "Department" },
+    { targetField: "class", label: "Class" },
+    { targetField: "location", label: "Location" },
     { targetField: "netsuiteId", label: "NetSuite ID" },
     { targetField: "status", label: "Status" },
+    { targetField: "isInactive", label: "Is Inactive (true/false)" },
   ];
 
   const handleImport = (data: Record<string, string>[]) => {
     const mapped = data.map(row => ({
       name: row.name || "Unknown",
-      category: row.category || null,
-      base: row.base || null,
+      unitFactor: row.unitFactor || null,
       price: row.price || null,
+      averageCost: row.averageCost || null,
+      department: row.department || null,
+      class: row.class || null,
+      location: row.location || null,
       netsuiteId: row.netsuiteId || null,
       status: row.status || "active",
       isLiveryPackage: false,
+      isInactive: row.isInactive === "true",
     }));
     importMutation.mutate({ items: mapped });
   };
@@ -82,7 +103,7 @@ export default function ItemsPage() {
     <div className="p-6">
       <PageHeader
         title="Items"
-        description="Items and service items. Base = quantity unit for pricing, Price = total price for that base quantity."
+        description="Items and service items. Unit Factor = quantity unit for pricing, Price = price for that unit factor."
         actions={
           <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-items">
             <Upload className="w-4 h-4 mr-2" />

@@ -444,9 +444,9 @@ export class DatabaseStorage implements IStorage {
         horseName: horse?.horseName || "Unknown",
         billDate: el.transactionDate,
         quantity: el.quantity,
-        unit: item?.base ? `${item.base}` : "Each",
-        unitPrice: parseFloat(el.price || "0"),
-        amount: parseFloat(el.price || "0") * (el.quantity || 1),
+        unit: item?.unitFactor ? `${item.unitFactor}` : "Each",
+        unitPrice: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
+        amount: parseFloat(el.price || "0"),
         isLivery: !!el.agreementId,
         billingMonth: el.billingMonth,
       };

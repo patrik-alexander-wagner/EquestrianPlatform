@@ -220,7 +220,7 @@ export default function ToInvoicePage() {
 
       for (const b of customerBilling) {
         const qty = b.quantity || 1;
-        const unitPrice = parseFloat(b.price || "0");
+        const totalPrice = parseFloat(b.price || "0");
         lineItems.push({
           key: `billing-${b.id}`,
           type: "billing",
@@ -228,8 +228,8 @@ export default function ToInvoicePage() {
           horseName: b.horseName,
           date: b.transactionDate,
           qty,
-          unitPrice,
-          amount: unitPrice * qty,
+          unitPrice: qty > 0 ? totalPrice / qty : totalPrice,
+          amount: totalPrice,
           billingElementId: b.id,
         });
       }

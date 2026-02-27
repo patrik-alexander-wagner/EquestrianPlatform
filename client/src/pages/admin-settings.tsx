@@ -99,8 +99,8 @@ export default function AdminSettingsPage() {
                   <Package className="w-4 h-4 text-muted-foreground" />
                   <div className="flex-1">
                     <span className="font-medium">{item.name}</span>
-                    {item.category && (
-                      <span className="text-sm text-muted-foreground ml-2">({item.category})</span>
+                    {item.department && (
+                      <span className="text-sm text-muted-foreground ml-2">({item.department})</span>
                     )}
                   </div>
                   <span className="text-sm text-muted-foreground">
