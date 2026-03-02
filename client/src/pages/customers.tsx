@@ -43,6 +43,7 @@ export default function CustomersPage() {
   });
 
   const columns = [
+    { key: "netsuiteId", label: "NetSuite ID", render: (item: Customer) => item.netsuiteId || "-" },
     { key: "firstname", label: "First Name" },
     { key: "lastname", label: "Last Name" },
     { key: "phone", label: "Phone" },
@@ -55,6 +56,7 @@ export default function CustomersPage() {
   ];
 
   const importFields = [
+    { targetField: "netsuiteId", label: "NetSuite ID" },
     { targetField: "firstname", label: "First Name", required: true },
     { targetField: "lastname", label: "Last Name", required: true },
     { targetField: "phone", label: "Phone" },
@@ -64,6 +66,7 @@ export default function CustomersPage() {
 
   const handleImport = (data: Record<string, string>[]) => {
     const mapped = data.map(row => ({
+      netsuiteId: row.netsuiteId || null,
       firstname: row.firstname || "Unknown",
       lastname: row.lastname || "Unknown",
       phone: row.phone || null,

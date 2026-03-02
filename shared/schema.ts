@@ -58,6 +58,7 @@ export type Stable = typeof stables.$inferSelect;
 
 export const boxes = pgTable("boxes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
   name: text("name").notNull(),
   type: text("type").notNull().default("box"),
   stableId: uuid("stable_id").notNull().references(() => stables.id),

@@ -84,6 +84,7 @@ export default function BoxesPage() {
   };
 
   const columns = [
+    { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
     { key: "name", label: "Box Name" },
     {
       key: "type",
@@ -97,6 +98,7 @@ export default function BoxesPage() {
   ];
 
   const importFields = [
+    { targetField: "netsuiteId", label: "NetSuite ID" },
     { targetField: "name", label: "Box Name", required: true },
     { targetField: "type", label: "Type (box / tack_room / storage_room)" },
   ];
@@ -107,6 +109,7 @@ export default function BoxesPage() {
       return;
     }
     const mapped = data.map(row => ({
+      netsuiteId: row.netsuiteId || null,
       name: row.name || "Unknown",
       type: row.type || "box",
       stableId: importStableId,

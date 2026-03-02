@@ -62,6 +62,7 @@ export default function HorsesPage() {
   });
 
   const columns = [
+    { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
     { key: "horseName", label: "Horse Name" },
     { key: "breed", label: "Breed", render: (item: any) => item.breed || "-" },
     { key: "dateOfBirth", label: "Date of Birth", render: (item: any) => item.dateOfBirth || "-" },
@@ -79,6 +80,7 @@ export default function HorsesPage() {
   ];
 
   const importFields = [
+    { targetField: "netsuiteId", label: "NetSuite ID" },
     { targetField: "horseName", label: "Horse Name", required: true },
     { targetField: "breed", label: "Breed" },
     { targetField: "dateOfBirth", label: "Date of Birth" },
@@ -91,6 +93,7 @@ export default function HorsesPage() {
 
   const handleImport = (data: Record<string, string>[]) => {
     const mapped = data.map(row => ({
+      netsuiteId: row.netsuiteId || null,
       horseName: row.horseName || "Unknown",
       breed: row.breed || null,
       dateOfBirth: row.dateOfBirth || null,
