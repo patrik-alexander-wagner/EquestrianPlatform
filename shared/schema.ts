@@ -48,6 +48,7 @@ export type Horse = typeof horses.$inferSelect;
 
 export const stables = pgTable("stables", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  netsuiteId: text("netsuite_id"),
   name: text("name").notNull(),
   status: text("status").notNull().default("active"),
 });

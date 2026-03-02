@@ -50,6 +50,7 @@ export default function StablesPage() {
   });
 
   const columns = [
+    { key: "netsuiteId", label: "NetSuite ID", render: (item: Stable) => item.netsuiteId || "-" },
     { key: "name", label: "Stable Name" },
     { key: "status", label: "Status", render: (item: Stable) => <StatusBadge status={item.status} /> },
   ];
