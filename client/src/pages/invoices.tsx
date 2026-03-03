@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
-import { Trash2, FileText, Eye, Download, FileJson, Zap } from "lucide-react";
+import { Trash2, FileText, Eye, Download, FileJson, Zap, Send, CheckCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ export default function InvoicesPage() {
   const { toast } = useToast();
   const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
   const [generatingSo, setGeneratingSo] = useState<string | null>(null);
+  const [sendingToNetsuite, setSendingToNetsuite] = useState<string | null>(null);
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
@@ -73,6 +74,25 @@ export default function InvoicesPage() {
       toast({ title: "Failed to generate SO", variant: "destructive" });
     } finally {
       setGeneratingSo(null);
+    }
+  };
+
+  const handleSendToNetsuite = async (invoiceId: string) => {
+    setSendingToNetsuite(invoiceId);
+    try {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/send-to-netsuite`);
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: data.netsuiteId ? `Sent to NetSuite (ID: ${data.netsuiteId})` : "Successfully sent to NetSuite" });
+    } catch (e: any) {
+      let msg = "Failed to send to NetSuite";
+      try {
+        const errData = e?.message || "";
+        if (errData) msg = errData;
+      } catch {}
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setSendingToNetsuite(null);
     }
   };
 
@@ -170,16 +190,40 @@ export default function InvoicesPage() {
                 Generate SO
               </Button>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                onClick={() => handleDownloadJson(item)}
-                data-testid={`button-download-json-${item.id}`}
-              >
-                <FileJson className="w-4 h-4 mr-1" />
-                Download JSON
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                  onClick={() => handleDownloadJson(item)}
+                  data-testid={`button-download-json-${item.id}`}
+                >
+                  <FileJson className="w-4 h-4 mr-1" />
+                  JSON
+                </Button>
+
+                {!item.sentToNetsuite ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
+                    onClick={() => handleSendToNetsuite(item.id)}
+                    disabled={sendingToNetsuite === item.id}
+                    data-testid={`button-send-netsuite-${item.id}`}
+                  >
+                    <Send className="w-4 h-4 mr-1" />
+                    {sendingToNetsuite === item.id ? "Sending..." : "Send"}
+                  </Button>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-md dark:text-green-300 dark:bg-green-900/30"
+                    data-testid={`badge-sent-netsuite-${item.id}`}
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                    Sent
+                  </span>
+                )}
+              </>
             )}
 
             <Button

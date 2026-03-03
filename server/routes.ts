@@ -507,6 +507,71 @@ export async function registerRoutes(
     }
   });
 
+  // Send invoice to NetSuite via N8N webhook
+  app.post("/api/invoices/:id/send-to-netsuite", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      if (!invoice.soGenerated) return res.status(400).json({ message: "SO must be generated before sending to NetSuite" });
+      if (invoice.sentToNetsuite) return res.status(400).json({ message: "Invoice already sent to NetSuite" });
+      if (!invoice.netsuiteJson) return res.status(400).json({ message: "No NetSuite JSON found on this invoice" });
+
+      const webhookUrl = await storage.getSetting("n8n_webhook_url");
+      if (!webhookUrl) return res.status(400).json({ message: "N8N Webhook URL is not configured. Please set it in Settings." });
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: invoice.netsuiteJson,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        return res.status(502).json({ message: `N8N webhook returned error: ${response.status} - ${errorText}` });
+      }
+
+      let netsuiteId: string | null = null;
+      try {
+        const responseData = await response.json();
+        if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
+        else if (responseData?.id) netsuiteId = String(responseData.id);
+      } catch {}
+
+      const updateData: any = {
+        sentToNetsuite: true,
+        status: "Sent to NetSuite",
+      };
+      if (netsuiteId) updateData.netsuiteId = netsuiteId;
+
+      await storage.updateInvoice(req.params.id, updateData);
+
+      res.json({ success: true, netsuiteId });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  // Settings - N8N Webhook URL
+  app.get("/api/settings/n8n-webhook", async (_req, res) => {
+    try {
+      const url = await storage.getSetting("n8n_webhook_url");
+      res.json({ url: url || "" });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/settings/n8n-webhook", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (typeof url !== "string") return res.status(400).json({ message: "URL must be a string" });
+      await storage.setSetting("n8n_webhook_url", url.trim());
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Settings - Livery Package Configuration
   app.post("/api/settings/livery-packages", async (req, res) => {
     try {

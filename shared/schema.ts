@@ -139,6 +139,7 @@ export const invoices = pgTable("invoices", {
   totalAmount: numeric("total_amount").notNull(),
   status: text("status").notNull().default("pending"),
   soGenerated: boolean("so_generated").notNull().default(false),
+  sentToNetsuite: boolean("sent_to_netsuite").notNull().default(false),
   poNumber: text("po_number"),
   netsuiteJson: text("netsuite_json"),
 });

@@ -73,6 +73,8 @@ export interface IStorage {
   getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>>;
   getNextPoNumber(): Promise<string>;
   getInvoiceDetailsForSO(id: string): Promise<any>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
 
   getReportData(groupBy: string): Promise<any[]>;
 }
@@ -546,6 +548,17 @@ export class DatabaseStorage implements IStorage {
       customer,
       items: itemsList,
     };
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting ? setting.value : null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db.insert(appSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value } });
   }
 
   async deleteInvoice(id: string): Promise<boolean> {

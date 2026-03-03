@@ -71,6 +71,7 @@ shared/
 - Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
 - Billing elements: price field stores Final Selling Price (total, not per-unit)
 - PO number counter stored in app_settings table (key: last_po_number)
+- N8N webhook integration: configurable webhook URL in Settings, "Send to NetSuite" button on invoices sends SO JSON via POST to N8N webhook, stores sent status and optional NetSuite ID from response
 
 ## Dependencies
 - jspdf + jspdf-autotable - PDF generation for invoices
