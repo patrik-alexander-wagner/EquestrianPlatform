@@ -172,7 +172,8 @@ export async function registerRoutes(
 
   app.patch("/api/horses/:id", async (req, res) => {
     try {
-      const horse = await storage.updateHorse(req.params.id, req.body);
+      const data = validateBody(insertHorseSchema.partial(), req.body);
+      const horse = await storage.updateHorse(req.params.id, data);
       if (!horse) return res.status(404).json({ message: "Horse not found" });
       res.json(horse);
     } catch (e: any) {
@@ -218,7 +219,8 @@ export async function registerRoutes(
 
   app.patch("/api/stables/:id", async (req, res) => {
     try {
-      const stable = await storage.updateStable(req.params.id, req.body);
+      const data = validateBody(insertStableSchema.partial(), req.body);
+      const stable = await storage.updateStable(req.params.id, data);
       if (!stable) return res.status(404).json({ message: "Stable not found" });
       res.json(stable);
     } catch (e: any) {
@@ -228,6 +230,8 @@ export async function registerRoutes(
 
   app.delete("/api/stables/:id", async (req, res) => {
     try {
+      const existing = await storage.getStable(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Stable not found" });
       await storage.deleteStable(req.params.id);
       res.json({ success: true });
     } catch (e: any) {
@@ -259,7 +263,8 @@ export async function registerRoutes(
 
   app.patch("/api/boxes/:id", async (req, res) => {
     try {
-      const box = await storage.updateBox(req.params.id, req.body);
+      const data = validateBody(insertBoxSchema.partial(), req.body);
+      const box = await storage.updateBox(req.params.id, data);
       if (!box) return res.status(404).json({ message: "Box not found" });
       res.json(box);
     } catch (e: any) {
@@ -269,6 +274,8 @@ export async function registerRoutes(
 
   app.delete("/api/boxes/:id", async (req, res) => {
     try {
+      const existing = await storage.getBox(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Box not found" });
       await storage.deleteBox(req.params.id);
       res.json({ success: true });
     } catch (e: any) {
@@ -335,7 +342,8 @@ export async function registerRoutes(
 
   app.patch("/api/items/:id", async (req, res) => {
     try {
-      const item = await storage.updateItem(req.params.id, req.body);
+      const data = validateBody(insertItemSchema.partial(), req.body);
+      const item = await storage.updateItem(req.params.id, data);
       if (!item) return res.status(404).json({ message: "Item not found" });
       res.json(item);
     } catch (e: any) {
@@ -366,7 +374,8 @@ export async function registerRoutes(
 
   app.patch("/api/livery-agreements/:id", async (req, res) => {
     try {
-      const agreement = await storage.updateLiveryAgreement(req.params.id, req.body);
+      const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
+      const agreement = await storage.updateLiveryAgreement(req.params.id, data);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
       res.json(agreement);
     } catch (e: any) {
@@ -459,9 +468,9 @@ export async function registerRoutes(
       if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
       const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status });
 
-      if (liveryItems && liveryItems.length > 0) {
+      if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
         for (const item of liveryItems) {
-          const created = await storage.createBillingElement({
+          const validatedItem = validateBody(insertBillingElementSchema, {
             horseId: item.horseId,
             customerId,
             boxId: item.boxId,
@@ -474,6 +483,7 @@ export async function registerRoutes(
             billed: true,
             invoiceId: invoice.id,
           });
+          await storage.createBillingElement(validatedItem);
         }
       }
 
@@ -579,11 +589,18 @@ export async function registerRoutes(
       }
 
       let netsuiteId: string | null = null;
+      let parseError = false;
       try {
         const responseData = await response.json();
         if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
         else if (responseData?.id) netsuiteId = String(responseData.id);
-      } catch {}
+      } catch {
+        parseError = true;
+      }
+
+      if (parseError && !netsuiteId) {
+        return res.status(502).json({ message: "Webhook returned success but response could not be parsed. Invoice was not marked as sent." });
+      }
 
       const updateData: any = {
         sentToNetsuite: true,

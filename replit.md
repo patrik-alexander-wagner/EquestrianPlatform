@@ -83,6 +83,17 @@ shared/
 - PO number counter stored in app_settings table (key: last_po_number)
 - N8N webhook integration: configurable webhook URL in Settings, "Send to NetSuite" button on invoices sends SO JSON via POST to N8N webhook, stores sent status and optional NetSuite ID from response
 
+## Input Validation
+- All POST routes use Zod schema validation via `validateBody()`
+- All PATCH routes use `.partial()` Zod schemas to validate incoming fields
+- Invoice creation validates liveryItems array entries against `insertBillingElementSchema`
+- DELETE routes for stables and boxes check item existence before deleting (return 404 if not found)
+
+## Security
+- SESSION_SECRET must be set as environment variable for stable sessions (warning logged if missing)
+- NetSuite webhook responses are validated before marking invoices as sent
+- Dependencies: minimatch@^10.2.3, rollup@4.59.0 (pinned for security)
+
 ## Dependencies
 - jspdf + jspdf-autotable - PDF generation for invoices
 - xlsx - Excel/CSV file parsing for imports
