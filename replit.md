@@ -48,7 +48,7 @@ shared/
 
 ## Database Tables
 - users, customers, horses, stables, boxes, items
-- livery_agreements, billing_elements, invoices
+- livery_agreements, billing_elements, invoices, app_settings
 
 ## Key Features
 - Currency: AED throughout
@@ -64,9 +64,13 @@ shared/
 - Billing month tracking to prevent duplicate livery billing
 - PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
 - Invoice deletion (temporary feature) with billing element unbilling
+- NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download
+- NetSuite ID fields on customers, horses, stables, boxes, items — mappable during import
 - Livery reports with bar charts (by month/customer)
 - Livery package configuration in settings
-- "Base" field = quantity unit; no seeding on startup
+- Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
+- Billing elements: price field stores Final Selling Price (total, not per-unit)
+- PO number counter stored in app_settings table (key: last_po_number)
 
 ## Dependencies
 - jspdf + jspdf-autotable - PDF generation for invoices

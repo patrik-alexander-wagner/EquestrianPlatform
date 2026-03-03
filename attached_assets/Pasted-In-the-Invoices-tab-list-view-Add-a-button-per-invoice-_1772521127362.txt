@@ -1,0 +1,127 @@
+In the Invoices tab (list view):
+
+Add a button per invoice:
+
+Generate NetSuite SO
+
+Button visible for ALL invoices as long as SO has NOT been generated yet
+
+Once clicked:
+
+Generate JSON body
+
+Save JSON inside invoice record
+
+Update invoice status to SO Generated
+
+Hide "Generate" button
+
+Show a new button next to PDF icon:
+
+Download JSON
+🔹 UI RULES
+
+In Invoices table add columns:
+
+| Invoice No | Customer | Amount | Status | PDF | JSON | Action |
+
+Button visibility logic:
+IF invoice.soGenerated == false
+    show "Generate NetSuite SO" button
+ELSE
+    show "SO Generated" status
+    show "Download JSON" button
+🔹 PO Number Logic
+
+First PO number = 2026003000
+
+Store last PO number globally (database or localStorage for now)
+
+Each time generate is clicked → increment by +1
+
+Example:
+
+2026003000
+2026003001
+2026003002
+🔹 JSON STRUCTURE TO GENERATE
+{
+  "customerId": "<invoice.customer.netsuiteId>",
+  "po": "<incremented PO>",
+  "department": "32",
+  "memo": "Monthly Livery Invoice - <customer name> (<MMM-YYYY>)",
+  "tranDate": "<today DD/MM/YYYY>",
+  "items": [
+    {
+      "itemId": "<item.netsuiteId>",
+      "horse": "<item.horseNetsuiteId>",
+      "quantity": "<item.quantity>",
+      "rate": "<item.rate>",
+      "description": "<item.description>",
+      "department": "<item.department>",
+      "class": "<item.class>",
+      "subclass": "<item.boxNetsuiteId>",
+      "location": "<item.location>"
+    }
+  ]
+}
+🔹 Generation Rules
+
+customerId = customer NetSuite ID
+
+department (header) = always "32"
+
+memo format EXACTLY:
+
+Monthly Livery Invoice - CUSTOMER NAME (Jan-2026)
+
+tranDate = today formatted as DD/MM/YYYY
+
+items = loop all invoice items
+
+🔹 After Click Behaviour
+
+When user clicks Generate NetSuite SO:
+
+Build JSON object
+
+Save it in:
+
+invoice.netsuiteJson
+
+Set:
+
+invoice.soGenerated = true
+invoice.status = "SO Generated"
+
+Hide Generate button
+
+Show Download JSON button
+
+🔹 Download JSON Button Behaviour
+
+When clicked:
+
+Download file as:
+
+Invoice_<invoiceNumber>_NetSuiteSO.json
+
+File content = saved JSON (formatted pretty with 2 spaces)
+
+🔹 For Now
+
+DO NOT:
+
+Call NetSuite API
+
+Send any request externally
+
+ONLY:
+
+Generate JSON
+
+Save JSON
+
+Allow download
+
+This keeps your architecture clean and production-ready for the next phase (API integration).

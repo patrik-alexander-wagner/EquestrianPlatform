@@ -2,7 +2,7 @@ import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, customers, horses, stables, boxes, items,
-  liveryAgreements, billingElements, invoices,
+  liveryAgreements, billingElements, invoices, appSettings,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -67,9 +67,12 @@ export interface IStorage {
   getInvoice(id: string): Promise<Invoice | undefined>;
   getInvoiceDetails(id: string): Promise<any>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined>;
   deleteInvoice(id: string): Promise<boolean>;
   markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void>;
   getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>>;
+  getNextPoNumber(): Promise<string>;
+  getInvoiceDetailsForSO(id: string): Promise<any>;
 
   getReportData(groupBy: string): Promise<any[]>;
 }
@@ -494,6 +497,55 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result;
+  }
+
+  async updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices).set(data).where(eq(invoices.id, id)).returning();
+    return updated;
+  }
+
+  async getNextPoNumber(): Promise<string> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, "last_po_number"));
+    const current = setting ? parseInt(setting.value) : 2026002999;
+    const next = current + 1;
+    await db.insert(appSettings)
+      .values({ key: "last_po_number", value: String(next) })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(next) } });
+    return String(next);
+  }
+
+  async getInvoiceDetailsForSO(id: string): Promise<any> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    if (!invoice) return null;
+
+    const customer = await this.getCustomer(invoice.customerId);
+    const linkedElements = await db.select().from(billingElements).where(eq(billingElements.invoiceId, id));
+    const allHorses = await db.select().from(horses);
+    const allItems = await db.select().from(items);
+    const allBoxes = await db.select().from(boxes);
+
+    const itemsList = linkedElements.map(el => {
+      const horse = allHorses.find(h => h.id === el.horseId);
+      const item = allItems.find(i => i.id === el.itemId);
+      const box = allBoxes.find(b => b.id === el.boxId);
+      return {
+        itemId: item?.netsuiteId || "",
+        horse: horse?.netsuiteId || "",
+        quantity: el.quantity,
+        rate: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
+        description: item?.name || "Unknown",
+        department: item?.department || "",
+        class: item?.class || "",
+        subclass: box?.netsuiteId || "",
+        location: item?.location || "",
+      };
+    });
+
+    return {
+      invoice,
+      customer,
+      items: itemsList,
+    };
   }
 
   async deleteInvoice(id: string): Promise<boolean> {

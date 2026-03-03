@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
-import { Trash2, FileText, Eye, Download } from "lucide-react";
+import { Trash2, FileText, Eye, Download, FileJson, Zap } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ function formatBillingMonth(billingMonth: string | null | undefined): string {
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
+  const [generatingSo, setGeneratingSo] = useState<string | null>(null);
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
@@ -61,11 +62,37 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleGenerateSO = async (invoiceId: string) => {
+    setGeneratingSo(invoiceId);
+    try {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/generate-so`);
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: `NetSuite SO generated (PO: ${data.poNumber})` });
+    } catch {
+      toast({ title: "Failed to generate SO", variant: "destructive" });
+    } finally {
+      setGeneratingSo(null);
+    }
+  };
+
+  const handleDownloadJson = (invoice: any) => {
+    if (!invoice.netsuiteJson) return;
+    const blob = new Blob([invoice.netsuiteJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const invoiceNo = invoice.poNumber || invoice.id.substring(0, 8);
+    a.href = url;
+    a.download = `Invoice_${invoiceNo}_NetSuiteSO.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const columns = [
-    { key: "id", label: "Invoice ID", render: (item: any) => item.id.substring(0, 8) + "..." },
-    { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
+    { key: "id", label: "Invoice No", render: (item: any) => item.poNumber || item.id.substring(0, 8) + "..." },
     { key: "customerName", label: "Customer" },
-    { key: "invoiceDate", label: "Created Date" },
     {
       key: "billingMonth",
       label: "Invoice Month",
@@ -73,7 +100,7 @@ export default function InvoicesPage() {
     },
     {
       key: "totalAmount",
-      label: "Total Amount",
+      label: "Amount",
       render: (item: any) => `AED ${parseFloat(item.totalAmount).toFixed(2)}`,
     },
     {
@@ -129,6 +156,31 @@ export default function InvoicesPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {!item.soGenerated ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                onClick={() => handleGenerateSO(item.id)}
+                disabled={generatingSo === item.id}
+                data-testid={`button-generate-so-${item.id}`}
+              >
+                <Zap className="w-4 h-4 mr-1" />
+                Generate SO
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                onClick={() => handleDownloadJson(item)}
+                data-testid={`button-download-json-${item.id}`}
+              >
+                <FileJson className="w-4 h-4 mr-1" />
+                Download JSON
+              </Button>
+            )}
 
             <Button
               size="sm"

@@ -447,6 +447,55 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/invoices/:id/generate-so", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      if (invoice.soGenerated) return res.status(400).json({ message: "SO already generated for this invoice" });
+
+      const details = await storage.getInvoiceDetailsForSO(req.params.id);
+      if (!details) return res.status(404).json({ message: "Invoice details not found" });
+
+      const poNumber = await storage.getNextPoNumber();
+
+      const billingMonth = invoice.billingMonth || "";
+      let memoMonth = "";
+      if (billingMonth) {
+        const [y, m] = billingMonth.split("-").map(Number);
+        const date = new Date(y, m - 1);
+        memoMonth = date.toLocaleString("en-US", { month: "short", year: "numeric" });
+      }
+      const customerName = details.customer
+        ? `${details.customer.firstname} ${details.customer.lastname}`
+        : "Unknown";
+
+      const today = new Date();
+      const tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+
+      const soJson = {
+        customerId: details.customer?.netsuiteId || "",
+        po: poNumber,
+        department: "32",
+        memo: `Monthly Livery Invoice - ${customerName} (${memoMonth})`,
+        tranDate,
+        items: details.items,
+      };
+
+      const jsonString = JSON.stringify(soJson, null, 2);
+
+      await storage.updateInvoice(req.params.id, {
+        soGenerated: true,
+        poNumber,
+        netsuiteJson: jsonString,
+        status: "SO Generated",
+      });
+
+      res.json({ success: true, poNumber, json: soJson });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Reports
   app.get("/api/reports/livery", async (req, res) => {
     try {

@@ -138,6 +138,14 @@ export const invoices = pgTable("invoices", {
   billingMonth: text("billing_month"),
   totalAmount: numeric("total_amount").notNull(),
   status: text("status").notNull().default("pending"),
+  soGenerated: boolean("so_generated").notNull().default(false),
+  poNumber: text("po_number"),
+  netsuiteJson: text("netsuite_json"),
+});
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
 });
 
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true });
