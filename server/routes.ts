@@ -513,7 +513,6 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
       if (!invoice.soGenerated) return res.status(400).json({ message: "SO must be generated before sending to NetSuite" });
-      if (invoice.sentToNetsuite) return res.status(400).json({ message: "Invoice already sent to NetSuite" });
       if (!invoice.netsuiteJson) return res.status(400).json({ message: "No NetSuite JSON found on this invoice" });
 
       const webhookUrl = await storage.getSetting("n8n_webhook_url");

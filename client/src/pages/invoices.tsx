@@ -202,27 +202,20 @@ export default function InvoicesPage() {
                   JSON
                 </Button>
 
-                {!item.sentToNetsuite ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
-                    onClick={() => handleSendToNetsuite(item.id)}
-                    disabled={sendingToNetsuite === item.id}
-                    data-testid={`button-send-netsuite-${item.id}`}
-                  >
-                    <Send className="w-4 h-4 mr-1" />
-                    {sendingToNetsuite === item.id ? "Sending..." : "Send"}
-                  </Button>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-md dark:text-green-300 dark:bg-green-900/30"
-                    data-testid={`badge-sent-netsuite-${item.id}`}
-                  >
-                    <CheckCircle className="w-3 h-3" />
-                    Sent
-                  </span>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={item.sentToNetsuite
+                    ? "text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                    : "text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
+                  }
+                  onClick={() => handleSendToNetsuite(item.id)}
+                  disabled={sendingToNetsuite === item.id}
+                  data-testid={`button-send-netsuite-${item.id}`}
+                >
+                  {item.sentToNetsuite ? <CheckCircle className="w-4 h-4 mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                  {sendingToNetsuite === item.id ? "Sending..." : item.sentToNetsuite ? "Resend" : "Send"}
+                </Button>
               </>
             )}
 
