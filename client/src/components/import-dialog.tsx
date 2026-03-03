@@ -55,7 +55,7 @@ async function parseFile(buffer: ArrayBuffer, fileName: string): Promise<{ heade
     const values = (row.values as (ExcelJS.CellValue | undefined)[]).slice(1);
     data.push(values.map((cell) => {
       if (cell === null || cell === undefined) return "";
-      if (typeof cell === "object" && "text" in cell) return String((cell as ExcelJS.CellRichTextValue).text).trim();
+      if (typeof cell === "object" && "text" in cell) return String((cell as ExcelJS.CellHyperlinkValue).text).trim();
       if (typeof cell === "object" && "result" in cell) return String((cell as ExcelJS.CellFormulaValue).result ?? "").trim();
       return String(cell).trim();
     }));
