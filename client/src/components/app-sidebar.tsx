@@ -9,6 +9,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
   Receipt,
@@ -25,7 +26,9 @@ import {
   BarChart3,
   Settings,
   UserCog,
+  LogOut,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const navGroups = [
   {
@@ -73,7 +76,11 @@ const navGroups = [
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onLogout: () => void;
+}
+
+export function AppSidebar({ onLogout }: AppSidebarProps) {
   const [location] = useLocation();
 
   return (
@@ -115,6 +122,17 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      <SidebarFooter className="p-3 border-t border-sidebar-border">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={onLogout}
+          data-testid="button-logout"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign Out
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   );
 }

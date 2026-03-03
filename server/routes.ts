@@ -1,6 +1,7 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import passport from "passport";
 import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
@@ -16,10 +17,49 @@ function validateBody(schema: any, body: any) {
   return result.data;
 }
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ message: "Authentication required" });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Auth routes (public)
+  app.post("/api/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return res.status(500).json({ message: "Server error" });
+      if (!user) return res.status(401).json({ message: info?.message || "Invalid credentials" });
+      req.logIn(user, (err) => {
+        if (err) return res.status(500).json({ message: "Login failed" });
+        res.json({ id: user.id, username: user.username });
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) return res.status(500).json({ message: "Logout failed" });
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/me", (req, res) => {
+    if (req.isAuthenticated()) {
+      res.json(req.user);
+    } else {
+      res.status(401).json({ message: "Not authenticated" });
+    }
+  });
+
+  // All routes below require authentication
+  app.use("/api", (req, res, next) => {
+    const publicPaths = ["/login", "/logout", "/me"];
+    if (publicPaths.includes(req.path)) return next();
+    requireAuth(req, res, next);
+  });
 
   // Users
   app.get("/api/users", async (_req, res) => {
@@ -35,7 +75,7 @@ export async function registerRoutes(
     try {
       const data = validateBody(insertUserSchema, req.body);
       const user = await storage.createUser(data);
-      res.json(user);
+      res.json({ id: user.id, username: user.username });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -75,9 +115,11 @@ export async function registerRoutes(
   app.post("/api/customers/import", async (req, res) => {
     try {
       const { customers: data } = req.body;
+      if (!Array.isArray(data)) throw { status: 400, message: "customers must be an array" };
       const results = [];
       for (const c of data) {
-        const created = await storage.createCustomer(c);
+        const validated = validateBody(insertCustomerSchema, c);
+        const created = await storage.createCustomer(validated);
         results.push(created);
       }
       res.json(results);
@@ -141,9 +183,11 @@ export async function registerRoutes(
   app.post("/api/horses/import", async (req, res) => {
     try {
       const { horses: data } = req.body;
+      if (!Array.isArray(data)) throw { status: 400, message: "horses must be an array" };
       const results = [];
       for (const h of data) {
-        const created = await storage.createHorse(h);
+        const validated = validateBody(insertHorseSchema, h);
+        const created = await storage.createHorse(validated);
         results.push(created);
       }
       res.json(results);
@@ -235,9 +279,11 @@ export async function registerRoutes(
   app.post("/api/boxes/import", async (req, res) => {
     try {
       const { boxes: data } = req.body;
+      if (!Array.isArray(data)) throw { status: 400, message: "boxes must be an array" };
       const results = [];
       for (const b of data) {
-        const created = await storage.createBox(b);
+        const validated = validateBody(insertBoxSchema, b);
+        const created = await storage.createBox(validated);
         results.push(created);
       }
       res.json(results);
@@ -278,7 +324,9 @@ export async function registerRoutes(
   app.post("/api/items/import", async (req, res) => {
     try {
       const { items: data } = req.body;
-      const results = await storage.createItemsBulk(data);
+      if (!Array.isArray(data)) throw { status: 400, message: "items must be an array" };
+      const validated = data.map(item => validateBody(insertItemSchema, item));
+      const results = await storage.createItemsBulk(validated);
       res.json({ imported: results.length });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -408,6 +456,7 @@ export async function registerRoutes(
   app.post("/api/invoices", async (req, res) => {
     try {
       const { customerId, invoiceDate, billingMonth, totalAmount, status, billingElementIds, liveryItems } = req.body;
+      if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
       const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status });
 
       if (liveryItems && liveryItems.length > 0) {
@@ -564,6 +613,9 @@ export async function registerRoutes(
     try {
       const { url } = req.body;
       if (typeof url !== "string") return res.status(400).json({ message: "URL must be a string" });
+      if (url.trim() && !/^https?:\/\/.+/i.test(url.trim())) {
+        return res.status(400).json({ message: "URL must start with http:// or https://" });
+      }
       await storage.setSetting("n8n_webhook_url", url.trim());
       res.json({ success: true });
     } catch (e: any) {
@@ -575,6 +627,7 @@ export async function registerRoutes(
   app.post("/api/settings/livery-packages", async (req, res) => {
     try {
       const { itemIds } = req.body;
+      if (!Array.isArray(itemIds)) throw { status: 400, message: "itemIds must be an array" };
       const allItems = await storage.getItems();
       for (const item of allItems) {
         const isPackage = itemIds.includes(item.id);

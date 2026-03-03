@@ -1,5 +1,6 @@
 import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
 import { db } from "./db";
+import { hashPassword } from "./auth";
 import {
   users, customers, horses, stables, boxes, items,
   liveryAgreements, billingElements, invoices, appSettings,
@@ -18,7 +19,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  getUsers(): Promise<User[]>;
+  getUsers(): Promise<Omit<User, "password">[]>;
 
   getCustomers(search?: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
@@ -91,12 +92,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const [created] = await db.insert(users).values(user).returning();
+    const hashedPassword = await hashPassword(user.password);
+    const [created] = await db.insert(users).values({ ...user, password: hashedPassword }).returning();
     return created;
   }
 
-  async getUsers(): Promise<User[]> {
-    return await db.select().from(users);
+  async getUsers(): Promise<Omit<User, "password">[]> {
+    return await db.select({ id: users.id, username: users.username }).from(users);
   }
 
   async getCustomers(search?: string): Promise<Customer[]> {

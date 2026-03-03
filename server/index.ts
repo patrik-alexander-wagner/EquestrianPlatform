@@ -1,7 +1,13 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import ConnectPgSimple from "connect-pg-simple";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { storage } from "./storage";
+import { verifyPassword } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +28,58 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+const PgStore = ConnectPgSimple(session);
+const sessionSecret = process.env.SESSION_SECRET || require("crypto").randomBytes(32).toString("hex");
+
+app.use(
+  session({
+    store: new PgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: true,
+    }),
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await storage.getUserByUsername(username);
+      if (!user) return done(null, false, { message: "Invalid username or password" });
+      const valid = await verifyPassword(password, user.password);
+      if (!valid) return done(null, false, { message: "Invalid username or password" });
+      return done(null, { id: user.id, username: user.username });
+    } catch (err) {
+      return done(err);
+    }
+  })
+);
+
+passport.serializeUser((user: any, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    const user = await storage.getUser(id);
+    if (!user) return done(null, false);
+    done(null, { id: user.id, username: user.username });
+  } catch (err) {
+    done(err);
+  }
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -77,9 +135,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -87,10 +142,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {

@@ -12,14 +12,15 @@ StableMaster is a web-based stable management system for managing horses, custom
 ## Project Structure
 ```
 client/src/
-  App.tsx                    - Main app with sidebar layout and routing
+  App.tsx                    - Main app with auth state, sidebar layout, routing
   components/
-    app-sidebar.tsx          - Navigation sidebar
+    app-sidebar.tsx          - Navigation sidebar with logout button
     page-header.tsx          - Reusable page header
     data-table.tsx           - Reusable paginated data table (25 rows/page)
     search-bar.tsx           - Reusable search input
     status-badge.tsx         - Status badge component
   pages/
+    login.tsx                - Login page (username/password)
     dashboard.tsx            - Home dashboard with stats
     customers.tsx            - Customer list (read-only + import)
     horses.tsx               - Horse management (CRUD + import)
@@ -33,11 +34,12 @@ client/src/
     invoices.tsx             - Invoice list (read-only)
     reports.tsx              - Livery reports with charts
     admin-users.tsx          - User management
-    admin-settings.tsx       - Livery package configuration
+    admin-settings.tsx       - Livery package + N8N webhook configuration
 
 server/
-  index.ts                   - Express server entry point
-  routes.ts                  - All API routes (/api/*)
+  index.ts                   - Express server + session + passport setup
+  auth.ts                    - Password hashing (scrypt) and verification
+  routes.ts                  - All API routes (/api/*) with auth middleware
   storage.ts                 - Database storage interface (PostgreSQL)
   db.ts                      - Database connection
   seed.ts                    - Seed data
@@ -49,6 +51,14 @@ shared/
 ## Database Tables
 - users, customers, horses, stables, boxes, items
 - livery_agreements, billing_elements, invoices, app_settings
+
+## Authentication
+- Session-based auth via passport-local + express-session + connect-pg-simple (PostgreSQL session store)
+- Passwords hashed with scrypt (Node.js crypto module)
+- All /api/* routes require authentication except /api/login, /api/logout, /api/me
+- Login page shown when unauthenticated; sidebar hidden
+- Default credentials: admin / admin123 (set via SEED_ADMIN_PASSWORD env var)
+- GET /api/users never returns password field
 
 ## Key Features
 - Currency: AED throughout
