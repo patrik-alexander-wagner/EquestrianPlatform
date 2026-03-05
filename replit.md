@@ -74,7 +74,7 @@ shared/
 - New agreement form: searchable customer/horse dropdowns, monthly price override
 - Invoice generation per customer with selectable line items (checkboxes + select all)
 - Livery packages only billable for months within agreement active period
-- Pro-rating by quarter-month for partial months (start/end mid-month)
+- Pro-rating by exact days for partial months (e.g. start on 2nd of 31-day month = 30/31 * monthlyAmount)
 - Billing month tracking to prevent duplicate livery billing
 - PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
 - Invoice deletion (temporary feature) with billing element unbilling

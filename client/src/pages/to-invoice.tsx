@@ -38,36 +38,28 @@ type LineItem = {
   billingMonth?: string;
 };
 
-function getQuarter(day: number): number {
-  if (day <= 7) return 1;
-  if (day <= 14) return 2;
-  if (day <= 22) return 3;
-  return 4;
-}
-
 function getProRateFraction(agreement: any, billingMonth: string): { fraction: number; label: string } {
   const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
-  const monthStart = new Date(bmYear, bmMonth - 1, 1);
-  const monthEnd = new Date(bmYear, bmMonth, 0);
+  const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
 
   const startDate = agreement.startDate ? new Date(agreement.startDate) : null;
   const endDate = agreement.endDate ? new Date(agreement.endDate) : null;
 
-  let startFraction = 0;
-  let endFraction = 4;
+  let firstDay = 1;
+  let lastDay = daysInMonth;
 
   if (startDate && startDate.getFullYear() === bmYear && startDate.getMonth() + 1 === bmMonth && startDate.getDate() > 1) {
-    startFraction = getQuarter(startDate.getDate()) - 1;
+    firstDay = startDate.getDate();
   }
 
-  if (endDate && endDate.getFullYear() === bmYear && endDate.getMonth() + 1 === bmMonth && endDate.getDate() < monthEnd.getDate()) {
-    endFraction = getQuarter(endDate.getDate());
+  if (endDate && endDate.getFullYear() === bmYear && endDate.getMonth() + 1 === bmMonth && endDate.getDate() < daysInMonth) {
+    lastDay = endDate.getDate();
   }
 
-  const quarters = endFraction - startFraction;
-  if (quarters >= 4) return { fraction: 1, label: "" };
-  if (quarters <= 0) return { fraction: 0, label: "" };
-  return { fraction: quarters / 4, label: `${quarters}/4 month` };
+  const activeDays = lastDay - firstDay + 1;
+  if (activeDays >= daysInMonth) return { fraction: 1, label: "" };
+  if (activeDays <= 0) return { fraction: 0, label: "" };
+  return { fraction: activeDays / daysInMonth, label: `${activeDays}/${daysInMonth} days` };
 }
 
 function isMonthInAgreementRange(agreement: any, billingMonth: string): boolean {
