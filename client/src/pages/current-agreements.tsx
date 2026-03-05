@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
@@ -36,14 +36,13 @@ export default function CurrentAgreementsPage() {
 
   const checkoutMutation = useMutation({
     mutationFn: (data: any) => apiRequest("PATCH", `/api/livery-agreements/${data.id}`, {
-      status: "closed",
       endDate: data.endDate,
       checkoutReason: data.reason,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
       setShowCheckoutDialog(false);
-      toast({ title: "Agreement checked out successfully" });
+      toast({ title: "Agreement checkout date set successfully" });
     },
   });
 
@@ -91,6 +90,18 @@ export default function CurrentAgreementsPage() {
     e.target.value = "";
   };
 
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const visibleAgreements = useMemo(() => {
+    return agreements.filter((a: any) => {
+      if (!a.endDate) return true;
+      return a.endDate >= todayStr;
+    });
+  }, [agreements, todayStr]);
+
   const columns = [
     { key: "referenceNumber", label: "Reference #" },
     {
@@ -125,7 +136,7 @@ export default function CurrentAgreementsPage() {
 
       <DataTable
         columns={columns}
-        data={agreements}
+        data={visibleAgreements}
         isLoading={isLoading}
         actions={(item) => (
           <div className="flex gap-1">
@@ -138,15 +149,22 @@ export default function CurrentAgreementsPage() {
               <FileText className="w-4 h-4 mr-1" />
               Docs
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
-              data-testid={`button-checkout-${item.id}`}
-            >
-              <LogOut className="w-4 h-4 mr-1" />
-              Checkout
-            </Button>
+            {!item.endDate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
+                data-testid={`button-checkout-${item.id}`}
+              >
+                <LogOut className="w-4 h-4 mr-1" />
+                Checkout
+              </Button>
+            )}
+            {item.endDate && (
+              <Badge variant="secondary" className="text-xs">
+                Ends {item.endDate}
+              </Badge>
+            )}
           </div>
         )}
       />

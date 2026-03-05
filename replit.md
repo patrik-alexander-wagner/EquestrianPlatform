@@ -75,6 +75,7 @@ shared/
 - Invoice generation per customer with selectable line items (checkboxes + select all)
 - Livery packages only billable for months within agreement active period
 - Pro-rating by exact days for partial months (e.g. start on 2nd of 31-day month = 30/31 * monthlyAmount)
+- Checkout sets endDate only (status stays "active"); agreement visible in Current Agreements until end of checkout date, then disappears; box/horse freed after endDate passes; To Invoice still shows pro-rated livery until billed
 - Billing month tracking to prevent duplicate livery billing
 - PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
 - Invoice deletion (temporary feature) with billing element unbilling

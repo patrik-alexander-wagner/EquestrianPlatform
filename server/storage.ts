@@ -339,10 +339,11 @@ export class DatabaseStorage implements IStorage {
     const allBoxes = await db.select().from(boxes);
     const allStables = await db.select().from(stables);
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const today = new Date().toISOString().split("T")[0];
 
     return allBoxes.map(box => {
       const stable = allStables.find(s => s.id === box.stableId);
-      const agreement = activeAgreements.find(a => a.boxId === box.id);
+      const agreement = activeAgreements.find(a => a.boxId === box.id && (!a.endDate || a.endDate >= today));
       return {
         ...box,
         stableName: stable?.name || "Unknown",
@@ -355,7 +356,8 @@ export class DatabaseStorage implements IStorage {
   async getAvailableHorses(): Promise<any[]> {
     const allHorses = await db.select().from(horses).where(eq(horses.status, "active"));
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
-    const bookedHorseIds = new Set(activeAgreements.map(a => a.horseId));
+    const today = new Date().toISOString().split("T")[0];
+    const bookedHorseIds = new Set(activeAgreements.filter(a => !a.endDate || a.endDate >= today).map(a => a.horseId));
     return allHorses.filter(h => !bookedHorseIds.has(h.id));
   }
 
@@ -403,7 +405,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getHorsesWithActiveAgreements(): Promise<any[]> {
-    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const allAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const today = new Date().toISOString().split("T")[0];
+    const activeAgreements = allAgreements.filter(a => !a.endDate || a.endDate >= today);
     const allHorses = await db.select().from(horses);
     const allCustomers = await db.select().from(customers);
     const allBoxes = await db.select().from(boxes);
