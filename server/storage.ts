@@ -3,7 +3,7 @@ import { db } from "./db";
 import { hashPassword } from "./auth";
 import {
   users, customers, horses, stables, boxes, items,
-  liveryAgreements, billingElements, invoices, appSettings,
+  liveryAgreements, billingElements, invoices, appSettings, agreementDocuments,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -13,6 +13,7 @@ import {
   type LiveryAgreement, type InsertLiveryAgreement,
   type BillingElement, type InsertBillingElement,
   type Invoice, type InsertInvoice,
+  type AgreementDocument, type InsertAgreementDocument,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -78,6 +79,11 @@ export interface IStorage {
   setSetting(key: string, value: string): Promise<void>;
 
   getReportData(groupBy: string): Promise<any[]>;
+
+  getAgreementDocuments(agreementId: string): Promise<AgreementDocument[]>;
+  getAgreementDocument(id: string): Promise<AgreementDocument | undefined>;
+  createAgreementDocument(doc: InsertAgreementDocument): Promise<AgreementDocument>;
+  deleteAgreementDocument(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -626,6 +632,25 @@ export class DatabaseStorage implements IStorage {
       }
       return Object.values(grouped).sort((a, b) => a.label.localeCompare(b.label));
     }
+  }
+  async getAgreementDocuments(agreementId: string): Promise<AgreementDocument[]> {
+    return await db.select().from(agreementDocuments)
+      .where(eq(agreementDocuments.agreementId, agreementId));
+  }
+
+  async getAgreementDocument(id: string): Promise<AgreementDocument | undefined> {
+    const [doc] = await db.select().from(agreementDocuments).where(eq(agreementDocuments.id, id));
+    return doc;
+  }
+
+  async createAgreementDocument(doc: InsertAgreementDocument): Promise<AgreementDocument> {
+    const [created] = await db.insert(agreementDocuments).values(doc).returning();
+    return created;
+  }
+
+  async deleteAgreementDocument(id: string): Promise<boolean> {
+    const result = await db.delete(agreementDocuments).where(eq(agreementDocuments.id, id)).returning();
+    return result.length > 0;
   }
 }
 

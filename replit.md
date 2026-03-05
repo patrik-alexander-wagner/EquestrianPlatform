@@ -50,7 +50,7 @@ shared/
 
 ## Database Tables
 - users, customers, horses, stables, boxes, items
-- livery_agreements, billing_elements, invoices, app_settings
+- livery_agreements, billing_elements, invoices, app_settings, agreement_documents
 
 ## Authentication
 - Session-based auth via passport-local + express-session + connect-pg-simple (PostgreSQL session store)
@@ -67,7 +67,11 @@ shared/
 - Search/filter on all list pages
 - Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
 - Livery agreement creation via box grid view
-- Billing element management for horses with active agreements (unit price + total display)
+- Billing element management for horses with active agreements (unit price + total display) + "Bill Non-Livery Customer" for customers without agreements
+- Billing month auto-derived from transaction date (YYYY-MM format)
+- To-invoice page filters billing elements by selected billing month
+- Agreement document management: PDF upload/download/delete on current agreements page (base64 storage)
+- New agreement form: searchable customer/horse dropdowns, monthly price override
 - Invoice generation per customer with selectable line items (checkboxes + select all)
 - Livery packages only billable for months within agreement active period
 - Pro-rating by quarter-month for partial months (start/end mid-month)

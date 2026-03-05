@@ -113,7 +113,7 @@ export const billingElements = pgTable("billing_elements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   horseId: uuid("horse_id").notNull().references(() => horses.id),
   customerId: uuid("customer_id").notNull().references(() => customers.id),
-  boxId: uuid("box_id").notNull().references(() => boxes.id),
+  boxId: uuid("box_id").references(() => boxes.id),
   itemId: uuid("item_id").notNull().references(() => items.id),
   agreementId: uuid("agreement_id").references(() => liveryAgreements.id),
   quantity: integer("quantity").notNull().default(1),
@@ -143,6 +143,18 @@ export const invoices = pgTable("invoices", {
   poNumber: text("po_number"),
   netsuiteJson: text("netsuite_json"),
 });
+
+export const agreementDocuments = pgTable("agreement_documents", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  agreementId: uuid("agreement_id").notNull().references(() => liveryAgreements.id),
+  filename: text("filename").notNull(),
+  fileData: text("file_data").notNull(),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const insertAgreementDocumentSchema = createInsertSchema(agreementDocuments).omit({ id: true, uploadedAt: true });
+export type InsertAgreementDocument = z.infer<typeof insertAgreementDocumentSchema>;
+export type AgreementDocument = typeof agreementDocuments.$inferSelect;
 
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

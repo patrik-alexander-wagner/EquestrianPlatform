@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Check, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
 
 export default function NewAgreementPage() {
@@ -23,8 +23,13 @@ export default function NewAgreementPage() {
   const [selectedBox, setSelectedBox] = useState<any>(null);
   const [agreementType, setAgreementType] = useState("permanent");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [selectedHorseId, setSelectedHorseId] = useState("");
+  const [horseSearch, setHorseSearch] = useState("");
+  const [horseDropdownOpen, setHorseDropdownOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [monthlyAmount, setMonthlyAmount] = useState("");
   const { toast } = useToast();
 
   const { data: boxesWithStatus = [], isLoading } = useQuery<any[]>({
@@ -77,7 +82,47 @@ export default function NewAgreementPage() {
     return groups;
   }, [filteredBoxes]);
 
+  const activeCustomers = useMemo(() => {
+    const active = customers.filter(c => c.status === "active");
+    if (!customerSearch.trim()) return active;
+    const s = customerSearch.toLowerCase();
+    return active.filter(c =>
+      `${c.firstname} ${c.lastname}`.toLowerCase().includes(s) ||
+      (c.email && c.email.toLowerCase().includes(s))
+    );
+  }, [customers, customerSearch]);
+
+  const activeHorses = useMemo(() => {
+    const active = horses.filter((h: any) => h.status === "active");
+    if (!horseSearch.trim()) return active;
+    const s = horseSearch.toLowerCase();
+    return active.filter((h: any) =>
+      h.horseName.toLowerCase().includes(s) ||
+      (h.breed && h.breed.toLowerCase().includes(s))
+    );
+  }, [horses, horseSearch]);
+
+  const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+  const selectedHorse = horses.find((h: any) => h.id === selectedHorseId);
   const selectedItem = liveryItems.find(i => i.id === selectedItemId);
+
+  const handleItemChange = (itemId: string) => {
+    setSelectedItemId(itemId);
+    const item = liveryItems.find(i => i.id === itemId);
+    setMonthlyAmount(item?.price || "0");
+  };
+
+  const openCreateDialog = (box: any) => {
+    setSelectedBox(box);
+    setSelectedCustomerId("");
+    setCustomerSearch("");
+    setSelectedHorseId("");
+    setHorseSearch("");
+    setSelectedItemId("");
+    setMonthlyAmount("");
+    setAgreementType("permanent");
+    setShowCreateDialog(true);
+  };
 
   return (
     <div className="p-6">
@@ -114,7 +159,7 @@ export default function NewAgreementPage() {
                         <Button
                           size="sm"
                           className="w-full mt-2"
-                          onClick={() => { setSelectedBox(box); setShowCreateDialog(true); }}
+                          onClick={() => openCreateDialog(box)}
                           data-testid={`button-new-agreement-${box.id}`}
                         >
                           <Plus className="w-4 h-4 mr-1" />
@@ -134,6 +179,7 @@ export default function NewAgreementPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New Livery Agreement</DialogTitle>
+            <DialogDescription>Create a new livery agreement for the selected box</DialogDescription>
           </DialogHeader>
           {selectedBox && (
             <form
@@ -152,46 +198,111 @@ export default function NewAgreementPage() {
                   type: agreementType,
                   status: "active",
                   notes: fd.get("notes") || null,
-                  monthlyAmount: selectedItem?.price || "0",
+                  monthlyAmount: monthlyAmount || selectedItem?.price || "0",
                 });
               }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
             >
               <div className="space-y-4">
                 <div className="p-3 rounded-md bg-muted text-sm">
                   Box: <strong>{selectedBox.name}</strong> ({selectedBox.stableName})
                 </div>
 
-                <div>
+                <div className="relative">
                   <Label>Customer</Label>
-                  <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                    <SelectTrigger data-testid="select-agreement-customer">
-                      <SelectValue placeholder="Select customer..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.filter(c => c.status === "active").map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.firstname} {c.lastname}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-agreement-customer-search"
+                      placeholder="Search customer..."
+                      value={selectedCustomer && !customerDropdownOpen ? `${selectedCustomer.firstname} ${selectedCustomer.lastname}` : customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value);
+                        setCustomerDropdownOpen(true);
+                        if (selectedCustomerId) setSelectedCustomerId("");
+                      }}
+                      onFocus={() => setCustomerDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setCustomerDropdownOpen(false), 200)}
+                    />
+                    {selectedCustomerId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => { setSelectedCustomerId(""); setCustomerSearch(""); setCustomerDropdownOpen(true); }}
+                      >✕</button>
+                    )}
+                  </div>
+                  {customerDropdownOpen && !selectedCustomerId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {activeCustomers.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No customers found</div>
+                      ) : (
+                        activeCustomers.map(c => (
+                          <button
+                            type="button"
+                            key={c.id}
+                            data-testid={`agreement-customer-option-${c.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => { setSelectedCustomerId(c.id); setCustomerSearch(""); setCustomerDropdownOpen(false); }}
+                          >
+                            <div className="font-medium">{c.firstname} {c.lastname}</div>
+                            {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div>
+                <div className="relative">
                   <Label>Horse</Label>
-                  <Select value={selectedHorseId} onValueChange={setSelectedHorseId}>
-                    <SelectTrigger data-testid="select-agreement-horse">
-                      <SelectValue placeholder="Select horse..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {horses.filter((h: any) => h.status === "active").map((h: any) => (
-                        <SelectItem key={h.id} value={h.id}>{h.horseName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-agreement-horse-search"
+                      placeholder="Search horse..."
+                      value={selectedHorse && !horseDropdownOpen ? selectedHorse.horseName : horseSearch}
+                      onChange={(e) => {
+                        setHorseSearch(e.target.value);
+                        setHorseDropdownOpen(true);
+                        if (selectedHorseId) setSelectedHorseId("");
+                      }}
+                      onFocus={() => setHorseDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setHorseDropdownOpen(false), 200)}
+                    />
+                    {selectedHorseId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => { setSelectedHorseId(""); setHorseSearch(""); setHorseDropdownOpen(true); }}
+                      >✕</button>
+                    )}
+                  </div>
+                  {horseDropdownOpen && !selectedHorseId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {activeHorses.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No horses found</div>
+                      ) : (
+                        activeHorses.map((h: any) => (
+                          <button
+                            type="button"
+                            key={h.id}
+                            data-testid={`agreement-horse-option-${h.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => { setSelectedHorseId(h.id); setHorseSearch(""); setHorseDropdownOpen(false); }}
+                          >
+                            <div className="font-medium">{h.horseName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <Label>Livery Package</Label>
-                  <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                  <Select value={selectedItemId} onValueChange={handleItemChange}>
                     <SelectTrigger data-testid="select-agreement-item">
                       <SelectValue placeholder="Select livery package..." />
                     </SelectTrigger>
@@ -202,6 +313,38 @@ export default function NewAgreementPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {selectedItem && (
+                  <div>
+                    <Label>Monthly Amount (AED)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={monthlyAmount}
+                        onChange={(e) => setMonthlyAmount(e.target.value)}
+                        data-testid="input-monthly-amount"
+                      />
+                      {monthlyAmount !== selectedItem.price && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setMonthlyAmount(selectedItem.price || "0")}
+                          data-testid="button-reset-price"
+                          className="text-xs whitespace-nowrap"
+                        >
+                          Reset to {selectedItem.price}
+                        </Button>
+                      )}
+                    </div>
+                    {monthlyAmount !== selectedItem.price && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Default package price: AED {selectedItem.price}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <Label>Start Date</Label>

@@ -230,6 +230,8 @@ export default function ToInvoicePage() {
       }
 
       for (const b of customerBilling) {
+        const bMonth = b.billingMonth || (b.transactionDate ? b.transactionDate.substring(0, 7) : null);
+        if (bMonth && bMonth !== billingMonth) continue;
         const qty = b.quantity || 1;
         const totalPrice = parseFloat(b.price || "0");
         lineItems.push({

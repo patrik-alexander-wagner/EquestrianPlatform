@@ -6,6 +6,7 @@ import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
   insertLiveryAgreementSchema, insertBillingElementSchema, insertInvoiceSchema,
+  insertAgreementDocumentSchema,
 } from "@shared/schema";
 import { ZodError } from "zod";
 
@@ -405,6 +406,9 @@ export async function registerRoutes(
 
   app.post("/api/billing-elements", async (req, res) => {
     try {
+      if (req.body.transactionDate && !req.body.billingMonth) {
+        req.body.billingMonth = req.body.transactionDate.substring(0, 7);
+      }
       const data = validateBody(insertBillingElementSchema, req.body);
       const element = await storage.createBillingElement(data);
       res.json(element);
@@ -652,6 +656,54 @@ export async function registerRoutes(
           await storage.updateItem(item.id, { isLiveryPackage: isPackage });
         }
       }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  // Agreement Documents
+  app.get("/api/livery-agreements/:id/documents", async (req, res) => {
+    try {
+      const docs = await storage.getAgreementDocuments(req.params.id);
+      res.json(docs.map(d => ({ id: d.id, agreementId: d.agreementId, filename: d.filename, uploadedAt: d.uploadedAt })));
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/livery-agreements/:id/documents", async (req, res) => {
+    try {
+      const { filename, fileData } = req.body;
+      if (!filename || !fileData) throw { status: 400, message: "filename and fileData are required" };
+      const doc = await storage.createAgreementDocument({
+        agreementId: req.params.id,
+        filename,
+        fileData,
+      });
+      res.json({ id: doc.id, agreementId: doc.agreementId, filename: doc.filename, uploadedAt: doc.uploadedAt });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/agreement-documents/:id/download", async (req, res) => {
+    try {
+      const doc = await storage.getAgreementDocument(req.params.id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      const buffer = Buffer.from(doc.fileData, "base64");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${doc.filename}"`);
+      res.send(buffer);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.delete("/api/agreement-documents/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAgreementDocument(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Document not found" });
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
