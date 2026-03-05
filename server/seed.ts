@@ -2,7 +2,21 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { customers, horses, stables, boxes, items, liveryAgreements } from "@shared/schema";
 
+async function ensureAdminUser() {
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
+  const existing = await storage.getUserByUsername("admin");
+  if (existing) {
+    await storage.updateUserPassword(existing.id, adminPassword, "admin");
+    console.log("Admin user password and role updated");
+  } else {
+    await storage.createUser({ username: "admin", password: adminPassword, role: "admin" });
+    console.log("Admin user created");
+  }
+}
+
 export async function seedDatabase() {
+  await ensureAdminUser();
+
   const existingCustomers = await storage.getCustomers();
   if (existingCustomers.length > 0) return;
 
@@ -91,8 +105,6 @@ export async function seedDatabase() {
       monthlyAmount: "1200",
     },
   ]);
-
-  await storage.createUser({ username: "admin", password: process.env.SEED_ADMIN_PASSWORD ?? "admin123", role: "admin" });
 
   console.log("Database seeded successfully");
 }
