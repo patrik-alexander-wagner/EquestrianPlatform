@@ -3,6 +3,7 @@ import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -11,6 +12,25 @@ import { verifyPassword } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
+
+if (process.env.NODE_ENV === "production") {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "data:"],
+      },
+    },
+  }));
+} else {
+  app.use(helmet({
+    contentSecurityPolicy: false,
+  }));
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -44,10 +64,11 @@ app.use(
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
+    name: "sm.sid",
     cookie: {
       maxAge: 24 * 60 * 60 * 1000,
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
     },
   })
@@ -63,7 +84,7 @@ passport.use(
       if (!user) return done(null, false, { message: "Invalid username or password" });
       const valid = await verifyPassword(password, user.password);
       if (!valid) return done(null, false, { message: "Invalid username or password" });
-      return done(null, { id: user.id, username: user.username });
+      return done(null, { id: user.id, username: user.username, role: user.role });
     } catch (err) {
       return done(err);
     }
@@ -78,7 +99,7 @@ passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await storage.getUser(id);
     if (!user) return done(null, false);
-    done(null, { id: user.id, username: user.username });
+    done(null, { id: user.id, username: user.username, role: user.role });
   } catch (err) {
     done(err);
   }

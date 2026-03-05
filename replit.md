@@ -35,6 +35,7 @@ client/src/
     reports.tsx              - Livery reports with charts
     admin-users.tsx          - User management
     admin-settings.tsx       - Livery package + N8N webhook configuration
+    admin-audit-logs.tsx     - Audit log viewer (admin-only, paginated)
 
 server/
   index.ts                   - Express server + session + passport setup
@@ -49,16 +50,20 @@ shared/
 ```
 
 ## Database Tables
-- users, customers, horses, stables, boxes, items
-- livery_agreements, billing_elements, invoices, app_settings, agreement_documents
+- users (with role column: "admin" | "user"), customers, horses, stables, boxes, items
+- livery_agreements, billing_elements, invoices, app_settings, agreement_documents, audit_logs
 
-## Authentication
+## Authentication & Authorization
 - Session-based auth via passport-local + express-session + connect-pg-simple (PostgreSQL session store)
 - Passwords hashed with scrypt (Node.js crypto module)
 - All /api/* routes require authentication except /api/login, /api/logout, /api/me
 - Login page shown when unauthenticated; sidebar hidden
 - Default credentials: admin / admin123 (set via SEED_ADMIN_PASSWORD env var)
 - GET /api/users never returns password field
+- RBAC: users have role ("admin" or "user"); admin-only routes protected by `requireAdmin` middleware
+- Admin-only routes: GET/POST /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
+- Frontend: Administration sidebar section hidden for non-admin users; admin routes redirect non-admins to dashboard
+- /api/me returns { id, username, role }
 
 ## Key Features
 - Currency: AED throughout
@@ -98,7 +103,16 @@ shared/
 - SESSION_SECRET must be set as environment variable for stable sessions (warning logged if missing)
 - NetSuite webhook responses are validated before marking invoices as sent
 - Dependencies: minimatch@^10.2.3, rollup@4.59.0 (pinned for security)
+- Rate limiting: /api/login limited to 5 attempts per minute per IP (express-rate-limit)
+- Security headers: helmet middleware (CSP disabled in dev, enabled in production)
+- Session cookie: name "sm.sid", sameSite "strict", httpOnly, secure in production
+- PDF upload validation: server checks base64 magic bytes (JVBERi = %PDF), max 20 docs per agreement
+- Audit logging: critical actions logged to audit_logs table (user, action, entity, details, timestamp)
+  - Actions logged: create/delete user, create/checkout agreement, create/delete invoice, create/delete billing element, upload/delete document, update settings
+  - Audit logs viewable at /admin/audit-logs (admin-only)
 
 ## Dependencies
 - jspdf + jspdf-autotable - PDF generation for invoices
 - xlsx - Excel/CSV file parsing for imports
+- express-rate-limit - Login rate limiting
+- helmet - HTTP security headers

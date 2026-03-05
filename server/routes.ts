@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import passport from "passport";
+import rateLimit from "express-rate-limit";
 import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
@@ -23,19 +24,46 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Authentication required" });
 }
 
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
+  const user = req.user as any;
+  if (user?.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+  next();
+}
+
+function auditLog(req: Request, action: string, entityType?: string, entityId?: string, details?: string) {
+  const user = req.user as any;
+  storage.createAuditLog({
+    userId: user?.id || null,
+    username: user?.username || null,
+    action,
+    entityType: entityType || null,
+    entityId: entityId || null,
+    details: details || null,
+  }).catch(err => console.error("Audit log error:", err));
+}
+
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { message: "Too many login attempts. Please try again in a minute." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
   // Auth routes (public)
-  app.post("/api/login", (req, res, next) => {
+  app.post("/api/login", loginLimiter, (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return res.status(500).json({ message: "Server error" });
       if (!user) return res.status(401).json({ message: info?.message || "Invalid credentials" });
       req.logIn(user, (err) => {
         if (err) return res.status(500).json({ message: "Login failed" });
-        res.json({ id: user.id, username: user.username });
+        res.json({ id: user.id, username: user.username, role: user.role });
       });
     })(req, res, next);
   });
@@ -49,7 +77,8 @@ export async function registerRoutes(
 
   app.get("/api/me", (req, res) => {
     if (req.isAuthenticated()) {
-      res.json(req.user);
+      const user = req.user as any;
+      res.json({ id: user.id, username: user.username, role: user.role });
     } else {
       res.status(401).json({ message: "Not authenticated" });
     }
@@ -63,7 +92,7 @@ export async function registerRoutes(
   });
 
   // Users
-  app.get("/api/users", async (_req, res) => {
+  app.get("/api/users", requireAdmin, async (_req, res) => {
     try {
       const users = await storage.getUsers();
       res.json(users);
@@ -72,10 +101,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/users", async (req, res) => {
+  app.post("/api/users", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertUserSchema, req.body);
       const user = await storage.createUser(data);
+      auditLog(req, "create_user", "user", user.id, `Created user: ${user.username}`);
       res.json({ id: user.id, username: user.username });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -229,11 +259,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/stables/:id", async (req, res) => {
+  app.delete("/api/stables/:id", requireAdmin, async (req, res) => {
     try {
       const existing = await storage.getStable(req.params.id);
       if (!existing) return res.status(404).json({ message: "Stable not found" });
       await storage.deleteStable(req.params.id);
+      auditLog(req, "delete_stable", "stable", req.params.id, `Deleted stable: ${existing.name}`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -273,11 +304,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/boxes/:id", async (req, res) => {
+  app.delete("/api/boxes/:id", requireAdmin, async (req, res) => {
     try {
       const existing = await storage.getBox(req.params.id);
       if (!existing) return res.status(404).json({ message: "Box not found" });
       await storage.deleteBox(req.params.id);
+      auditLog(req, "delete_box", "box", req.params.id, `Deleted box: ${existing.name}`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -367,6 +399,7 @@ export async function registerRoutes(
     try {
       const data = validateBody(insertLiveryAgreementSchema, req.body);
       const agreement = await storage.createLiveryAgreement(data);
+      auditLog(req, "create_agreement", "agreement", agreement.id, `Created agreement: ${agreement.referenceNumber}`);
       res.json(agreement);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -378,6 +411,9 @@ export async function registerRoutes(
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
       const agreement = await storage.updateLiveryAgreement(req.params.id, data);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
+      if (data.endDate) {
+        auditLog(req, "checkout_agreement", "agreement", req.params.id, `Checkout agreement, end date: ${data.endDate}`);
+      }
       res.json(agreement);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -411,6 +447,7 @@ export async function registerRoutes(
       }
       const data = validateBody(insertBillingElementSchema, req.body);
       const element = await storage.createBillingElement(data);
+      auditLog(req, "create_billing_element", "billing_element", element.id);
       res.json(element);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -421,6 +458,7 @@ export async function registerRoutes(
     try {
       const deleted = await storage.deleteBillingElement(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Billing element not found" });
+      auditLog(req, "delete_billing_element", "billing_element", req.params.id);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -495,15 +533,17 @@ export async function registerRoutes(
         await storage.markBillingElementsByIds(billingElementIds, invoice.id);
       }
 
+      auditLog(req, "create_invoice", "invoice", invoice.id, `Created invoice for billing month ${billingMonth || "N/A"}`);
       res.json(invoice);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });
 
-  app.delete("/api/invoices/:id", async (req, res) => {
+  app.delete("/api/invoices/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteInvoice(req.params.id);
+      auditLog(req, "delete_invoice", "invoice", req.params.id);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -630,7 +670,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/n8n-webhook", async (req, res) => {
+  app.post("/api/settings/n8n-webhook", requireAdmin, async (req, res) => {
     try {
       const { url } = req.body;
       if (typeof url !== "string") return res.status(400).json({ message: "URL must be a string" });
@@ -638,6 +678,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "URL must start with http:// or https://" });
       }
       await storage.setSetting("n8n_webhook_url", url.trim());
+      auditLog(req, "update_setting", "setting", "n8n_webhook_url", `Updated N8N webhook URL`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -645,7 +686,7 @@ export async function registerRoutes(
   });
 
   // Settings - Livery Package Configuration
-  app.post("/api/settings/livery-packages", async (req, res) => {
+  app.post("/api/settings/livery-packages", requireAdmin, async (req, res) => {
     try {
       const { itemIds } = req.body;
       if (!Array.isArray(itemIds)) throw { status: 400, message: "itemIds must be an array" };
@@ -656,6 +697,7 @@ export async function registerRoutes(
           await storage.updateItem(item.id, { isLiveryPackage: isPackage });
         }
       }
+      auditLog(req, "update_setting", "setting", "livery_packages", `Updated livery packages`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -676,11 +718,22 @@ export async function registerRoutes(
     try {
       const { filename, fileData } = req.body;
       if (!filename || !fileData) throw { status: 400, message: "filename and fileData are required" };
+
+      if (!fileData.startsWith("JVBERi")) {
+        return res.status(400).json({ message: "Only PDF files are allowed" });
+      }
+
+      const existingDocs = await storage.getAgreementDocuments(req.params.id);
+      if (existingDocs.length >= 20) {
+        return res.status(400).json({ message: "Maximum 20 documents per agreement reached" });
+      }
+
       const doc = await storage.createAgreementDocument({
         agreementId: req.params.id,
         filename,
         fileData,
       });
+      auditLog(req, "upload_document", "agreement_document", doc.id, `Uploaded ${filename} for agreement ${req.params.id}`);
       res.json({ id: doc.id, agreementId: doc.agreementId, filename: doc.filename, uploadedAt: doc.uploadedAt });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -704,7 +757,20 @@ export async function registerRoutes(
     try {
       const deleted = await storage.deleteAgreementDocument(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Document not found" });
+      auditLog(req, "delete_document", "agreement_document", req.params.id);
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/audit-logs", requireAdmin, async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = (page - 1) * limit;
+      const logs = await storage.getAuditLogs(limit, offset);
+      res.json(logs);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }

@@ -27,18 +27,21 @@ import {
   Settings,
   UserCog,
   LogOut,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navGroups = [
   {
     label: "Billing Element",
+    adminOnly: false,
     items: [
       { title: "Billing Elements", url: "/billing-elements", icon: Receipt },
     ],
   },
   {
     label: "Livery Agreements",
+    adminOnly: false,
     items: [
       { title: "Current Agreements", url: "/agreements/current", icon: FileText },
       { title: "New Agreement", url: "/agreements/new", icon: FilePlus },
@@ -46,6 +49,7 @@ const navGroups = [
   },
   {
     label: "Master Data",
+    adminOnly: false,
     items: [
       { title: "Customers", url: "/customers", icon: Users },
       { title: "Horses", url: "/horses", icon: PawPrint },
@@ -56,6 +60,7 @@ const navGroups = [
   },
   {
     label: "Billing",
+    adminOnly: false,
     items: [
       { title: "To Invoice", url: "/billing/to-invoice", icon: ClipboardList },
       { title: "Invoices", url: "/billing/invoices", icon: CreditCard },
@@ -63,24 +68,28 @@ const navGroups = [
   },
   {
     label: "Reports",
+    adminOnly: false,
     items: [
       { title: "Livery Reports", url: "/reports/livery", icon: BarChart3 },
     ],
   },
   {
     label: "Administration",
+    adminOnly: true,
     items: [
       { title: "Users", url: "/admin/users", icon: UserCog },
       { title: "Settings", url: "/admin/settings", icon: Settings },
+      { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield },
     ],
   },
 ];
 
 interface AppSidebarProps {
   onLogout: () => void;
+  userRole: string;
 }
 
-export function AppSidebar({ onLogout }: AppSidebarProps) {
+export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
   const [location] = useLocation();
 
   return (
@@ -99,7 +108,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((group) => (
+        {navGroups.filter(group => !group.adminOnly || userRole === "admin").map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

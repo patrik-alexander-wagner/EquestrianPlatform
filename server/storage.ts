@@ -3,7 +3,7 @@ import { db } from "./db";
 import { hashPassword } from "./auth";
 import {
   users, customers, horses, stables, boxes, items,
-  liveryAgreements, billingElements, invoices, appSettings, agreementDocuments,
+  liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -14,6 +14,7 @@ import {
   type BillingElement, type InsertBillingElement,
   type Invoice, type InsertInvoice,
   type AgreementDocument, type InsertAgreementDocument,
+  type AuditLog, type InsertAuditLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -84,6 +85,9 @@ export interface IStorage {
   getAgreementDocument(id: string): Promise<AgreementDocument | undefined>;
   createAgreementDocument(doc: InsertAgreementDocument): Promise<AgreementDocument>;
   deleteAgreementDocument(id: string): Promise<boolean>;
+
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(limit?: number, offset?: number): Promise<{ logs: AuditLog[]; total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -655,6 +659,17 @@ export class DatabaseStorage implements IStorage {
   async deleteAgreementDocument(id: string): Promise<boolean> {
     const result = await db.delete(agreementDocuments).where(eq(agreementDocuments.id, id)).returning();
     return result.length > 0;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(log).returning();
+    return created;
+  }
+
+  async getAuditLogs(limit = 50, offset = 0): Promise<{ logs: AuditLog[]; total: number }> {
+    const logs = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit).offset(offset);
+    const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+    return { logs, total: Number(countResult.count) };
   }
 }
 
