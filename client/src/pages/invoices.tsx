@@ -177,19 +177,19 @@ export default function InvoicesPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {!item.soGenerated ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
-                onClick={() => handleGenerateSO(item.id)}
-                disabled={generatingSo === item.id}
-                data-testid={`button-generate-so-${item.id}`}
-              >
-                <Zap className="w-4 h-4 mr-1" />
-                Generate SO
-              </Button>
-            ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+              onClick={() => handleGenerateSO(item.id)}
+              disabled={generatingSo === item.id}
+              data-testid={`button-generate-so-${item.id}`}
+            >
+              <Zap className="w-4 h-4 mr-1" />
+              {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+            </Button>
+
+            {item.soGenerated && (
               <>
                 <Button
                   size="sm"

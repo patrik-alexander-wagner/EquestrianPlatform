@@ -556,7 +556,7 @@ export class DatabaseStorage implements IStorage {
       const box = allBoxes.find(b => b.id === el.boxId);
       return {
         itemId: item?.netsuiteId || "",
-        horse: horse?.netsuiteId || "",
+        horse: horse?.horseName || "",
         quantity: el.quantity,
         rate: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
         description: item?.name || "Unknown",

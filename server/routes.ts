@@ -554,12 +554,11 @@ export async function registerRoutes(
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-      if (invoice.soGenerated) return res.status(400).json({ message: "SO already generated for this invoice" });
 
       const details = await storage.getInvoiceDetailsForSO(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice details not found" });
 
-      const poNumber = await storage.getNextPoNumber();
+      const poNumber = invoice.poNumber || await storage.getNextPoNumber();
 
       const billingMonth = invoice.billingMonth || "";
       let memoMonth = "";
@@ -591,6 +590,7 @@ export async function registerRoutes(
         poNumber,
         netsuiteJson: jsonString,
         status: "SO Generated",
+        sentToNetsuite: false,
       });
 
       res.json({ success: true, poNumber, json: soJson });
