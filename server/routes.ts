@@ -558,6 +558,19 @@ export async function registerRoutes(
       const details = await storage.getInvoiceDetailsForSO(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice details not found" });
 
+      if (!details.customer?.netsuiteId) {
+        return res.status(400).json({ message: "Customer does not have a NetSuite ID. Please set it before generating SO." });
+      }
+
+      const missingItems: string[] = [];
+      for (const item of details.items) {
+        if (!item.itemId) missingItems.push(`Item "${item.description}" is missing NetSuite ID`);
+        if (!item.horse) missingItems.push(`Horse for item "${item.description}" is missing NetSuite ID`);
+      }
+      if (missingItems.length > 0) {
+        return res.status(400).json({ message: `Missing NetSuite IDs:\n${missingItems.join("\n")}` });
+      }
+
       const poNumber = invoice.poNumber || await storage.getNextPoNumber();
 
       const billingMonth = invoice.billingMonth || "";
