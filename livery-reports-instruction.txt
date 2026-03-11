@@ -1,0 +1,360 @@
+================================================================================
+  ИНСТРУКЦИЯ: Реализация страницы Livery Reports
+  Техническое описание для переноса в другой проект
+================================================================================
+
+
+АРХИТЕКТУРА
+-----------
+Страница состоит из 3 слоёв:
+
+1. Frontend — React-компонент с двумя фильтрами и столбчатой диаграммой (Recharts)
+2. API — один GET-эндпоинт /api/reports/livery?groupBy=month|customer
+3. Storage — метод getReportData(groupBy), агрегирующий данные из БД
+
+
+================================================================================
+СЛОЙ 1: API-ЭНДПОИНТ
+================================================================================
+
+Файл: server/routes.ts
+
+  app.get("/api/reports/livery", async (req, res) => {
+    try {
+      const groupBy = (req.query.groupBy as string) || "month";
+      const data = await storage.getReportData(groupBy);
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+Просто прокидывает параметр groupBy в storage и отдаёт JSON-массив.
+
+
+================================================================================
+СЛОЙ 2: БИЗНЕС-ЛОГИКА (STORAGE)
+================================================================================
+
+Файл: server/storage.ts
+
+Метод getReportData(groupBy) загружает 4 набора данных из БД и агрегирует
+их в памяти:
+
+  async getReportData(groupBy: string): Promise<any[]> {
+    // 1. Загрузка данных
+    const activeAgreements = await db.select().from(liveryAgreements)
+      .where(eq(liveryAgreements.status, "active"));
+    const allCustomers = await db.select().from(customers);
+    const allItems = await db.select().from(items);
+    const allBillingElements = await db.select().from(billingElements);
+
+    if (groupBy === "customer") {
+      // Группировка по имени клиента
+      const grouped: Record<string, any> = {};
+
+      // Проход по контрактам → liveryRevenue + horseCount
+      for (const agreement of activeAgreements) {
+        const customer = allCustomers.find(c => c.id === agreement.customerId);
+        const key = customer
+          ? `${customer.firstname} ${customer.lastname}`
+          : "Unknown";
+        if (!grouped[key]) {
+          grouped[key] = {
+            label: key,
+            horseCount: 0,
+            liveryRevenue: 0,
+            otherRevenue: 0,
+            totalRevenue: 0,
+          };
+        }
+        grouped[key].horseCount++;
+        const amount = parseFloat(agreement.monthlyAmount || "0");
+        grouped[key].liveryRevenue += amount;
+        grouped[key].totalRevenue += amount;
+      }
+
+      // Проход по billing elements → otherRevenue
+      for (const el of allBillingElements) {
+        const customer = allCustomers.find(c => c.id === el.customerId);
+        const key = customer
+          ? `${customer.firstname} ${customer.lastname}`
+          : "Unknown";
+        if (!grouped[key]) {
+          grouped[key] = {
+            label: key,
+            horseCount: 0,
+            liveryRevenue: 0,
+            otherRevenue: 0,
+            totalRevenue: 0,
+          };
+        }
+        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
+        grouped[key].otherRevenue += amount;
+        grouped[key].totalRevenue += amount;
+      }
+
+      return Object.values(grouped);
+    } else {
+      // Группировка по месяцу (YYYY-MM)
+      const grouped: Record<string, any> = {};
+
+      for (const agreement of activeAgreements) {
+        const month = agreement.startDate?.substring(0, 7) || "Unknown";
+        if (!grouped[month]) {
+          grouped[month] = {
+            label: month,
+            horseCount: 0,
+            liveryRevenue: 0,
+            otherRevenue: 0,
+            totalRevenue: 0,
+          };
+        }
+        grouped[month].horseCount++;
+        const amount = parseFloat(agreement.monthlyAmount || "0");
+        grouped[month].liveryRevenue += amount;
+        grouped[month].totalRevenue += amount;
+      }
+
+      for (const el of allBillingElements) {
+        const month = el.transactionDate?.substring(0, 7) || "Unknown";
+        if (!grouped[month]) {
+          grouped[month] = {
+            label: month,
+            horseCount: 0,
+            liveryRevenue: 0,
+            otherRevenue: 0,
+            totalRevenue: 0,
+          };
+        }
+        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
+        grouped[month].otherRevenue += amount;
+        grouped[month].totalRevenue += amount;
+      }
+
+      // Сортировка по месяцу хронологически
+      return Object.values(grouped).sort((a, b) =>
+        a.label.localeCompare(b.label)
+      );
+    }
+  }
+
+
+ФОРМАТ ОТВЕТА API
+-----------------
+Массив объектов:
+
+  [
+    {
+      "label": "2026-03",        // или "Firstname Lastname"
+      "horseCount": 5,
+      "liveryRevenue": 22500,
+      "otherRevenue": 3200,
+      "totalRevenue": 25700
+    }
+  ]
+
+
+ЛОГИКА АГРЕГАЦИИ
+----------------
+
+  Источник                        | Метрика        | Формула
+  --------------------------------|----------------|---------------------------
+  livery_agreements (active)      | horseCount     | +1 за каждый контракт
+  livery_agreements (active)      | liveryRevenue  | monthlyAmount контракта
+  billing_elements                | otherRevenue   | price × quantity
+  Оба                             | totalRevenue   | liveryRevenue + otherRevenue
+
+
+КЛЮЧ ГРУППИРОВКИ
+-----------------
+  - По клиенту: "Firstname Lastname"
+  - По месяцу: startDate.substring(0, 7) для контрактов,
+               transactionDate.substring(0, 7) для billing elements
+
+
+================================================================================
+СЛОЙ 3: FRONTEND-КОМПОНЕНТ
+================================================================================
+
+Файл: client/src/pages/reports.tsx
+
+  import { useState } from "react";
+  import { useQuery } from "@tanstack/react-query";
+  import { PageHeader } from "@/components/page-header";
+  import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  } from "@/components/ui/select";
+  import { Label } from "@/components/ui/label";
+  import { Card, CardContent } from "@/components/ui/card";
+  import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid,
+    Tooltip, Legend, ResponsiveContainer,
+  } from "recharts";
+
+  export default function ReportsPage() {
+    const [groupBy, setGroupBy] = useState("month");
+    const [metric, setMetric] = useState("totalRevenue");
+
+    const { data: reportData = [], isLoading } = useQuery<any[]>({
+      queryKey: ["/api/reports/livery", `?groupBy=${groupBy}`],
+    });
+
+    const metricLabels: Record<string, string> = {
+      horseCount: "Number of Horses",
+      liveryRevenue: "Livery Package Revenue",
+      otherRevenue: "Other Revenue",
+      totalRevenue: "Total Revenue",
+    };
+
+    const metricColors: Record<string, string> = {
+      horseCount: "hsl(142, 76%, 36%)",      // зелёный
+      liveryRevenue: "hsl(197, 84%, 42%)",    // синий
+      otherRevenue: "hsl(25, 95%, 53%)",      // оранжевый
+      totalRevenue: "hsl(280, 65%, 60%)",     // фиолетовый
+    };
+
+    return (
+      <div className="p-6">
+        <PageHeader
+          title="Livery Reports"
+          description="Visual analysis of livery data"
+        />
+
+        <div className="flex gap-4 mb-6 flex-wrap">
+          <div>
+            <Label className="text-sm text-muted-foreground mb-1 block">
+              X-Axis
+            </Label>
+            <Select value={groupBy} onValueChange={setGroupBy}>
+              <SelectTrigger className="w-40" data-testid="select-report-groupby">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="month">Month</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-sm text-muted-foreground mb-1 block">
+              Metric
+            </Label>
+            <Select value={metric} onValueChange={setMetric}>
+              <SelectTrigger className="w-52" data-testid="select-report-metric">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="horseCount">Number of Horses</SelectItem>
+                <SelectItem value="liveryRevenue">Livery Revenue</SelectItem>
+                <SelectItem value="otherRevenue">Other Revenue</SelectItem>
+                <SelectItem value="totalRevenue">Total Revenue</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            {isLoading ? (
+              <div className="h-80 flex items-center justify-center text-muted-foreground">
+                Loading report data...
+              </div>
+            ) : reportData.length === 0 ? (
+              <div className="h-80 flex items-center justify-center text-muted-foreground">
+                No data available for the selected criteria
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart
+                  data={reportData}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: "6px",
+                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "hsl(var(--card))",
+                      color: "hsl(var(--card-foreground))",
+                    }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey={metric}
+                    name={metricLabels[metric]}
+                    fill={metricColors[metric]}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+
+КЛЮЧЕВЫЕ МОМЕНТЫ UI
+--------------------
+  - Два Select-фильтра управляют осями диаграммы
+  - queryKey включает groupBy — при смене фильтра данные автоматически
+    перезапрашиваются
+  - dataKey={metric} на <Bar> — динамически переключает, какой столбец
+    из данных отображается
+  - Скруглённые верхушки столбцов: radius={[4, 4, 0, 0]}
+
+
+================================================================================
+НЕОБХОДИМЫЕ ЗАВИСИМОСТИ
+================================================================================
+
+  npm install recharts @tanstack/react-query
+
+
+================================================================================
+НЕОБХОДИМЫЕ ТАБЛИЦЫ БД
+================================================================================
+
+Для работы этого отчёта нужны данные из 3 таблиц:
+
+1. livery_agreements
+   - customerId (UUID, FK → customers.id)
+   - status (TEXT, "active" для фильтрации)
+   - startDate (TEXT, формат "YYYY-MM-DD")
+   - monthlyAmount (NUMERIC)
+
+2. billing_elements
+   - customerId (UUID, FK → customers.id)
+   - transactionDate (TEXT, формат "YYYY-MM-DD")
+   - price (NUMERIC)
+   - quantity (INTEGER)
+
+3. customers
+   - id (UUID, PK)
+   - firstname (TEXT)
+   - lastname (TEXT)
+
+
+================================================================================
+КАК ПОДКЛЮЧИТЬ К ДРУГОМУ ПРОЕКТУ
+================================================================================
+
+1. Добавить эндпоинт GET /api/reports/livery?groupBy=month|customer в ваш бэкенд
+
+2. Реализовать метод агрегации (код выше), адаптировав названия таблиц/полей
+   под вашу схему БД
+
+3. Установить recharts на фронте:
+     npm install recharts
+
+4. Скопировать компонент ReportsPage, подставив ваши UI-компоненты
+   (Select, Card и т.д.) вместо Shadcn/UI
+
+5. Настроить data-fetching — если у вас другой подход (axios, SWR, fetch),
+   заменить useQuery на ваш способ получения данных
+
+6. Зарегистрировать роут на фронте, указывающий на компонент ReportsPage
