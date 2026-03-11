@@ -1,0 +1,64 @@
+Мне нужно добавить SSO-авторизацию через одноразовые токены от внешнего приложения (Unified Portal). Вот что нужно сделать:
+
+1. Добавить маршрут GET /sso на фронтенде, который:
+   - Читает параметр ?token= из URL
+   - Отправляет POST-запрос на https://aksportal.com/api/sso/verify-token с телом { "token": "<значение из URL>" }
+   - Заголовок Content-Type: application/json
+   - Если ответ успешный (200), сервер вернёт JSON с данными пользователя:
+     {
+       "id": "uuid",
+       "email": "user@example.com",
+       "username": "username",
+       "firstName": "John",
+       "lastName": "Doe",
+       "role": "superadmin"
+     }
+   - Используй эти данные чтобы автоматически создать сессию для пользователя (найди или создай пользователя в локальной БД по email/username, затем авторизуй его)
+   - После успешной авторизации — перенаправь на главную страницу приложения
+   - Если ответ неуспешный (401, 400, 500) — перенаправь на страницу логина с сообщением об ошибке "SSO token invalid or expired"
+
+2. Важные детали:
+   - Токен одноразовый — после первой проверки он становится недействительным
+   - Токен действует 5 минут с момента создания
+   - Запрос verify-token нужно делать с серверной стороны (из бэкенда), а НЕ из браузера, чтобы избежать CORS-проблем
+   - Поток: браузер → GET /sso?token=xxx → твой бэкенд → POST к Unified Portal /api/sso/verify-token → получить данные → создать сессию → редирект
+
+3. Примерная реализация серверного маршрута:
+
+   app.get("/sso", async (req, res) => {
+     const token = req.query.token;
+     if (!token) return res.redirect("/login?error=missing_token");
+     
+     try {
+       const response = await fetch("https://unified-portal-aks.replit.app/api/sso/verify-token", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ token }),
+       });
+       
+       if (!response.ok) {
+         return res.redirect("/login?error=invalid_token");
+       }
+       
+       const userData = await response.json();
+       
+       // Найди или создай пользователя в локальной БД
+       let localUser = await findUserByEmail(userData.email);
+       if (!localUser) {
+         localUser = await createUser({
+           email: userData.email,
+           username: userData.username,
+           firstName: userData.firstName,
+           lastName: userData.lastName,
+           role: userData.role,
+         });
+       }
+       
+       // Создай сессию
+       req.session.userId = localUser.id;
+       
+       return res.redirect("/");
+     } catch (error) {
+       return res.redirect("/login?error=sso_failed");
+     }
+   });
