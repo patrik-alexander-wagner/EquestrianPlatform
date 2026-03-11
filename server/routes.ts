@@ -56,6 +56,55 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get("/sso", async (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.redirect("/login?error=missing_token");
+
+    try {
+      const response = await fetch("https://aksportal.com/api/sso/verify-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        return res.redirect("/login?error=invalid_token");
+      }
+
+      const userData = await response.json();
+
+      if (!userData.username || typeof userData.username !== "string") {
+        return res.redirect("/login?error=sso_failed");
+      }
+
+      const allowedRoles = ["user", "admin", "superadmin"];
+      const mappedRole = allowedRoles.includes(userData.role) ? (userData.role === "superadmin" ? "admin" : userData.role) : "user";
+
+      let localUser = await storage.getUserByUsername(userData.username);
+      if (!localUser) {
+        const crypto = await import("crypto");
+        localUser = await storage.createUser({
+          username: userData.username,
+          password: crypto.randomUUID(),
+          role: mappedRole,
+        });
+      }
+
+      const sessionUser = { id: localUser.id, username: localUser.username, role: localUser.role };
+      req.logIn(sessionUser, (err) => {
+        if (err) {
+          console.error("SSO login error:", err);
+          return res.redirect("/login?error=sso_failed");
+        }
+        auditLog(req, "sso_login", "user", localUser!.id, `SSO login via Unified Portal`);
+        return res.redirect("/");
+      });
+    } catch (error) {
+      console.error("SSO verification error:", error);
+      return res.redirect("/login?error=sso_failed");
+    }
+  });
+
   // Auth routes (public)
   app.post("/api/login", loginLimiter, (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {

@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PawPrint, LogIn } from "lucide-react";
+
+const SSO_ERROR_MESSAGES: Record<string, string> = {
+  missing_token: "SSO token is missing",
+  invalid_token: "SSO token invalid or expired",
+  sso_failed: "SSO authentication failed",
+};
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -14,6 +20,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ssoError = params.get("error");
+    if (ssoError && SSO_ERROR_MESSAGES[ssoError]) {
+      setError(SSO_ERROR_MESSAGES[ssoError]);
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

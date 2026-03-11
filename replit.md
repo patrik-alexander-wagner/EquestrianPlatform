@@ -64,6 +64,10 @@ shared/
 - Admin-only routes: GET/POST /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
 - Frontend: Administration sidebar section hidden for non-admin users; admin routes redirect non-admins to dashboard
 - /api/me returns { id, username, role }
+- SSO via Unified Portal: GET /sso?token=xxx → server verifies token with POST to aksportal.com/api/sso/verify-token → finds/creates local user by username → establishes Passport session → redirects to /
+  - Role mapping: "superadmin" → "admin", unknown roles → "user"
+  - SSO errors redirect to /login?error=missing_token|invalid_token|sso_failed
+  - Login page reads ?error= query param and displays human-readable SSO error messages
 
 ## Key Features
 - Currency: AED throughout
