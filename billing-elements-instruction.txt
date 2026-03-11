@@ -1,0 +1,651 @@
+================================================================================
+  ИНСТРУКЦИЯ: Реализация страницы Billing Elements
+  Техническое описание для переноса в другой проект
+================================================================================
+
+
+НАЗНАЧЕНИЕ
+----------
+Страница для добавления дополнительных начислений (extra charges) к лошадям.
+Два сценария использования:
+
+  1. Для лошади с активным контрактом (livery agreement) — контекст (лошадь,
+     клиент, бокс) заполняется автоматически из контракта.
+
+  2. Для клиента без контракта (non-livery) — клиент и лошадь выбираются вручную.
+
+
+АРХИТЕКТУРА
+-----------
+Страница состоит из 3 слоёв:
+
+  1. Frontend — React-компонент с таблицей лошадей, двумя диалогами добавления,
+     и таблицей истории начислений.
+  2. API — 4 эндпоинта (CRUD billing elements + список лошадей с контрактами).
+  3. Storage — методы доступа к данным с обогащением (join) связанных сущностей.
+
+
+================================================================================
+НЕОБХОДИМЫЕ ТАБЛИЦЫ БД
+================================================================================
+
+1. billing_elements (основная таблица начислений)
+   -----------------------------------------------------------------------
+   Поле              | Тип        | Ограничения
+   -----------------------------------------------------------------------
+   id                | UUID       | PK, auto-gen
+   horse_id          | UUID       | NOT NULL, FK → horses.id
+   customer_id       | UUID       | NOT NULL, FK → customers.id
+   box_id            | UUID       | FK → boxes.id (NULL для non-livery)
+   item_id           | UUID       | NOT NULL, FK → items.id
+   agreement_id      | UUID       | FK → livery_agreements.id (NULL для non-livery)
+   quantity          | INTEGER    | NOT NULL, default 1
+   base              | NUMERIC    | (опционально, базовая цена)
+   price             | NUMERIC    | NOT NULL (итоговая цена)
+   transaction_date  | TEXT       | NOT NULL (формат YYYY-MM-DD)
+   billing_month     | TEXT       | (формат YYYY-MM, вычисляется из transaction_date)
+   billed            | BOOLEAN    | NOT NULL, default false
+   invoice_id        | UUID       | (привязка к счёту после выставления)
+   created_at        | TIMESTAMP  | default now()
+
+2. livery_agreements (для определения лошадей с активными контрактами)
+   -----------------------------------------------------------------------
+   Поле              | Тип        | Ограничения
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   horse_id          | UUID       | NOT NULL, FK → horses.id
+   customer_id       | UUID       | NOT NULL, FK → customers.id
+   box_id            | UUID       | NOT NULL, FK → boxes.id
+   item_id           | UUID       | NOT NULL, FK → items.id
+   start_date        | TEXT       | NOT NULL
+   end_date          | TEXT       | (NULL = бессрочный)
+   status            | TEXT       | NOT NULL, default "active"
+
+3. horses
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   horse_name        | TEXT       | NOT NULL
+   status            | TEXT       | NOT NULL, default "active"
+   breed             | TEXT       |
+   color             | TEXT       |
+
+4. customers
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   firstname         | TEXT       | NOT NULL
+   lastname          | TEXT       | NOT NULL
+   email             | TEXT       |
+   status            | TEXT       | NOT NULL, default "active"
+
+5. boxes
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   name              | TEXT       | NOT NULL
+   stable_id         | UUID       | NOT NULL, FK → stables.id
+
+6. stables
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   name              | TEXT       | NOT NULL
+
+7. items (услуги/товары, которые можно начислить)
+   -----------------------------------------------------------------------
+   id                | UUID       | PK
+   name              | TEXT       | NOT NULL
+   price             | NUMERIC    |
+   unit_factor       | NUMERIC    | (делитель цены, см. формулу ниже)
+   department        | TEXT       |
+   location          | TEXT       |
+   is_livery_package | BOOLEAN    | NOT NULL, default false
+   is_inactive       | BOOLEAN    | NOT NULL, default false
+
+
+================================================================================
+СЛОЙ 1: API-ЭНДПОИНТЫ
+================================================================================
+
+Файл: server/routes.ts
+
+--- 1.1 GET /api/billing-elements ---
+
+Возвращает список billing elements с обогащёнными данными (имена лошадей,
+клиентов, боксов, конюшен, товаров).
+Опциональный фильтр: ?billed=true|false
+
+  app.get("/api/billing-elements", async (req, res) => {
+    try {
+      const billed = req.query.billed !== undefined
+        ? req.query.billed === "true"
+        : undefined;
+      const elements = await storage.getBillingElements(billed);
+      res.json(elements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+
+--- 1.2 POST /api/billing-elements ---
+
+Создаёт новый billing element. Автоматически вычисляет billingMonth из
+transactionDate, если не передан. Логирует действие в аудит.
+
+  app.post("/api/billing-elements", async (req, res) => {
+    try {
+      if (req.body.transactionDate && !req.body.billingMonth) {
+        req.body.billingMonth = req.body.transactionDate.substring(0, 7);
+      }
+      const data = validateBody(insertBillingElementSchema, req.body);
+      const element = await storage.createBillingElement(data);
+      auditLog(req, "create_billing_element", "billing_element", element.id);
+      res.json(element);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+Тело запроса (JSON):
+  {
+    "horseId": "uuid",
+    "customerId": "uuid",
+    "boxId": "uuid | null",
+    "itemId": "uuid",
+    "agreementId": "uuid | null",
+    "quantity": 1,
+    "price": "125.50",
+    "transactionDate": "2026-03-11",
+    "billingMonth": "2026-03",
+    "billed": false
+  }
+
+
+--- 1.3 DELETE /api/billing-elements/:id ---
+
+Удаляет billing element по ID.
+
+  app.delete("/api/billing-elements/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteBillingElement(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Billing element not found" });
+      auditLog(req, "delete_billing_element", "billing_element", req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+
+--- 1.4 GET /api/horses-with-agreements ---
+
+Возвращает список лошадей с активными контрактами (для главной таблицы).
+Обогащает данными о клиенте, боксе и конюшне.
+
+  app.get("/api/horses-with-agreements", async (_req, res) => {
+    try {
+      const horses = await storage.getHorsesWithActiveAgreements();
+      res.json(horses);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+Формат ответа:
+  [
+    {
+      "horseId": "uuid",
+      "horseName": "Aceto MC",
+      "customerId": "uuid",
+      "customerName": "John Doe",
+      "boxId": "uuid",
+      "boxName": "SB001-S001",
+      "stableId": "uuid",
+      "stableName": "Maha",
+      "agreementId": "uuid"
+    }
+  ]
+
+
+--- 1.5 GET /api/items/non-livery-packages ---
+
+Возвращает товары/услуги, НЕ являющиеся пакетами постоя (is_livery_package = false).
+Используется для выпадающего списка выбора товара.
+
+  app.get("/api/items/non-livery-packages", async (_req, res) => {
+    try {
+      const items = await storage.getNonLiveryPackageItems();
+      res.json(items);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+
+================================================================================
+СЛОЙ 2: БИЗНЕС-ЛОГИКА (STORAGE)
+================================================================================
+
+Файл: server/storage.ts
+
+--- 2.1 getBillingElements(billed?) ---
+
+Загружает billing elements и обогащает каждый запись именами связанных сущностей:
+
+  async getBillingElements(billed?: boolean): Promise<any[]> {
+    const query = billed !== undefined
+      ? await db.select().from(billingElements).where(eq(billingElements.billed, billed))
+      : await db.select().from(billingElements);
+
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allItems = await db.select().from(items);
+
+    return query.map(element => {
+      const horse = allHorses.find(h => h.id === element.horseId);
+      const customer = allCustomers.find(c => c.id === element.customerId);
+      const box = allBoxes.find(b => b.id === element.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const item = allItems.find(i => i.id === element.itemId);
+      return {
+        ...element,
+        horseName: horse?.horseName || "Unknown",
+        customerName: customer
+          ? `${customer.firstname} ${customer.lastname}`
+          : "Unknown",
+        boxName: box?.name || "Unknown",
+        stableName: stable?.name || "Unknown",
+        itemName: item?.name || "Unknown",
+      };
+    });
+  }
+
+
+--- 2.2 createBillingElement(element) ---
+
+Простая вставка в таблицу:
+
+  async createBillingElement(element: InsertBillingElement): Promise<BillingElement> {
+    const [created] = await db.insert(billingElements).values(element).returning();
+    return created;
+  }
+
+
+--- 2.3 deleteBillingElement(id) ---
+
+  async deleteBillingElement(id: string): Promise<boolean> {
+    const result = await db.delete(billingElements)
+      .where(eq(billingElements.id, id)).returning();
+    return result.length > 0;
+  }
+
+
+--- 2.4 getHorsesWithActiveAgreements() ---
+
+Фильтрует контракты: status = "active" И (endDate = null ИЛИ endDate >= сегодня).
+Обогащает данными связанных сущностей:
+
+  async getHorsesWithActiveAgreements(): Promise<any[]> {
+    const allAgreements = await db.select().from(liveryAgreements)
+      .where(eq(liveryAgreements.status, "active"));
+    const today = new Date().toISOString().split("T")[0];
+    const activeAgreements = allAgreements.filter(
+      a => !a.endDate || a.endDate >= today
+    );
+
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+
+    return activeAgreements.map(agreement => {
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      return {
+        horseId: horse?.id,
+        horseName: horse?.horseName || "Unknown",
+        customerId: customer?.id,
+        customerName: customer
+          ? `${customer.firstname} ${customer.lastname}`
+          : "Unknown",
+        boxId: box?.id,
+        boxName: box?.name || "Unknown",
+        stableId: stable?.id,
+        stableName: stable?.name || "Unknown",
+        agreementId: agreement.id,
+      };
+    });
+  }
+
+
+================================================================================
+СЛОЙ 3: FRONTEND-КОМПОНЕНТ
+================================================================================
+
+Файл: client/src/pages/billing-elements.tsx
+
+--- 3.1 Общая структура страницы ---
+
+  ┌─────────────────────────────────────────────────────┐
+  │  Заголовок: "Billing Elements"                      │
+  ├─────────────────────────────────────────────────────┤
+  │  [Поиск: Horse] [Поиск: Customer] [Поиск: Stable]  │
+  │  [Кнопка: Bill Non-Livery Customer]                 │
+  ├─────────────────────────────────────────────────────┤
+  │  Таблица: Лошади с активными контрактами            │
+  │  Столбцы: Horse | Customer | Stable | Box | [Add]   │
+  ├─────────────────────────────────────────────────────┤
+  │  Таблица: Последние billing elements                │
+  │  Столбцы: Horse | Customer | Item | Qty | Price |   │
+  │           Date | Billing Month | Billed             │
+  └─────────────────────────────────────────────────────┘
+
+
+--- 3.2 Состояние (State) ---
+
+  // Фильтры поиска
+  const [horseSearch, setHorseSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [stableSearch, setStableSearch] = useState("");
+
+  // Диалог добавления (для лошади с контрактом)
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedAgreementHorse, setSelectedAgreementHorse] = useState(null);
+
+  // Диалог для non-livery клиента
+  const [showNonLiveryDialog, setShowNonLiveryDialog] = useState(false);
+  const [nlCustomerId, setNlCustomerId] = useState("");
+  const [nlHorseId, setNlHorseId] = useState("");
+
+  // Общие поля формы (используются обоими диалогами)
+  const [selectedItemId, setSelectedItemId] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [finalSellingPrice, setFinalSellingPrice] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayString());
+
+
+--- 3.3 Data Fetching ---
+
+  // Лошади с активными контрактами (главная таблица)
+  const { data: horsesWithAgreements } = useQuery({
+    queryKey: ["/api/horses-with-agreements"],
+  });
+
+  // Товары НЕ из пакета постоя (выпадающий список)
+  const { data: nonLiveryItems } = useQuery({
+    queryKey: ["/api/items/non-livery-packages"],
+  });
+
+  // История billing elements
+  const { data: billingElements } = useQuery({
+    queryKey: ["/api/billing-elements"],
+  });
+
+  // Все клиенты и лошади (для non-livery диалога)
+  const { data: allCustomers } = useQuery({ queryKey: ["/api/customers"] });
+  const { data: allHorses } = useQuery({ queryKey: ["/api/horses"] });
+
+
+--- 3.4 Мутация ---
+
+  const createMutation = useMutation({
+    mutationFn: (data) => apiRequest("POST", "/api/billing-elements", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horses-with-agreements"] });
+      setShowAddDialog(false);
+      setShowNonLiveryDialog(false);
+      toast({ title: "Billing element added successfully" });
+    },
+  });
+
+
+--- 3.5 Формула расчёта цены ---
+
+  ВАЖНО: Это ключевая бизнес-логика ценообразования.
+
+  Исходные данные из item:
+    - price       = базовая цена товара
+    - unitFactor  = делитель (коэффициент единицы измерения)
+
+  Формула:
+    computedPrice = (item.price / item.unitFactor) * quantity
+
+  Пример:
+    Мешок корма: price = 300, unitFactor = 10 (10 порций в мешке)
+    При quantity = 3: computedPrice = (300 / 10) * 3 = 90 AED
+
+  На UI показываются два поля:
+    - "Computed Price" — расчётная цена (только чтение)
+    - "Final Selling Price" — итоговая цена (можно изменить вручную)
+
+  При выборе товара или изменении количества, finalSellingPrice автоматически
+  заполняется значением computedPrice, но пользователь может его переопределить.
+
+  Код расчёта:
+
+    const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
+    const itemPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
+    const itemUnitFactor = selectedItem?.unitFactor
+      ? parseFloat(selectedItem.unitFactor) : 1;
+    const computedSellingPrice = itemUnitFactor > 0
+      ? (itemPrice / itemUnitFactor) * quantity : 0;
+
+    const handleItemChange = (val) => {
+      setSelectedItemId(val);
+      const item = nonLiveryItems.find(i => i.id === val);
+      const price = item?.price ? parseFloat(item.price) : 0;
+      const uf = item?.unitFactor ? parseFloat(item.unitFactor) : 1;
+      const computed = uf > 0 ? (price / uf) * quantity : 0;
+      setFinalSellingPrice(computed.toFixed(2));
+    };
+
+    const handleQuantityChange = (newQty) => {
+      setQuantity(newQty);
+      if (selectedItem) {
+        const computed = itemUnitFactor > 0
+          ? (itemPrice / itemUnitFactor) * newQty : 0;
+        setFinalSellingPrice(computed.toFixed(2));
+      }
+    };
+
+
+--- 3.6 Фильтрация таблицы ---
+
+  Три поисковых поля фильтруют главную таблицу (лошади с контрактами):
+
+    const filteredHorses = useMemo(() => {
+      let result = horsesWithAgreements;
+      if (horseSearch) {
+        result = result.filter(h =>
+          h.horseName.toLowerCase().includes(horseSearch.toLowerCase()));
+      }
+      if (customerSearch) {
+        result = result.filter(h =>
+          h.customerName.toLowerCase().includes(customerSearch.toLowerCase()));
+      }
+      if (stableSearch) {
+        result = result.filter(h =>
+          h.stableName.toLowerCase().includes(stableSearch.toLowerCase()) ||
+          h.boxName.toLowerCase().includes(stableSearch.toLowerCase()));
+      }
+      return result;
+    }, [horsesWithAgreements, horseSearch, customerSearch, stableSearch]);
+
+
+--- 3.7 Диалог 1: Добавление начисления для лошади с контрактом ---
+
+  Открывается нажатием кнопки "Add" в строке таблицы.
+  Контекст (лошадь, клиент, бокс) заполнен автоматически.
+
+  Пользователь выбирает только:
+    - Товар (searchable dropdown)
+    - Количество
+    - Итоговую цену (авто-расчёт с возможностью переопределить)
+    - Дату транзакции
+
+  Тело запроса при сохранении:
+    {
+      horseId: selectedAgreementHorse.horseId,
+      customerId: selectedAgreementHorse.customerId,
+      boxId: selectedAgreementHorse.boxId,
+      itemId: selectedItemId,
+      quantity: quantity,
+      price: finalSellingPrice,
+      transactionDate: "2026-03-11",
+      billingMonth: "2026-03",    // вычисляется из transactionDate
+      billed: false,
+    }
+
+
+--- 3.8 Диалог 2: Начисление для non-livery клиента ---
+
+  Открывается кнопкой "Bill Non-Livery Customer".
+  Контекст НЕ заполнен — пользователь выбирает всё вручную:
+
+    - Клиент (searchable dropdown по всем активным клиентам)
+    - Лошадь (searchable dropdown по всем активным лошадям)
+    - Товар (тот же searchable dropdown)
+    - Количество, цена, дата (как в диалоге 1)
+
+  Тело запроса при сохранении:
+    {
+      horseId: nlHorseId,
+      customerId: nlCustomerId,
+      boxId: null,                // нет бокса
+      itemId: selectedItemId,
+      agreementId: null,          // нет контракта
+      quantity: quantity,
+      price: finalSellingPrice,
+      transactionDate: "2026-03-11",
+      billingMonth: "2026-03",
+      billed: false,
+    }
+
+
+--- 3.9 Searchable Dropdown (паттерн) ---
+
+  Все выпадающие списки реализованы одинаково — кастомный компонент:
+
+    1. Input с placeholder для поиска
+    2. При фокусе открывается выпадающий список
+    3. Фильтрация в реальном времени по введённому тексту
+    4. При выборе элемента Input показывает его имя
+    5. Кнопка "✕" для сброса выбора
+    6. onBlur с setTimeout(200ms) для закрытия
+
+  Пример (searchable dropdown для товаров):
+
+    <div className="relative">
+      <Label>Item</Label>
+      <Input
+        placeholder="Search items..."
+        value={selectedItem && !dropdownOpen
+          ? selectedItem.name
+          : searchText}
+        onChange={(e) => {
+          setSearchText(e.target.value);
+          setDropdownOpen(true);
+          if (selectedId) { setSelectedId(""); }
+        }}
+        onFocus={() => setDropdownOpen(true)}
+        onBlur={() => setTimeout(() => setDropdownOpen(false), 200)}
+      />
+      {dropdownOpen && !selectedId && (
+        <div className="absolute z-50 w-full mt-1 bg-popover border
+                        rounded-md shadow-md max-h-48 overflow-y-auto">
+          {filteredItems.map(item => (
+            <button
+              key={item.id}
+              className="w-full text-left px-3 py-2 text-sm
+                         hover:bg-accent cursor-pointer"
+              onClick={() => {
+                setSelectedId(item.id);
+                setSearchText("");
+                setDropdownOpen(false);
+              }}
+            >
+              <div className="font-medium">{item.name}</div>
+              <div className="text-xs text-muted-foreground">
+                AED {item.price}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
+
+--- 3.10 Таблица истории начислений ---
+
+  Показывается внизу страницы, если есть billing elements.
+  Столбцы:
+
+    Horse | Customer | Item | Qty | Selling Price | Date | Billing Month | Billed
+
+  Поле "Selling Price" форматируется: `AED ${parseFloat(item.price).toFixed(2)}`
+  Поле "Billed" отображается: item.billed ? "Yes" : "No"
+
+
+================================================================================
+ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+================================================================================
+
+  // Сегодняшняя дата в формате YYYY-MM-DD
+  function getTodayString() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }
+
+  // Извлечение месяца из даты: "2026-03-11" → "2026-03"
+  function deriveBillingMonth(dateStr) {
+    return dateStr ? dateStr.substring(0, 7) : "";
+  }
+
+
+================================================================================
+НЕОБХОДИМЫЕ ЗАВИСИМОСТИ
+================================================================================
+
+  npm install @tanstack/react-query recharts lucide-react
+
+
+================================================================================
+КАК ПОДКЛЮЧИТЬ К ДРУГОМУ ПРОЕКТУ
+================================================================================
+
+1. Создать таблицу billing_elements в БД (схема выше).
+
+2. Убедиться, что существуют связанные таблицы: horses, customers, boxes,
+   stables, items, livery_agreements.
+
+3. Реализовать 4 API-эндпоинта:
+     GET    /api/billing-elements        — список с обогащением
+     POST   /api/billing-elements        — создание
+     DELETE /api/billing-elements/:id    — удаление
+     GET    /api/horses-with-agreements  — лошади с активными контрактами
+
+4. Также потребуются существующие эндпоинты:
+     GET /api/items/non-livery-packages  — товары (is_livery_package = false)
+     GET /api/customers                  — все клиенты
+     GET /api/horses                     — все лошади
+
+5. Реализовать storage-методы (код выше), адаптировав под вашу ORM и БД.
+
+6. На фронте — скопировать компонент, подставив ваши UI-компоненты
+   (Dialog, Input, Button, Label, DataTable) вместо Shadcn/UI.
+
+7. Настроить data-fetching — если используете не TanStack Query, заменить
+   useQuery/useMutation на ваш подход.
+
+8. Зарегистрировать роут на фронте (например, /billing-elements).
+
+9. Ключевые моменты при адаптации:
+     - Формула цены: (item.price / item.unitFactor) * quantity
+     - billingMonth вычисляется автоматически из transactionDate
+     - Non-livery элементы имеют boxId=null и agreementId=null
+     - После создания элемента — инвалидировать кеш billing-elements
+       и horses-with-agreements
