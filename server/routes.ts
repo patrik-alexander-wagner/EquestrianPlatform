@@ -495,6 +495,22 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/livery-agreements/:id/cancel-checkout", async (req, res) => {
+    try {
+      const agreement = await storage.getLiveryAgreement(req.params.id);
+      if (!agreement) return res.status(404).json({ message: "Agreement not found" });
+      if (!agreement.endDate) return res.status(400).json({ message: "Agreement does not have a checkout date" });
+      const updated = await storage.updateLiveryAgreement(req.params.id, {
+        endDate: null,
+        checkoutReason: null,
+      });
+      auditLog(req, "cancel_checkout", "agreement", req.params.id, `Cancelled checkout for agreement ${agreement.referenceNumber}`);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   app.get("/api/boxes-with-status", async (_req, res) => {
     try {
       const boxes = await storage.getBoxesWithAgreementStatus();

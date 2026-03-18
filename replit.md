@@ -27,8 +27,9 @@ client/src/
     stables.tsx              - Stable management (CRUD)
     boxes.tsx                - Box management (CRUD + import)
     items.tsx                - Items list (read-only + import)
-    current-agreements.tsx   - Active livery agreements with checkout
+    current-agreements.tsx   - Active livery agreements with checkout and edit
     new-agreement.tsx        - New agreement creation (box grid view)
+    agreement-history.tsx    - Historical agreements with cancel checkout
     billing-elements.tsx     - Extra billing items per horse
     to-invoice.tsx           - Invoice preparation
     invoices.tsx             - Invoice list (read-only)

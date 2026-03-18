@@ -16,6 +16,7 @@ import BoxesPage from "@/pages/boxes";
 import ItemsPage from "@/pages/items";
 import CurrentAgreementsPage from "@/pages/current-agreements";
 import NewAgreementPage from "@/pages/new-agreement";
+import AgreementHistoryPage from "@/pages/agreement-history";
 import BillingElementsPage from "@/pages/billing-elements";
 import ToInvoicePage from "@/pages/to-invoice";
 import InvoicesPage from "@/pages/invoices";
@@ -42,6 +43,7 @@ function Router({ userRole }: { userRole: string }) {
       <Route path="/items" component={ItemsPage} />
       <Route path="/agreements/current" component={CurrentAgreementsPage} />
       <Route path="/agreements/new" component={NewAgreementPage} />
+      <Route path="/agreements/history" component={AgreementHistoryPage} />
       <Route path="/billing-elements" component={BillingElementsPage} />
       <Route path="/billing/to-invoice" component={ToInvoicePage} />
       <Route path="/billing/invoices" component={InvoicesPage} />

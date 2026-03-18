@@ -28,6 +28,7 @@ import {
   UserCog,
   LogOut,
   Shield,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +46,7 @@ const navGroups = [
     items: [
       { title: "Current Agreements", url: "/agreements/current", icon: FileText },
       { title: "New Agreement", url: "/agreements/new", icon: FilePlus },
+      { title: "History", url: "/agreements/history", icon: History },
     ],
   },
   {
