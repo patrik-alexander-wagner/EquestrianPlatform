@@ -672,6 +672,37 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/new-livery-horses", async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
+      const data = await storage.getNewLiveryHorses(month);
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/reports/departed-livery-horses", async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
+      const data = await storage.getDepartedLiveryHorses(month);
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/reports/livery-customers-info", async (_req, res) => {
+    try {
+      const data = await storage.getLiveryCustomersInfo();
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Send invoice to NetSuite via N8N webhook
   app.post("/api/invoices/:id/send-to-netsuite", async (req, res) => {
     try {

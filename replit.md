@@ -90,7 +90,10 @@ shared/
 - Invoice deletion (temporary feature) with billing element unbilling
 - NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download
 - NetSuite ID fields on customers, horses, stables, boxes, items — mappable during import
-- Livery reports with bar charts (by month/customer)
+- Livery reports with bar charts (by month/customer) and detail report tables:
+  - New Livery Horses by month (grouped by owner with horse names, arrival dates, prices)
+  - Departure of Livery Horses by month (grouped by owner with horse names, departure dates, reasons)
+  - Livery Customers Information File (all active customers with horse counts and monthly prices)
 - Livery package configuration in settings
 - Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
 - Billing elements: price field stores Final Selling Price (total, not per-unit)

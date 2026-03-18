@@ -81,6 +81,9 @@ export interface IStorage {
   setSetting(key: string, value: string): Promise<void>;
 
   getReportData(groupBy: string): Promise<any[]>;
+  getNewLiveryHorses(month: string): Promise<any[]>;
+  getDepartedLiveryHorses(month: string): Promise<any[]>;
+  getLiveryCustomersInfo(): Promise<any[]>;
 
   getAgreementDocuments(agreementId: string): Promise<AgreementDocument[]>;
   getAgreementDocument(id: string): Promise<AgreementDocument | undefined>;
@@ -649,6 +652,104 @@ export class DatabaseStorage implements IStorage {
       return Object.values(grouped).sort((a, b) => a.label.localeCompare(b.label));
     }
   }
+  async getNewLiveryHorses(month: string): Promise<any[]> {
+    const allAgreements = await db.select().from(liveryAgreements);
+    const allCustomers = await db.select().from(customers);
+    const allHorses = await db.select().from(horses);
+    const allItems = await db.select().from(items);
+
+    const filtered = allAgreements.filter(a => a.startDate?.substring(0, 7) === month);
+
+    const grouped: Record<string, any> = {};
+    for (const agreement of filtered) {
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const item = allItems.find(i => i.id === agreement.itemId);
+      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+
+      if (!grouped[agreement.customerId]) {
+        grouped[agreement.customerId] = {
+          customerName,
+          horses: [],
+          horseCount: 0,
+        };
+      }
+      grouped[agreement.customerId].horses.push({
+        horseName: horse?.horseName || "Unknown",
+        arrivalDate: agreement.startDate,
+        liveryPrice: agreement.monthlyAmount || (item?.price || "0"),
+      });
+      grouped[agreement.customerId].horseCount++;
+    }
+
+    return Object.values(grouped);
+  }
+
+  async getDepartedLiveryHorses(month: string): Promise<any[]> {
+    const allAgreements = await db.select().from(liveryAgreements);
+    const allCustomers = await db.select().from(customers);
+    const allHorses = await db.select().from(horses);
+
+    const filtered = allAgreements.filter(a => a.endDate && a.endDate.substring(0, 7) === month);
+
+    const grouped: Record<string, any> = {};
+    for (const agreement of filtered) {
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+
+      if (!grouped[agreement.customerId]) {
+        grouped[agreement.customerId] = {
+          customerName,
+          horses: [],
+          horseCount: 0,
+        };
+      }
+      grouped[agreement.customerId].horses.push({
+        horseName: horse?.horseName || "Unknown",
+        departureDate: agreement.endDate,
+        checkoutReason: agreement.checkoutReason || "",
+      });
+      grouped[agreement.customerId].horseCount++;
+    }
+
+    return Object.values(grouped);
+  }
+
+  async getLiveryCustomersInfo(): Promise<any[]> {
+    const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const today = new Date().toISOString().split("T")[0];
+    const current = activeAgreements.filter(a => !a.endDate || a.endDate >= today);
+
+    const allCustomers = await db.select().from(customers);
+    const allHorses = await db.select().from(horses);
+
+    const grouped: Record<string, any> = {};
+    for (const agreement of current) {
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+
+      if (!grouped[agreement.customerId]) {
+        grouped[agreement.customerId] = {
+          customerName,
+          horses: [],
+          horseCount: 0,
+          totalMonthlyPrice: 0,
+        };
+      }
+      const price = parseFloat(agreement.monthlyAmount || "0");
+      grouped[agreement.customerId].horses.push({
+        horseName: horse?.horseName || "Unknown",
+        monthlyPrice: price,
+      });
+      grouped[agreement.customerId].horseCount++;
+      grouped[agreement.customerId].totalMonthlyPrice += price;
+    }
+
+    return Object.values(grouped);
+  }
+
   async getAgreementDocuments(agreementId: string): Promise<AgreementDocument[]> {
     return await db.select().from(agreementDocuments)
       .where(eq(agreementDocuments.agreementId, agreementId));
