@@ -102,6 +102,24 @@ export default function BillingElementsPage() {
     return result;
   }, [horsesWithAgreements, horseSearch, customerSearch, stableSearch]);
 
+  const filteredBillingElements = useMemo(() => {
+    let result = billingElements;
+    if (horseSearch) {
+      result = result.filter((el: any) => el.horseName?.toLowerCase().includes(horseSearch.toLowerCase()));
+    }
+    if (customerSearch) {
+      result = result.filter((el: any) => el.customerName?.toLowerCase().includes(customerSearch.toLowerCase()));
+    }
+    if (stableSearch) {
+      const s = stableSearch.toLowerCase();
+      result = result.filter((el: any) =>
+        (el.stableName && el.stableName.toLowerCase().includes(s)) ||
+        (el.boxName && el.boxName.toLowerCase().includes(s))
+      );
+    }
+    return result;
+  }, [billingElements, horseSearch, customerSearch, stableSearch]);
+
   const filteredNlCustomers = useMemo(() => {
     const active = allCustomers.filter(c => c.status === "active");
     if (!nlCustomerSearch.trim()) return active;
@@ -365,7 +383,7 @@ export default function BillingElementsPage() {
                 render: (item: any) => item.billed ? "Yes" : "No",
               },
             ]}
-            data={billingElements}
+            data={filteredBillingElements}
           />
         </div>
       )}
