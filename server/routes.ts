@@ -433,6 +433,32 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/items/:id/price-history", async (req, res) => {
+    try {
+      const item = await storage.getItem(req.params.id);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const history = await storage.getItemPriceHistory(req.params.id);
+      res.json(history);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/items/:id/change-price", async (req, res) => {
+    try {
+      const item = await storage.getItem(req.params.id);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const { price } = req.body;
+      if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) return res.status(400).json({ message: "Valid positive price is required" });
+      const user = req.user as any;
+      const newPriceRecord = await storage.changeItemPrice(req.params.id, String(price), user?.username);
+      auditLog(req, "change_item_price", "item", req.params.id, `Price changed to ${price} for item ${item.name}`);
+      res.json(newPriceRecord);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Livery Agreements
   app.get("/api/livery-agreements", async (req, res) => {
     try {

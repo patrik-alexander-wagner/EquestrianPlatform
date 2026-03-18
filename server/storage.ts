@@ -2,7 +2,7 @@ import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import {
-  users, customers, horses, stables, boxes, items,
+  users, customers, horses, stables, boxes, items, itemPrices,
   liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
@@ -10,6 +10,7 @@ import {
   type Stable, type InsertStable,
   type Box, type InsertBox,
   type Item, type InsertItem,
+  type ItemPrice, type InsertItemPrice,
   type LiveryAgreement, type InsertLiveryAgreement,
   type BillingElement, type InsertBillingElement,
   type Invoice, type InsertInvoice,
@@ -79,6 +80,9 @@ export interface IStorage {
   getInvoiceDetailsForSO(id: string): Promise<any>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+
+  getItemPriceHistory(itemId: string): Promise<ItemPrice[]>;
+  changeItemPrice(itemId: string, newPrice: string, createdBy?: string): Promise<ItemPrice>;
 
   getReportData(groupBy: string): Promise<any[]>;
   getNewLiveryHorses(month: string): Promise<any[]>;
@@ -652,6 +656,31 @@ export class DatabaseStorage implements IStorage {
       return Object.values(grouped).sort((a, b) => a.label.localeCompare(b.label));
     }
   }
+  async getItemPriceHistory(itemId: string): Promise<ItemPrice[]> {
+    return await db.select().from(itemPrices)
+      .where(eq(itemPrices.itemId, itemId))
+      .orderBy(desc(itemPrices.createdAt));
+  }
+
+  async changeItemPrice(itemId: string, newPrice: string, createdBy?: string): Promise<ItemPrice> {
+    return await db.transaction(async (tx) => {
+      await tx.update(itemPrices)
+        .set({ isActive: false })
+        .where(and(eq(itemPrices.itemId, itemId), eq(itemPrices.isActive, true)));
+
+      const [newRecord] = await tx.insert(itemPrices).values({
+        itemId,
+        price: newPrice,
+        isActive: true,
+        createdBy: createdBy || null,
+      }).returning();
+
+      await tx.update(items).set({ price: newPrice }).where(eq(items.id, itemId));
+
+      return newRecord;
+    });
+  }
+
   async getNewLiveryHorses(month: string): Promise<any[]> {
     const allAgreements = await db.select().from(liveryAgreements);
     const allCustomers = await db.select().from(customers);

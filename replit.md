@@ -96,6 +96,7 @@ shared/
   - Livery Customers Information File (all active customers with horse counts and monthly prices)
 - Livery package configuration in settings
 - Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
+- Item price history: item_prices table tracks all price changes per item (id, item_id, price, is_active, created_at, created_by). Only one active price per item. "Change Price" button in Add Billing Element dialog allows updating item price with history preservation. Existing billing records unaffected.
 - Billing elements: price field stores Final Selling Price (total, not per-unit)
 - PO number counter stored in app_settings table (key: last_po_number)
 - N8N webhook integration: configurable webhook URL in Settings, "Send to NetSuite" button on invoices sends SO JSON via POST to N8N webhook, stores sent status and optional NetSuite ID from response

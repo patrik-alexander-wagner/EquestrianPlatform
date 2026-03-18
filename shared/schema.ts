@@ -90,6 +90,19 @@ export const insertItemSchema = createInsertSchema(items).omit({ id: true });
 export type InsertItem = z.infer<typeof insertItemSchema>;
 export type Item = typeof items.$inferSelect;
 
+export const itemPrices = pgTable("item_prices", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  itemId: uuid("item_id").notNull().references(() => items.id),
+  price: numeric("price").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: text("created_by"),
+});
+
+export const insertItemPriceSchema = createInsertSchema(itemPrices).omit({ id: true, createdAt: true });
+export type InsertItemPrice = z.infer<typeof insertItemPriceSchema>;
+export type ItemPrice = typeof itemPrices.$inferSelect;
+
 export const liveryAgreements = pgTable("livery_agreements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   referenceNumber: text("reference_number").notNull(),

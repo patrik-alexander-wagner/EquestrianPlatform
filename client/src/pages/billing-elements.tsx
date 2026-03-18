@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, UserPlus } from "lucide-react";
+import { Plus, UserPlus, DollarSign } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { Item, Customer, Horse } from "@shared/schema";
 
 function getTodayString() {
@@ -41,6 +42,10 @@ export default function BillingElementsPage() {
   const [nlHorseId, setNlHorseId] = useState("");
   const [nlHorseSearch, setNlHorseSearch] = useState("");
   const [nlHorseDropdownOpen, setNlHorseDropdownOpen] = useState(false);
+
+  const [showChangePriceDialog, setShowChangePriceDialog] = useState(false);
+  const [changePriceItem, setChangePriceItem] = useState<Item | null>(null);
+  const [newPrice, setNewPrice] = useState("");
 
   const { toast } = useToast();
 
@@ -74,6 +79,29 @@ export default function BillingElementsPage() {
       toast({ title: "Billing element added successfully" });
     },
   });
+
+  const changePriceMutation = useMutation({
+    mutationFn: (data: { itemId: string; price: string }) =>
+      apiRequest("POST", `/api/items/${data.itemId}/change-price`, { price: data.price }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/items/non-livery-packages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/items/livery-packages"] });
+      setShowChangePriceDialog(false);
+      setChangePriceItem(null);
+      setNewPrice("");
+      toast({ title: "Price updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to update price", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openChangePriceDialog = (item: Item) => {
+    setChangePriceItem(item);
+    setNewPrice("");
+    setShowChangePriceDialog(true);
+  };
 
   const filteredItems = useMemo(() => {
     if (!itemSearch.trim()) return nonLiveryItems;
@@ -267,9 +295,22 @@ export default function BillingElementsPage() {
             <span>Unit Factor:</span>
             <span>{itemUnitFactor}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span>Base Price (per unit factor):</span>
-            <span>AED {itemPrice.toFixed(2)}</span>
+            <span className="flex items-center gap-2">
+              AED {itemPrice.toFixed(2)}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => openChangePriceDialog(selectedItem)}
+                data-testid="button-change-price"
+              >
+                <DollarSign className="w-3 h-3 mr-1" />
+                Change Price
+              </Button>
+            </span>
           </div>
         </div>
       )}
@@ -566,6 +607,70 @@ export default function BillingElementsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showChangePriceDialog} onOpenChange={setShowChangePriceDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change Item Price</DialogTitle>
+            <DialogDescription>Update the price for this item</DialogDescription>
+          </DialogHeader>
+          {changePriceItem && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>Item:</span>
+                  <span className="font-medium">{changePriceItem.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Current Price:</span>
+                  <span className="font-medium">AED {changePriceItem.price ? parseFloat(changePriceItem.price).toFixed(2) : "0.00"}</span>
+                </div>
+                {changePriceItem.unitFactor && (
+                  <div className="flex justify-between">
+                    <span>Unit Factor:</span>
+                    <span>{changePriceItem.unitFactor}</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>New Price (AED)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newPrice}
+                  onChange={(e) => setNewPrice(e.target.value)}
+                  placeholder="Enter new price..."
+                  data-testid="input-new-price"
+                />
+              </div>
+
+              <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  This price will be used for all future billing. Existing records will not be affected.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  disabled={changePriceMutation.isPending || !newPrice || parseFloat(newPrice) <= 0}
+                  onClick={() => {
+                    if (changePriceItem) {
+                      changePriceMutation.mutate({ itemId: changePriceItem.id, price: newPrice });
+                    }
+                  }}
+                  data-testid="button-submit-change-price"
+                >
+                  Update Price
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
