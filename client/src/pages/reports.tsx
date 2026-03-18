@@ -1,10 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Download } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import html2canvas from "html2canvas";
 
 function formatMonthLabel(month: string) {
   if (!month) return "";
@@ -42,6 +47,9 @@ export default function ReportsPage() {
   const [metric, setMetric] = useState("totalRevenue");
   const [detailReport, setDetailReport] = useState("new_livery");
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [downloadingChart, setDownloadingChart] = useState(false);
+  const [downloadingDetail, setDownloadingDetail] = useState(false);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   const { data: reportData = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/reports/livery", `?groupBy=${groupBy}`],
@@ -79,6 +87,196 @@ export default function ReportsPage() {
   const monthOptions = useMemo(() => generateMonthOptions(), []);
   const showMonthFilter = detailReport === "new_livery" || detailReport === "departed";
 
+  const downloadChartPdf = useCallback(async () => {
+    if (!chartRef.current) return;
+    setDownloadingChart(true);
+    try {
+      const canvas = await html2canvas(chartRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("StableMaster - Livery Report", pageWidth / 2, 15, { align: "center" });
+
+      pdf.setFontSize(11);
+      pdf.setFont("helvetica", "normal");
+      const subtitle = `${metricLabels[metric]} by ${groupBy === "month" ? "Month" : "Customer"}`;
+      pdf.text(subtitle, pageWidth / 2, 22, { align: "center" });
+
+      const imgWidth = pageWidth - 30;
+      const imgHeight = (canvas.height / canvas.width) * imgWidth;
+      const maxHeight = pageHeight - 40;
+      const finalHeight = Math.min(imgHeight, maxHeight);
+      const finalWidth = imgHeight > maxHeight ? (canvas.width / canvas.height) * finalHeight : imgWidth;
+      const xOffset = (pageWidth - finalWidth) / 2;
+
+      pdf.addImage(imgData, "PNG", xOffset, 28, finalWidth, finalHeight);
+
+      pdf.setFontSize(8);
+      pdf.setTextColor(128);
+      pdf.text(`Generated on ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, pageWidth / 2, pageHeight - 5, { align: "center" });
+
+      pdf.save(`livery-chart-${groupBy}-${metric}.pdf`);
+    } finally {
+      setDownloadingChart(false);
+    }
+  }, [groupBy, metric]);
+
+  const addDetailFooter = (pdf: jsPDF, pageWidth: number, pageHeight: number) => {
+    pdf.setFontSize(8);
+    pdf.setTextColor(128);
+    pdf.text(`Generated on ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, pageWidth / 2, pageHeight - 5, { align: "center" });
+    pdf.setTextColor(0);
+  };
+
+  const downloadDetailPdf = useCallback(() => {
+    setDownloadingDetail(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("StableMaster", pageWidth / 2, 15, { align: "center" });
+
+      if (detailReport === "new_livery") {
+        const title = `New Livery Horses - ${formatMonthLabel(selectedMonth)}`;
+        pdf.setFontSize(13);
+        pdf.text(title, pageWidth / 2, 23, { align: "center" });
+
+        if (newLiveryData.length === 0) {
+          pdf.setFontSize(11);
+          pdf.setFont("helvetica", "normal");
+          pdf.text("No new livery horses for this month", pageWidth / 2, 40, { align: "center" });
+        } else {
+          const rows: any[][] = [];
+          newLiveryData.forEach((group: any, idx: number) => {
+            group.horses.forEach((h: any, i: number) => {
+              rows.push([
+                i === 0 ? String(idx + 1) : "",
+                i === 0 ? group.customerName : "",
+                h.horseName,
+                i === 0 ? String(group.horseCount) : "",
+                formatDate(h.arrivalDate),
+                `${parseFloat(h.liveryPrice).toLocaleString()} AED`,
+              ]);
+            });
+          });
+
+          autoTable(pdf, {
+            startY: 28,
+            head: [["#", "Name of Owner", "Name of Livery Horse", "No. of Horses", "Arrival Date", "Livery Price"]],
+            body: rows,
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
+            bodyStyles: { fontSize: 9 },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+            columnStyles: {
+              0: { cellWidth: 12, halign: "center" },
+              3: { halign: "center" },
+              5: { halign: "right" },
+            },
+            margin: { left: 15, right: 15 },
+          });
+        }
+
+        addDetailFooter(pdf, pageWidth, pageHeight);
+        pdf.save(`new-livery-horses-${selectedMonth}.pdf`);
+      } else if (detailReport === "departed") {
+        const title = `Departure of Livery Horses - ${formatMonthLabel(selectedMonth)}`;
+        pdf.setFontSize(13);
+        pdf.text(title, pageWidth / 2, 23, { align: "center" });
+
+        if (departedData.length === 0) {
+          pdf.setFontSize(11);
+          pdf.setFont("helvetica", "normal");
+          pdf.text("No departures for this month", pageWidth / 2, 40, { align: "center" });
+        } else {
+          const rows: any[][] = [];
+          departedData.forEach((group: any, idx: number) => {
+            group.horses.forEach((h: any, i: number) => {
+              rows.push([
+                i === 0 ? String(idx + 1) : "",
+                i === 0 ? group.customerName : "",
+                h.horseName,
+                i === 0 ? String(group.horseCount) : "",
+                formatDate(h.departureDate),
+                h.checkoutReason || "—",
+              ]);
+            });
+          });
+
+          autoTable(pdf, {
+            startY: 28,
+            head: [["#", "Name of Owner", "Name of Livery Horse", "No. of Horses", "Departure Date", "Reason"]],
+            body: rows,
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
+            bodyStyles: { fontSize: 9 },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+            columnStyles: {
+              0: { cellWidth: 12, halign: "center" },
+              3: { halign: "center" },
+            },
+            margin: { left: 15, right: 15 },
+          });
+        }
+
+        addDetailFooter(pdf, pageWidth, pageHeight);
+        pdf.save(`departed-livery-horses-${selectedMonth}.pdf`);
+      } else if (detailReport === "customers_info") {
+        const title = "Livery Customers - Information File";
+        pdf.setFontSize(13);
+        pdf.text(title, pageWidth / 2, 23, { align: "center" });
+
+        if (customersInfoData.length === 0) {
+          pdf.setFontSize(11);
+          pdf.setFont("helvetica", "normal");
+          pdf.text("No livery customers found", pageWidth / 2, 40, { align: "center" });
+        } else {
+          const rows: any[][] = [];
+          customersInfoData.forEach((group: any, idx: number) => {
+            group.horses.forEach((h: any, i: number) => {
+              rows.push([
+                i === 0 ? String(idx + 1) : "",
+                i === 0 ? group.customerName : "",
+                i === 0 ? String(group.horseCount) : "",
+                h.horseName,
+                `${h.monthlyPrice.toLocaleString()} AED`,
+              ]);
+            });
+          });
+
+          autoTable(pdf, {
+            startY: 28,
+            head: [["#", "Name of Customer", "No. of Horses", "Name of Horses", "Monthly Livery Price"]],
+            body: rows,
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
+            bodyStyles: { fontSize: 9 },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+            columnStyles: {
+              0: { cellWidth: 12, halign: "center" },
+              2: { halign: "center" },
+              4: { halign: "right" },
+            },
+            margin: { left: 15, right: 15 },
+          });
+        }
+
+        addDetailFooter(pdf, pageWidth, pageHeight);
+        pdf.save(`livery-customers-info.pdf`);
+      }
+    } finally {
+      setDownloadingDetail(false);
+    }
+  }, [detailReport, selectedMonth, newLiveryData, departedData, customersInfoData]);
+
   return (
     <div className="p-6">
       <PageHeader
@@ -86,7 +284,7 @@ export default function ReportsPage() {
         description="Visual analysis of livery data"
       />
 
-      <div className="flex gap-4 mb-6 flex-wrap">
+      <div className="flex gap-4 mb-6 flex-wrap items-end">
         <div>
           <Label className="text-sm text-muted-foreground mb-1 block">X-Axis</Label>
           <Select value={groupBy} onValueChange={setGroupBy}>
@@ -113,10 +311,20 @@ export default function ReportsPage() {
             </SelectContent>
           </Select>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={downloadChartPdf}
+          disabled={downloadingChart || isLoading || reportData.length === 0}
+          data-testid="button-download-chart-pdf"
+        >
+          <Download className="w-4 h-4 mr-1" />
+          {downloadingChart ? "Generating..." : "Download PDF"}
+        </Button>
       </div>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6" ref={chartRef}>
           {isLoading ? (
             <div className="h-80 flex items-center justify-center text-muted-foreground">Loading report data...</div>
           ) : reportData.length === 0 ? (
@@ -180,6 +388,16 @@ export default function ReportsPage() {
               </Select>
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={downloadDetailPdf}
+            disabled={downloadingDetail || loadingNew || loadingDeparted || loadingCustomers}
+            data-testid="button-download-detail-pdf"
+          >
+            <Download className="w-4 h-4 mr-1" />
+            {downloadingDetail ? "Generating..." : "Download PDF"}
+          </Button>
         </div>
 
         {detailReport === "new_livery" && (
