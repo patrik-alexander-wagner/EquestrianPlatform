@@ -26,7 +26,7 @@ import AdminSettingsPage from "@/pages/admin-settings";
 import AdminAuditLogsPage from "@/pages/admin-audit-logs";
 
 function AdminRoute({ component: Component, userRole }: { component: React.ComponentType; userRole: string }) {
-  if (userRole !== "admin") {
+  if (userRole !== "ADMIN") {
     return <Redirect to="/" />;
   }
   return <Component />;

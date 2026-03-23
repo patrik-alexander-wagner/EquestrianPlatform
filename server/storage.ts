@@ -3,7 +3,7 @@ import { db } from "./db";
 import { hashPassword } from "./auth";
 import {
   users, customers, horses, stables, boxes, items, itemPrices,
-  liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs,
+  liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs, invoiceValidations,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -16,6 +16,7 @@ import {
   type Invoice, type InsertInvoice,
   type AgreementDocument, type InsertAgreementDocument,
   type AuditLog, type InsertAuditLog,
+  type InvoiceValidation, type InsertInvoiceValidation,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -96,6 +97,10 @@ export interface IStorage {
 
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(limit?: number, offset?: number): Promise<{ logs: AuditLog[]; total: number }>;
+
+  createInvoiceValidation(validation: InsertInvoiceValidation): Promise<InvoiceValidation>;
+  getInvoiceValidations(invoiceId: string): Promise<any[]>;
+  updateUser(id: string, data: Partial<{ username: string; role: string }>): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -123,7 +128,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<Omit<User, "password">[]> {
-    return await db.select({ id: users.id, username: users.username }).from(users);
+    return await db.select({ id: users.id, username: users.username, role: users.role }).from(users);
   }
 
   async getCustomers(search?: string): Promise<Customer[]> {
@@ -809,6 +814,27 @@ export class DatabaseStorage implements IStorage {
     const logs = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit).offset(offset);
     const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs);
     return { logs, total: Number(countResult.count) };
+  }
+
+  async createInvoiceValidation(validation: InsertInvoiceValidation): Promise<InvoiceValidation> {
+    const [created] = await db.insert(invoiceValidations).values(validation).returning();
+    return created;
+  }
+
+  async getInvoiceValidations(invoiceId: string): Promise<any[]> {
+    const validations = await db.select().from(invoiceValidations)
+      .where(eq(invoiceValidations.invoiceId, invoiceId))
+      .orderBy(desc(invoiceValidations.createdAt));
+    const allUsers = await db.select({ id: users.id, username: users.username }).from(users);
+    return validations.map(v => {
+      const user = allUsers.find(u => u.id === v.userId);
+      return { ...v, username: user?.username || "Unknown" };
+    });
+  }
+
+  async updateUser(id: string, data: Partial<{ username: string; role: string }>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return updated;
   }
 }
 

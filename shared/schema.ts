@@ -1,13 +1,23 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+export const userRoleEnum = pgEnum("user_role", ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE"]);
+
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "DRAFT", "VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION",
+  "APPROVED", "PUSHED_TO_ERP", "REJECTED"
+]);
+
+export const validationStepEnum = pgEnum("validation_step", ["VET", "STORES", "FINANCE", "ADMIN_OVERRIDE"]);
+export const validationActionEnum = pgEnum("validation_action", ["APPROVED", "REJECTED"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role").notNull().default("user"),
+  role: text("role").notNull().default("LIVERY_ADMIN"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -152,7 +162,7 @@ export const invoices = pgTable("invoices", {
   invoiceDate: text("invoice_date").notNull(),
   billingMonth: text("billing_month"),
   totalAmount: numeric("total_amount").notNull(),
-  status: text("status").notNull().default("pending"),
+  status: text("status").notNull().default("DRAFT"),
   soGenerated: boolean("so_generated").notNull().default(false),
   sentToNetsuite: boolean("sent_to_netsuite").notNull().default(false),
   poNumber: text("po_number"),
@@ -194,3 +204,26 @@ export const auditLogs = pgTable("audit_logs", {
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+export const invoiceValidations = pgTable("invoice_validations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: uuid("invoice_id").notNull().references(() => invoices.id),
+  step: text("step").notNull(),
+  action: text("action").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertInvoiceValidationSchema = createInsertSchema(invoiceValidations).omit({ id: true, createdAt: true });
+export type InsertInvoiceValidation = z.infer<typeof insertInvoiceValidationSchema>;
+export type InvoiceValidation = typeof invoiceValidations.$inferSelect;
+
+export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE"] as const;
+export type UserRole = typeof VALID_ROLES[number];
+
+export const INVOICE_STATUSES = [
+  "DRAFT", "VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION",
+  "APPROVED", "PUSHED_TO_ERP", "REJECTED"
+] as const;
+export type InvoiceStatus = typeof INVOICE_STATUSES[number];

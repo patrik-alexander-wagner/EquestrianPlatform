@@ -5,6 +5,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
+  if (!status) return <Badge variant="outline">—</Badge>;
   const variant = status === "active" || status === "paid"
     ? "default"
     : status === "inactive" || status === "cancelled"

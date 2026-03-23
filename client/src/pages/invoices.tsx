@@ -2,18 +2,26 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
-import { Trash2, FileText, Eye, Download, FileJson, Zap, Send, CheckCircle } from "lucide-react";
+import {
+  Trash2, FileText, Eye, Download, FileJson, Zap, Send, CheckCircle,
+  ShieldCheck, XCircle, ArrowRight, Clock, MessageSquare,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 function formatBillingMonth(billingMonth: string | null | undefined): string {
   if (!billingMonth) return "-";
@@ -22,14 +30,63 @@ function formatBillingMonth(billingMonth: string | null | undefined): string {
   return date.toLocaleString("en-US", { month: "long", year: "numeric" });
 }
 
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  DRAFT: { label: "Draft", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  VET_VALIDATION: { label: "Vet Validation", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
+  STORES_VALIDATION: { label: "Stores Validation", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300" },
+  FINANCE_VALIDATION: { label: "Finance Validation", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300" },
+  APPROVED: { label: "Approved", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+  PUSHED_TO_ERP: { label: "Pushed to ERP", color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300" },
+  REJECTED: { label: "Rejected", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+};
+
+function InvoiceStatusBadge({ status }: { status: string }) {
+  const config = STATUS_CONFIG[status] || { label: status, color: "bg-gray-100 text-gray-800" };
+  return (
+    <Badge variant="outline" className={`${config.color} border-0 font-medium`} data-testid={`badge-status-${status}`}>
+      {config.label}
+    </Badge>
+  );
+}
+
+function canSendForValidation(userRole: string, invoiceStatus: string) {
+  return (userRole === "ADMIN" || userRole === "LIVERY_ADMIN") && invoiceStatus === "DRAFT";
+}
+
+function canApproveReject(userRole: string, invoiceStatus: string) {
+  if (userRole === "ADMIN" && ["VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION"].includes(invoiceStatus)) return true;
+  if (userRole === "VETERINARY" && invoiceStatus === "VET_VALIDATION") return true;
+  if (userRole === "STORES" && invoiceStatus === "STORES_VALIDATION") return true;
+  if (userRole === "FINANCE" && invoiceStatus === "FINANCE_VALIDATION") return true;
+  return false;
+}
+
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
   const [generatingSo, setGeneratingSo] = useState<string | null>(null);
   const [sendingToNetsuite, setSendingToNetsuite] = useState<string | null>(null);
+  const [validationDialog, setValidationDialog] = useState<{ invoice: any; action: "APPROVED" | "REJECTED" } | null>(null);
+  const [validationComment, setValidationComment] = useState("");
+  const [historyDialog, setHistoryDialog] = useState<any | null>(null);
+
+  const { data: me } = useQuery<{ id: string; username: string; role: string }>({
+    queryKey: ["/api/me"],
+  });
+  const userRole = me?.role || "LIVERY_ADMIN";
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
+  });
+
+  const { data: validationHistory = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoices", historyDialog?.id, "validations"],
+    queryFn: async () => {
+      if (!historyDialog?.id) return [];
+      const res = await fetch(`/api/invoices/${historyDialog.id}/validations`);
+      return res.json();
+    },
+    enabled: !!historyDialog?.id,
   });
 
   const deleteMutation = useMutation({
@@ -42,6 +99,33 @@ export default function InvoicesPage() {
     },
     onError: () => {
       toast({ title: "Failed to delete invoice", variant: "destructive" });
+    },
+  });
+
+  const sendForValidationMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/invoices/${id}/send-for-validation`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Invoice sent for validation" });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to send for validation", variant: "destructive" });
+    },
+  });
+
+  const validateMutation = useMutation({
+    mutationFn: ({ id, action, comment }: { id: string; action: string; comment: string }) =>
+      apiRequest("POST", `/api/invoices/${id}/validate`, { action, comment }),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      setValidationDialog(null);
+      setValidationComment("");
+      const label = data.erpPushed ? "Approved and pushed to ERP" : data.status === "DRAFT" ? "Invoice rejected" : "Invoice approved";
+      toast({ title: label });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Validation failed", variant: "destructive" });
     },
   });
 
@@ -126,7 +210,7 @@ export default function InvoicesPage() {
     {
       key: "status",
       label: "Status",
-      render: (item: any) => <StatusBadge status={item.status} />,
+      render: (item: any) => <InvoiceStatusBadge status={item.status} />,
     },
   ];
 
@@ -134,12 +218,14 @@ export default function InvoicesPage() {
     <div className="p-6">
       <PageHeader
         title="Invoices"
-        description="View generated invoices"
+        description="View and manage invoices through the validation workflow"
       />
 
-      <div className="mb-4 p-3 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 text-sm text-orange-800 dark:text-orange-300" data-testid="text-temp-delete-notice">
-        Temporary feature: Invoice deletion is enabled for testing purposes and will be removed in a future release.
-      </div>
+      {userRole === "ADMIN" && (
+        <div className="mb-4 p-3 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 text-sm text-orange-800 dark:text-orange-300" data-testid="text-temp-delete-notice">
+          Temporary feature: Invoice deletion is enabled for testing purposes and will be removed in a future release.
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -147,7 +233,7 @@ export default function InvoicesPage() {
         isLoading={isLoading}
         emptyMessage="No invoices yet"
         actions={(item) => (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -180,61 +266,217 @@ export default function InvoicesPage() {
             <Button
               size="sm"
               variant="outline"
-              className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
-              onClick={() => handleGenerateSO(item.id)}
-              disabled={generatingSo === item.id}
-              data-testid={`button-generate-so-${item.id}`}
+              onClick={() => setHistoryDialog(item)}
+              data-testid={`button-history-${item.id}`}
             >
-              <Zap className="w-4 h-4 mr-1" />
-              {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+              <Clock className="w-4 h-4" />
             </Button>
 
-            {item.soGenerated && (
+            {canSendForValidation(userRole, item.status) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                onClick={() => sendForValidationMutation.mutate(item.id)}
+                disabled={sendForValidationMutation.isPending}
+                data-testid={`button-send-validation-${item.id}`}
+              >
+                <ArrowRight className="w-4 h-4 mr-1" />
+                Send for Validation
+              </Button>
+            )}
+
+            {canApproveReject(userRole, item.status) && (
               <>
                 <Button
                   size="sm"
                   variant="outline"
                   className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                  onClick={() => handleDownloadJson(item)}
-                  data-testid={`button-download-json-${item.id}`}
+                  onClick={() => setValidationDialog({ invoice: item, action: "APPROVED" })}
+                  data-testid={`button-approve-${item.id}`}
                 >
-                  <FileJson className="w-4 h-4 mr-1" />
-                  JSON
+                  <ShieldCheck className="w-4 h-4 mr-1" />
+                  Approve
                 </Button>
-
                 <Button
                   size="sm"
                   variant="outline"
-                  className={item.sentToNetsuite
-                    ? "text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                    : "text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
-                  }
-                  onClick={() => handleSendToNetsuite(item.id)}
-                  disabled={sendingToNetsuite === item.id}
-                  data-testid={`button-send-netsuite-${item.id}`}
+                  className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950"
+                  onClick={() => setValidationDialog({ invoice: item, action: "REJECTED" })}
+                  data-testid={`button-reject-${item.id}`}
                 >
-                  {item.sentToNetsuite ? <CheckCircle className="w-4 h-4 mr-1" /> : <Send className="w-4 h-4 mr-1" />}
-                  {sendingToNetsuite === item.id ? "Sending..." : item.sentToNetsuite ? "Resend" : "Send"}
+                  <XCircle className="w-4 h-4 mr-1" />
+                  Reject
                 </Button>
               </>
             )}
 
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => {
-                if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
-                  deleteMutation.mutate(item.id);
-                }
-              }}
-              disabled={deleteMutation.isPending}
-              data-testid={`button-delete-invoice-${item.id}`}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (userRole === "ADMIN" || userRole === "FINANCE") && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
+                  onClick={() => handleGenerateSO(item.id)}
+                  disabled={generatingSo === item.id}
+                  data-testid={`button-generate-so-${item.id}`}
+                >
+                  <Zap className="w-4 h-4 mr-1" />
+                  {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+                </Button>
+
+                {item.soGenerated && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                      onClick={() => handleDownloadJson(item)}
+                      data-testid={`button-download-json-${item.id}`}
+                    >
+                      <FileJson className="w-4 h-4 mr-1" />
+                      JSON
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={item.sentToNetsuite
+                        ? "text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                        : "text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
+                      }
+                      onClick={() => handleSendToNetsuite(item.id)}
+                      disabled={sendingToNetsuite === item.id}
+                      data-testid={`button-send-netsuite-${item.id}`}
+                    >
+                      {item.sentToNetsuite ? <CheckCircle className="w-4 h-4 mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                      {sendingToNetsuite === item.id ? "Sending..." : item.sentToNetsuite ? "Resend" : "Send"}
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+
+            {userRole === "ADMIN" && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
+                    deleteMutation.mutate(item.id);
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+                data-testid={`button-delete-invoice-${item.id}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         )}
       />
+
+      <Dialog open={!!validationDialog} onOpenChange={() => { setValidationDialog(null); setValidationComment(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {validationDialog?.action === "APPROVED" ? "Approve Invoice" : "Reject Invoice"}
+            </DialogTitle>
+            <DialogDescription>
+              Invoice: {validationDialog?.invoice?.poNumber || validationDialog?.invoice?.id?.substring(0, 8)}
+              {" - "}
+              {validationDialog?.invoice?.customerName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Comment (optional)</Label>
+              <Textarea
+                value={validationComment}
+                onChange={(e) => setValidationComment(e.target.value)}
+                placeholder="Add a comment..."
+                data-testid="input-validation-comment"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setValidationDialog(null); setValidationComment(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant={validationDialog?.action === "APPROVED" ? "default" : "destructive"}
+              onClick={() => {
+                if (validationDialog) {
+                  validateMutation.mutate({
+                    id: validationDialog.invoice.id,
+                    action: validationDialog.action,
+                    comment: validationComment,
+                  });
+                }
+              }}
+              disabled={validateMutation.isPending}
+              data-testid="button-confirm-validation"
+            >
+              {validateMutation.isPending ? "Processing..." : validationDialog?.action === "APPROVED" ? "Approve" : "Reject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!historyDialog} onOpenChange={() => setHistoryDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Validation History</DialogTitle>
+            <DialogDescription>
+              Invoice: {historyDialog?.poNumber || historyDialog?.id?.substring(0, 8)}
+              {" - "}{historyDialog?.customerName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm text-muted-foreground">Current Status:</span>
+              {historyDialog && <InvoiceStatusBadge status={historyDialog.status} />}
+            </div>
+            {validationHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground" data-testid="text-no-history">No validation history yet</p>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {validationHistory.map((v: any) => (
+                  <div key={v.id} className="flex items-start gap-3 p-3 rounded-md border bg-muted/30" data-testid={`validation-entry-${v.id}`}>
+                    <div className="mt-0.5">
+                      {v.action === "APPROVED" ? (
+                        <ShieldCheck className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">{v.username}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {v.step}
+                        </Badge>
+                        <Badge variant={v.action === "APPROVED" ? "default" : "destructive"} className="text-xs">
+                          {v.action}
+                        </Badge>
+                      </div>
+                      {v.comment && (
+                        <p className="text-sm text-muted-foreground mt-1 flex items-start gap-1">
+                          <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
+                          {v.comment}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(v.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

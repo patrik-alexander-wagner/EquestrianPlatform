@@ -110,7 +110,7 @@ export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.filter(group => !group.adminOnly || userRole === "admin").map((group) => (
+        {navGroups.filter(group => !group.adminOnly || userRole === "ADMIN").map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

@@ -144,7 +144,6 @@ export default function ToInvoicePage() {
         invoiceDate: new Date().toISOString().split("T")[0],
         billingMonth,
         totalAmount: total.toFixed(2),
-        status: "pending",
         billingElementIds,
         liveryItems,
       });

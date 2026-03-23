@@ -51,8 +51,10 @@ shared/
 ```
 
 ## Database Tables
-- users (with role column: "admin" | "user"), customers, horses, stables, boxes, items
-- livery_agreements, billing_elements, invoices, app_settings, agreement_documents, audit_logs
+- users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers, horses, stables, boxes, items
+- livery_agreements, billing_elements, invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
+- invoice_validations (audit trail: invoice_id, step, action, user_id, comment, created_at)
+- app_settings, agreement_documents, audit_logs
 
 ## Authentication & Authorization
 - Session-based auth via passport-local + express-session + connect-pg-simple (PostgreSQL session store)
@@ -60,13 +62,20 @@ shared/
 - All /api/* routes require authentication except /api/login, /api/logout, /api/me
 - Login page shown when unauthenticated; sidebar hidden
 - Default credentials: admin / admin123 (set via SEED_ADMIN_PASSWORD env var)
-- GET /api/users never returns password field
-- RBAC: users have role ("admin" or "user"); admin-only routes protected by `requireAdmin` middleware
-- Admin-only routes: GET/POST /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
-- Frontend: Administration sidebar section hidden for non-admin users; admin routes redirect non-admins to dashboard
+- GET /api/users never returns password field (returns id, username, role)
+- RBAC with 5 roles: ADMIN, LIVERY_ADMIN, VETERINARY, STORES, FINANCE
+  - ADMIN: full access, can perform any action at any step
+  - LIVERY_ADMIN: create/edit invoices, send for validation
+  - VETERINARY: approve/reject at VET_VALIDATION step
+  - STORES: approve/reject at STORES_VALIDATION step
+  - FINANCE: approve/reject at FINANCE_VALIDATION step, ERP operations (generate SO, send to NetSuite)
+- Admin-only routes: GET/POST/PATCH /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
+- ERP routes (generate-so, send-to-netsuite) restricted to FINANCE + ADMIN via requireRoles middleware
+- Frontend: Administration sidebar section hidden for non-ADMIN users; admin routes redirect non-admins to dashboard
 - /api/me returns { id, username, role }
+- Users page (admin-only): create users with role, edit user roles
 - SSO via Unified Portal: GET /sso?token=xxx → server verifies token with POST to aksportal.com/api/sso/verify-token → finds/creates local user by username → establishes Passport session → redirects to /
-  - Role mapping: "superadmin" → "admin", unknown roles → "user"
+  - Role mapping: "superadmin"/"admin" → "ADMIN", "livery_admin" → "LIVERY_ADMIN", "veterinary" → "VETERINARY", "stores" → "STORES", "finance" → "FINANCE", unknown → "LIVERY_ADMIN"
   - SSO errors redirect to /login?error=missing_token|invalid_token|sso_failed
   - Login page reads ?error= query param and displays human-readable SSO error messages
 
@@ -88,8 +97,17 @@ shared/
 - Checkout sets endDate only (status stays "active"); agreement visible in Current Agreements until end of checkout date, then disappears; box/horse freed after endDate passes; To Invoice still shows pro-rated livery until billed
 - Billing month tracking to prevent duplicate livery billing
 - PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
-- Invoice deletion (temporary feature) with billing element unbilling
-- NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download
+- Invoice deletion (temporary feature, ADMIN only) with billing element unbilling
+- Invoice validation workflow: DRAFT → VET_VALIDATION → STORES_VALIDATION → FINANCE_VALIDATION → APPROVED → PUSHED_TO_ERP
+  - LIVERY_ADMIN creates invoice (DRAFT), sends for validation
+  - VETERINARY approves/rejects at VET step
+  - STORES approves/rejects at STORES step
+  - FINANCE approves/rejects at FINANCE step; on approval triggers automatic ERP push
+  - ADMIN can approve/reject at any step
+  - Rejection at any step returns invoice to DRAFT
+  - All validation actions recorded in invoice_validations table with user, step, action, comment, timestamp
+  - Validation history viewable per invoice via clock icon button
+- NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download (FINANCE/ADMIN only)
 - NetSuite ID fields on customers, horses, stables, boxes, items — mappable during import
 - Livery reports with bar charts (by month/customer) and detail report tables:
   - New Livery Horses by month (grouped by owner with horse names, arrival dates, prices)

@@ -7,8 +7,9 @@ import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
   insertLiveryAgreementSchema, insertBillingElementSchema, insertInvoiceSchema,
-  insertAgreementDocumentSchema,
+  insertAgreementDocumentSchema, VALID_ROLES,
 } from "@shared/schema";
+import type { UserRole, InvoiceStatus } from "@shared/schema";
 import { ZodError } from "zod";
 
 function validateBody(schema: any, body: any) {
@@ -27,8 +28,17 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
   const user = req.user as any;
-  if (user?.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+  if (user?.role !== "ADMIN") return res.status(403).json({ message: "Admin access required" });
   next();
+}
+
+function requireRoles(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
+    const user = req.user as any;
+    if (user?.role === "ADMIN" || roles.includes(user?.role)) return next();
+    res.status(403).json({ message: "Insufficient permissions" });
+  };
 }
 
 function auditLog(req: Request, action: string, entityType?: string, entityId?: string, details?: string) {
@@ -77,8 +87,12 @@ export async function registerRoutes(
         return res.redirect("/login?error=sso_failed");
       }
 
-      const allowedRoles = ["user", "admin", "superadmin"];
-      const mappedRole = allowedRoles.includes(userData.role) ? (userData.role === "superadmin" ? "admin" : userData.role) : "user";
+      const ssoRoleMap: Record<string, string> = {
+        "superadmin": "ADMIN", "admin": "ADMIN",
+        "livery_admin": "LIVERY_ADMIN", "veterinary": "VETERINARY",
+        "stores": "STORES", "finance": "FINANCE",
+      };
+      const mappedRole = ssoRoleMap[userData.role?.toLowerCase()] || "LIVERY_ADMIN";
 
       let localUser = await storage.getUserByUsername(userData.username);
       if (!localUser) {
@@ -153,9 +167,27 @@ export async function registerRoutes(
   app.post("/api/users", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertUserSchema, req.body);
+      if (!VALID_ROLES.includes(data.role)) {
+        return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+      }
       const user = await storage.createUser(data);
-      auditLog(req, "create_user", "user", user.id, `Created user: ${user.username}`);
-      res.json({ id: user.id, username: user.username });
+      auditLog(req, "create_user", "user", user.id, `Created user: ${user.username} (role: ${user.role})`);
+      res.json({ id: user.id, username: user.username, role: user.role });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.patch("/api/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const { role } = req.body;
+      if (role && !VALID_ROLES.includes(role)) {
+        return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+      }
+      const updated = await storage.updateUser(req.params.id, { role });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      auditLog(req, "update_user", "user", req.params.id, `Updated user role to: ${role}`);
+      res.json({ id: updated.id, username: updated.username, role: updated.role });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -616,9 +648,9 @@ export async function registerRoutes(
 
   app.post("/api/invoices", async (req, res) => {
     try {
-      const { customerId, invoiceDate, billingMonth, totalAmount, status, billingElementIds, liveryItems } = req.body;
+      const { customerId, invoiceDate, billingMonth, totalAmount, billingElementIds, liveryItems } = req.body;
       if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
-      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status });
+      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "DRAFT" });
 
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
         for (const item of liveryItems) {
@@ -660,7 +692,152 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices/:id/generate-so", async (req, res) => {
+  app.post("/api/invoices/:id/send-for-validation", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      const user = req.user as any;
+      if (invoice.status !== "DRAFT" && user.role !== "ADMIN") {
+        return res.status(400).json({ message: "Invoice must be in DRAFT status to send for validation" });
+      }
+      await storage.updateInvoice(req.params.id, { status: "VET_VALIDATION" });
+      await storage.createInvoiceValidation({
+        invoiceId: req.params.id,
+        step: user.role === "ADMIN" ? "ADMIN_OVERRIDE" : "VET",
+        action: "APPROVED",
+        userId: user.id,
+        comment: "Sent for validation",
+      });
+      auditLog(req, "send_for_validation", "invoice", req.params.id, "Invoice sent for VET validation");
+      res.json({ success: true, status: "VET_VALIDATION" });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/invoices/:id/validate", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      const user = req.user as any;
+      const { action, comment } = req.body;
+      if (!action || !["APPROVED", "REJECTED"].includes(action)) {
+        return res.status(400).json({ message: "Action must be APPROVED or REJECTED" });
+      }
+
+      const statusRoleMap: Record<string, { role: string; step: string; nextStatus: string }> = {
+        "VET_VALIDATION": { role: "VETERINARY", step: "VET", nextStatus: "STORES_VALIDATION" },
+        "STORES_VALIDATION": { role: "STORES", step: "STORES", nextStatus: "FINANCE_VALIDATION" },
+        "FINANCE_VALIDATION": { role: "FINANCE", step: "FINANCE", nextStatus: "APPROVED" },
+      };
+
+      const currentStep = statusRoleMap[invoice.status];
+      if (!currentStep && user.role !== "ADMIN") {
+        return res.status(400).json({ message: "Invoice is not in a validation state" });
+      }
+      if (currentStep && user.role !== "ADMIN" && user.role !== currentStep.role) {
+        return res.status(403).json({ message: `Only ${currentStep.role} or ADMIN can validate at this step` });
+      }
+
+      const step = user.role === "ADMIN" ? "ADMIN_OVERRIDE" : currentStep?.step || "ADMIN_OVERRIDE";
+
+      if (action === "REJECTED") {
+        await storage.updateInvoice(req.params.id, { status: "DRAFT" });
+        await storage.createInvoiceValidation({
+          invoiceId: req.params.id, step, action: "REJECTED", userId: user.id, comment: comment || null,
+        });
+        auditLog(req, "reject_invoice", "invoice", req.params.id, `Rejected at ${step}: ${comment || ""}`);
+        return res.json({ success: true, status: "DRAFT" });
+      }
+
+      let newStatus: InvoiceStatus;
+      if (user.role === "ADMIN") {
+        if (invoice.status === "FINANCE_VALIDATION" || !currentStep) {
+          newStatus = "APPROVED";
+        } else {
+          newStatus = currentStep.nextStatus as InvoiceStatus;
+        }
+      } else {
+        newStatus = currentStep!.nextStatus as InvoiceStatus;
+      }
+
+      await storage.updateInvoice(req.params.id, { status: newStatus });
+      await storage.createInvoiceValidation({
+        invoiceId: req.params.id, step, action: "APPROVED", userId: user.id, comment: comment || null,
+      });
+      auditLog(req, "approve_invoice", "invoice", req.params.id, `Approved at ${step}, new status: ${newStatus}`);
+
+      if (newStatus === "APPROVED" && currentStep?.step === "FINANCE") {
+        try {
+          const details = await storage.getInvoiceDetailsForSO(req.params.id);
+          if (details?.customer?.netsuiteId) {
+            const poNumber = invoice.poNumber || await storage.getNextPoNumber();
+            const billingMonth = invoice.billingMonth || "";
+            let memoMonth = "";
+            if (billingMonth) {
+              const [y, m] = billingMonth.split("-").map(Number);
+              const date = new Date(y, m - 1);
+              memoMonth = date.toLocaleString("en-US", { month: "short", year: "numeric" });
+            }
+            const customerName = details.customer
+              ? `${details.customer.firstname} ${details.customer.lastname}` : "Unknown";
+            const today = new Date();
+            const tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+            const soJson = {
+              customerId: details.customer?.netsuiteId || "",
+              po: poNumber,
+              department: "32",
+              memo: `Monthly Livery Invoice - ${customerName} (${memoMonth})`,
+              tranDate,
+              items: details.items,
+            };
+            const jsonString = JSON.stringify(soJson, null, 2);
+            await storage.updateInvoice(req.params.id, {
+              soGenerated: true, poNumber, netsuiteJson: jsonString,
+            });
+
+            const webhookUrl = await storage.getSetting("n8n_webhook_url");
+            if (webhookUrl) {
+              const webhookResponse = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: jsonString,
+              });
+              if (webhookResponse.ok) {
+                let netsuiteId: string | null = null;
+                try {
+                  const responseData = await webhookResponse.json();
+                  if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
+                  else if (responseData?.id) netsuiteId = String(responseData.id);
+                } catch {}
+                const erpUpdate: any = { sentToNetsuite: true, status: "PUSHED_TO_ERP" };
+                if (netsuiteId) erpUpdate.netsuiteId = netsuiteId;
+                await storage.updateInvoice(req.params.id, erpUpdate);
+                return res.json({ success: true, status: "PUSHED_TO_ERP", erpPushed: true });
+              }
+            }
+          }
+        } catch (erpErr) {
+          console.error("ERP push after finance approval failed:", erpErr);
+        }
+      }
+
+      res.json({ success: true, status: newStatus });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/invoices/:id/validations", async (req, res) => {
+    try {
+      const validations = await storage.getInvoiceValidations(req.params.id);
+      res.json(validations);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/invoices/:id/generate-so", requireRoles("FINANCE"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
@@ -712,7 +889,6 @@ export async function registerRoutes(
         soGenerated: true,
         poNumber,
         netsuiteJson: jsonString,
-        status: "SO Generated",
         sentToNetsuite: false,
       });
 
@@ -765,7 +941,7 @@ export async function registerRoutes(
   });
 
   // Send invoice to NetSuite via N8N webhook
-  app.post("/api/invoices/:id/send-to-netsuite", async (req, res) => {
+  app.post("/api/invoices/:id/send-to-netsuite", requireRoles("FINANCE"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
@@ -802,7 +978,7 @@ export async function registerRoutes(
 
       const updateData: any = {
         sentToNetsuite: true,
-        status: "Sent to NetSuite",
+        status: "PUSHED_TO_ERP",
       };
       if (netsuiteId) updateData.netsuiteId = netsuiteId;
 

@@ -6,10 +6,10 @@ async function ensureAdminUser() {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
   const existing = await storage.getUserByUsername("admin");
   if (existing) {
-    await storage.updateUserPassword(existing.id, adminPassword, "admin");
+    await storage.updateUserPassword(existing.id, adminPassword, "ADMIN");
     console.log("Admin user password and role updated");
   } else {
-    await storage.createUser({ username: "admin", password: adminPassword, role: "admin" });
+    await storage.createUser({ username: "admin", password: adminPassword, role: "ADMIN" });
     console.log("Admin user created");
   }
 }
