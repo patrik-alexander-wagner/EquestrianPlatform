@@ -23,6 +23,7 @@ export default function CurrentAgreementsPage() {
 
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editAgreement, setEditAgreement] = useState<any>(null);
+  const [editAgreementCategory, setEditAgreementCategory] = useState("with_horse");
   const [editAgreementType, setEditAgreementType] = useState("permanent");
   const [editSelectedCustomerId, setEditSelectedCustomerId] = useState("");
   const [editCustomerSearch, setEditCustomerSearch] = useState("");
@@ -185,9 +186,10 @@ export default function CurrentAgreementsPage() {
 
   const openEditDialog = (agreement: any) => {
     setEditAgreement(agreement);
+    setEditAgreementCategory(agreement.agreementCategory || "with_horse");
     setEditSelectedCustomerId(agreement.customerId);
     setEditCustomerSearch("");
-    setEditSelectedHorseId(agreement.horseId);
+    setEditSelectedHorseId(agreement.horseId || "");
     setEditHorseSearch("");
     setEditSelectedItemId(agreement.itemId);
     setEditMonthlyAmount(agreement.monthlyAmount || "");
@@ -206,6 +208,15 @@ export default function CurrentAgreementsPage() {
   const columns = [
     { key: "referenceNumber", label: "Reference #" },
     {
+      key: "agreementCategory",
+      label: "Category",
+      render: (item: any) => (
+        <Badge variant={item.agreementCategory === "without_horse" ? "secondary" : "default"}>
+          {item.agreementCategory === "without_horse" ? "Without Horse" : "With Horse"}
+        </Badge>
+      ),
+    },
+    {
       key: "type",
       label: "Type",
       render: (item: any) => (
@@ -214,7 +225,7 @@ export default function CurrentAgreementsPage() {
         </Badge>
       ),
     },
-    { key: "horseName", label: "Horse" },
+    { key: "horseName", label: "Horse", render: (item: any) => item.horseName || "—" },
     { key: "customerName", label: "Customer" },
     { key: "stableName", label: "Stable" },
     { key: "boxName", label: "Box" },
@@ -294,7 +305,8 @@ export default function CurrentAgreementsPage() {
                 editMutation.mutate({
                   id: editAgreement.id,
                   updates: {
-                    horseId: editSelectedHorseId,
+                    agreementCategory: editAgreementCategory,
+                    horseId: editAgreementCategory === "with_horse" ? editSelectedHorseId : null,
                     customerId: editSelectedCustomerId,
                     boxId,
                     itemId: editSelectedItemId,
@@ -319,6 +331,19 @@ export default function CurrentAgreementsPage() {
                       {editAvailableBoxes.map((b: any) => (
                         <SelectItem key={b.id} value={b.id}>{b.name} ({b.stableName})</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Agreement Type</Label>
+                  <Select value={editAgreementCategory} onValueChange={(v) => { setEditAgreementCategory(v); if (v === "without_horse") { setEditSelectedHorseId(""); setEditHorseSearch(""); } }}>
+                    <SelectTrigger data-testid="select-edit-agreement-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="with_horse">With Horse</SelectItem>
+                      <SelectItem value="without_horse">Without Horse</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -368,6 +393,7 @@ export default function CurrentAgreementsPage() {
                   )}
                 </div>
 
+                {editAgreementCategory === "with_horse" && (
                 <div className="relative">
                   <Label>Horse</Label>
                   <div className="relative">
@@ -414,6 +440,7 @@ export default function CurrentAgreementsPage() {
                     </div>
                   )}
                 </div>
+                )}
 
                 <div>
                   <Label>Livery Package</Label>
@@ -492,7 +519,7 @@ export default function CurrentAgreementsPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={editMutation.isPending || !editSelectedCustomerId || !editSelectedHorseId || !editSelectedItemId} data-testid="button-submit-edit">
+                <Button type="submit" disabled={editMutation.isPending || !editSelectedCustomerId || (editAgreementCategory === "with_horse" && !editSelectedHorseId) || !editSelectedItemId} data-testid="button-submit-edit">
                   Save Changes
                 </Button>
               </DialogFooter>

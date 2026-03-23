@@ -21,6 +21,7 @@ export default function NewAgreementPage() {
   const [boxSearch, setBoxSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedBox, setSelectedBox] = useState<any>(null);
+  const [agreementCategory, setAgreementCategory] = useState("with_horse");
   const [agreementType, setAgreementType] = useState("permanent");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -114,6 +115,7 @@ export default function NewAgreementPage() {
 
   const openCreateDialog = (box: any) => {
     setSelectedBox(box);
+    setAgreementCategory("with_horse");
     setSelectedCustomerId("");
     setCustomerSearch("");
     setSelectedHorseId("");
@@ -189,7 +191,8 @@ export default function NewAgreementPage() {
                 const refNum = `LA-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
                 createMutation.mutate({
                   referenceNumber: refNum,
-                  horseId: selectedHorseId,
+                  agreementCategory,
+                  horseId: agreementCategory === "with_horse" ? selectedHorseId : null,
                   customerId: selectedCustomerId,
                   boxId: selectedBox.id,
                   itemId: selectedItemId,
@@ -206,6 +209,19 @@ export default function NewAgreementPage() {
               <div className="space-y-4">
                 <div className="p-3 rounded-md bg-muted text-sm">
                   Box: <strong>{selectedBox.name}</strong> ({selectedBox.stableName})
+                </div>
+
+                <div>
+                  <Label>Agreement Type</Label>
+                  <Select value={agreementCategory} onValueChange={(v) => { setAgreementCategory(v); if (v === "without_horse") { setSelectedHorseId(""); setHorseSearch(""); } }}>
+                    <SelectTrigger data-testid="select-agreement-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="with_horse">With Horse</SelectItem>
+                      <SelectItem value="without_horse">Without Horse</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="relative">
@@ -253,6 +269,7 @@ export default function NewAgreementPage() {
                   )}
                 </div>
 
+                {agreementCategory === "with_horse" && (
                 <div className="relative">
                   <Label>Horse</Label>
                   <div className="relative">
@@ -299,6 +316,7 @@ export default function NewAgreementPage() {
                     </div>
                   )}
                 </div>
+                )}
 
                 <div>
                   <Label>Livery Package</Label>
@@ -377,7 +395,7 @@ export default function NewAgreementPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || !selectedHorseId || !selectedItemId} data-testid="button-submit-agreement">
+                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || (agreementCategory === "with_horse" && !selectedHorseId) || !selectedItemId} data-testid="button-submit-agreement">
                   Create Agreement
                 </Button>
               </DialogFooter>

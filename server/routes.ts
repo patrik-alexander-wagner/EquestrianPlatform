@@ -473,6 +473,13 @@ export async function registerRoutes(
   app.post("/api/livery-agreements", async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema, req.body);
+      const cat = data.agreementCategory || "with_horse";
+      if (cat === "with_horse" && !data.horseId) {
+        return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
+      }
+      if (cat === "without_horse" && data.horseId) {
+        return res.status(400).json({ message: "Horse must not be provided for 'Without Horse' agreements" });
+      }
       const agreement = await storage.createLiveryAgreement(data);
       auditLog(req, "create_agreement", "agreement", agreement.id, `Created agreement: ${agreement.referenceNumber}`);
       res.json(agreement);
@@ -484,6 +491,18 @@ export async function registerRoutes(
   app.patch("/api/livery-agreements/:id", async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
+      if (data.agreementCategory) {
+        const existing = await storage.getLiveryAgreement(req.params.id);
+        if (!existing) return res.status(404).json({ message: "Agreement not found" });
+        const cat = data.agreementCategory;
+        const horseId = data.horseId !== undefined ? data.horseId : existing.horseId;
+        if (cat === "with_horse" && !horseId) {
+          return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
+        }
+        if (cat === "without_horse" && horseId) {
+          return res.status(400).json({ message: "Horse must not be provided for 'Without Horse' agreements" });
+        }
+      }
       const agreement = await storage.updateLiveryAgreement(req.params.id, data);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
       if (data.endDate) {

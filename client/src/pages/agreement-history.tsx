@@ -56,7 +56,7 @@ export default function AgreementHistoryPage() {
         </Badge>
       ),
     },
-    { key: "horseName", label: "Horse" },
+    { key: "horseName", label: "Horse", render: (item: any) => item.horseName || "—" },
     { key: "customerName", label: "Customer" },
     { key: "stableName", label: "Stable" },
     { key: "boxName", label: "Box" },

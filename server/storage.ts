@@ -323,14 +323,14 @@ export class DatabaseStorage implements IStorage {
     const allItems = await db.select().from(items);
 
     return allAgreements.map(agreement => {
-      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const horse = agreement.horseId ? allHorses.find(h => h.id === agreement.horseId) : null;
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const item = allItems.find(i => i.id === agreement.itemId);
       return {
         ...agreement,
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse?.horseName || null,
         customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
@@ -376,7 +376,7 @@ export class DatabaseStorage implements IStorage {
     const allHorses = await db.select().from(horses).where(eq(horses.status, "active"));
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
     const today = new Date().toISOString().split("T")[0];
-    const bookedHorseIds = new Set(activeAgreements.filter(a => !a.endDate || a.endDate >= today).map(a => a.horseId));
+    const bookedHorseIds = new Set(activeAgreements.filter(a => a.horseId && (!a.endDate || a.endDate >= today)).map(a => a.horseId));
     return allHorses.filter(h => !bookedHorseIds.has(h.id));
   }
 

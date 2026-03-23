@@ -106,7 +106,8 @@ export type ItemPrice = typeof itemPrices.$inferSelect;
 export const liveryAgreements = pgTable("livery_agreements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   referenceNumber: text("reference_number").notNull(),
-  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  agreementCategory: text("agreement_category").notNull().default("with_horse"),
+  horseId: uuid("horse_id").references(() => horses.id),
   customerId: uuid("customer_id").notNull().references(() => customers.id),
   boxId: uuid("box_id").notNull().references(() => boxes.id),
   itemId: uuid("item_id").notNull().references(() => items.id),
