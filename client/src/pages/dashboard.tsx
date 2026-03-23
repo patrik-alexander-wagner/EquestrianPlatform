@@ -108,7 +108,7 @@ export default function DashboardPage() {
                       <PawPrint className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">{agreement.horseName}</p>
+                      <p className="font-medium">{agreement.horseName || "No Horse"}</p>
                       <p className="text-sm text-muted-foreground">{agreement.customerName}</p>
                     </div>
                   </div>

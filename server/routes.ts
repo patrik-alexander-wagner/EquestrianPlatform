@@ -675,7 +675,7 @@ export async function registerRoutes(
       const missingItems: string[] = [];
       for (const item of details.items) {
         if (!item.itemId) missingItems.push(`Item "${item.description}" is missing NetSuite ID`);
-        if (!item.horse) missingItems.push(`Horse for item "${item.description}" is missing NetSuite ID`);
+        if (item.horseId && !item.horse) missingItems.push(`Horse for item "${item.description}" is missing NetSuite ID`);
       }
       if (missingItems.length > 0) {
         return res.status(400).json({ message: `Missing NetSuite IDs:\n${missingItems.join("\n")}` });

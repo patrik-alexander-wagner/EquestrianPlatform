@@ -24,7 +24,7 @@ type LineItem = {
   key: string;
   type: "livery" | "billing";
   description: string;
-  horseName: string;
+  horseName: string | null;
   date: string;
   qty: number;
   unitPrice: number;
@@ -365,7 +365,7 @@ export default function ToInvoicePage() {
                           </TableCell>
                           <TableCell>{li.type === "livery" ? "Livery Fee" : "Billing Element"}</TableCell>
                           <TableCell>{li.description}</TableCell>
-                          <TableCell>{li.horseName}</TableCell>
+                          <TableCell>{li.horseName || "—"}</TableCell>
                           <TableCell>{li.date}</TableCell>
                           <TableCell className="text-right">{li.qty}</TableCell>
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>

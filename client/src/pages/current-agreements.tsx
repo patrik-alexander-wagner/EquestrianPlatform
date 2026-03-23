@@ -548,7 +548,7 @@ export default function CurrentAgreementsPage() {
             >
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Checking out: <strong>{checkoutAgreement.horseName}</strong> ({checkoutAgreement.customerName})
+                  Checking out: <strong>{checkoutAgreement.horseName || "No Horse"}</strong> ({checkoutAgreement.customerName})
                 </p>
                 <div>
                   <Label>End Date</Label>
@@ -574,7 +574,7 @@ export default function CurrentAgreementsPage() {
           <DialogHeader>
             <DialogTitle>Agreement Documents</DialogTitle>
             <DialogDescription>
-              {documentsAgreement ? `${documentsAgreement.horseName} - ${documentsAgreement.customerName} (${documentsAgreement.referenceNumber})` : ""}
+              {documentsAgreement ? `${documentsAgreement.horseName || "No Horse"} - ${documentsAgreement.customerName} (${documentsAgreement.referenceNumber})` : ""}
             </DialogDescription>
           </DialogHeader>
 

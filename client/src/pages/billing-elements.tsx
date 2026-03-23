@@ -116,10 +116,10 @@ export default function BillingElementsPage() {
   const filteredHorses = useMemo(() => {
     let result = horsesWithAgreements;
     if (horseSearch) {
-      result = result.filter((h: any) => h.horseName.toLowerCase().includes(horseSearch.toLowerCase()));
+      result = result.filter((h: any) => (h.horseName || "").toLowerCase().includes(horseSearch.toLowerCase()));
     }
     if (customerSearch) {
-      result = result.filter((h: any) => h.customerName.toLowerCase().includes(customerSearch.toLowerCase()));
+      result = result.filter((h: any) => (h.customerName || "").toLowerCase().includes(customerSearch.toLowerCase()));
     }
     if (stableSearch) {
       result = result.filter((h: any) =>

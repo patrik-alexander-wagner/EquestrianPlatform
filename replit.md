@@ -105,7 +105,7 @@ shared/
 ## Input Validation
 - All POST routes use Zod schema validation via `validateBody()`
 - All PATCH routes use `.partial()` Zod schemas to validate incoming fields
-- Invoice creation validates liveryItems array entries against `insertBillingElementSchema`
+- Invoice creation validates liveryItems array entries against `insertBillingElementSchema` (horseId is nullable for "without horse" agreements)
 - DELETE routes for stables and boxes check item existence before deleting (return 404 if not found)
 
 ## Security

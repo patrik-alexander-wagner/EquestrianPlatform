@@ -392,14 +392,14 @@ export class DatabaseStorage implements IStorage {
     const allItems = await db.select().from(items);
 
     return query.map(element => {
-      const horse = allHorses.find(h => h.id === element.horseId);
+      const horse = element.horseId ? allHorses.find(h => h.id === element.horseId) : null;
       const customer = allCustomers.find(c => c.id === element.customerId);
       const box = allBoxes.find(b => b.id === element.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const item = allItems.find(i => i.id === element.itemId);
       return {
         ...element,
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse?.horseName || null,
         customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
@@ -479,11 +479,11 @@ export class DatabaseStorage implements IStorage {
     const allItems = await db.select().from(items);
 
     const lineItems = linkedElements.map(el => {
-      const horse = allHorses.find(h => h.id === el.horseId);
+      const horse = el.horseId ? allHorses.find(h => h.id === el.horseId) : null;
       const item = allItems.find(i => i.id === el.itemId);
       return {
         description: item?.name || "Unknown",
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse?.horseName || "—",
         billDate: el.transactionDate,
         quantity: el.quantity,
         unit: item?.unitFactor ? `${item.unitFactor}` : "Each",
@@ -558,12 +558,13 @@ export class DatabaseStorage implements IStorage {
     const allBoxes = await db.select().from(boxes);
 
     const itemsList = linkedElements.map(el => {
-      const horse = allHorses.find(h => h.id === el.horseId);
+      const horse = el.horseId ? allHorses.find(h => h.id === el.horseId) : null;
       const item = allItems.find(i => i.id === el.itemId);
       const box = allBoxes.find(b => b.id === el.boxId);
       return {
         itemId: item?.netsuiteId || "",
-        horse: String(horse?.netsuiteId || ""),
+        horseId: el.horseId,
+        horse: horse ? String(horse.netsuiteId || "") : "",
         quantity: el.quantity,
         rate: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
         description: item?.name || "Unknown",
