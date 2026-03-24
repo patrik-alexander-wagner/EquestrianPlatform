@@ -972,12 +972,16 @@ export async function registerRoutes(
       const token = { key: tokenId, secret: tokenSecret };
       const requestData = { url: restletUrl, method: "POST" };
       const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
+      const authWithRealm = authHeader.Authorization.replace(
+        'OAuth ',
+        `OAuth realm="${accountId}", `
+      );
 
       const response = await fetch(restletUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": authHeader.Authorization,
+          "Authorization": authWithRealm,
           "Cookie": "",
         },
         body: invoice.netsuiteJson,
