@@ -118,7 +118,10 @@ shared/
 - Item price history: item_prices table tracks all price changes per item (id, item_id, price, is_active, created_at, created_by). Only one active price per item. "Change Price" button in Add Billing Element dialog allows updating item price with history preservation. Existing billing records unaffected.
 - Billing elements: price field stores Final Selling Price (total, not per-unit)
 - PO number counter stored in app_settings table (key: last_po_number)
-- N8N webhook integration: configurable webhook URL in Settings, "Send to NetSuite" button on invoices sends SO JSON via POST to N8N webhook, stores sent status and optional NetSuite ID from response
+- NetSuite RESTlet integration: "Send to NetSuite" button on invoices sends SO JSON directly to NetSuite RESTlet via OAuth 1.0 TBA authentication, stores sent status and NetSuite ID from response
+  - Credentials stored in env vars: NETSUITE_ACCOUNT_ID, NETSUITE_RESTLET_URL, NETSUITE_CONSUMER_KEY, NETSUITE_CONSUMER_SECRET, NETSUITE_TOKEN_ID, NETSUITE_TOKEN_SECRET
+  - Uses oauth-1.0a package with HMAC-SHA256 signing
+- N8N webhook integration (legacy): configurable webhook URL in Settings still available
 
 ## Input Validation
 - All POST routes use Zod schema validation via `validateBody()`

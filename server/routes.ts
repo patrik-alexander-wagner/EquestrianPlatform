@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import passport from "passport";
 import rateLimit from "express-rate-limit";
+import OAuth from "oauth-1.0a";
+import crypto from "crypto";
 import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
@@ -940,7 +942,7 @@ export async function registerRoutes(
     }
   });
 
-  // Send invoice to NetSuite via N8N webhook
+  // Send invoice to NetSuite via RESTlet (OAuth 1.0 TBA)
   app.post("/api/invoices/:id/send-to-netsuite", requireRoles("FINANCE"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
@@ -948,32 +950,52 @@ export async function registerRoutes(
       if (!invoice.soGenerated) return res.status(400).json({ message: "SO must be generated before sending to NetSuite" });
       if (!invoice.netsuiteJson) return res.status(400).json({ message: "No NetSuite JSON found on this invoice" });
 
-      const webhookUrl = await storage.getSetting("n8n_webhook_url");
-      if (!webhookUrl) return res.status(400).json({ message: "N8N Webhook URL is not configured. Please set it in Settings." });
+      const restletUrl = process.env.NETSUITE_RESTLET_URL;
+      const consumerKey = process.env.NETSUITE_CONSUMER_KEY;
+      const consumerSecret = process.env.NETSUITE_CONSUMER_SECRET;
+      const tokenId = process.env.NETSUITE_TOKEN_ID;
+      const tokenSecret = process.env.NETSUITE_TOKEN_SECRET;
+      const accountId = process.env.NETSUITE_ACCOUNT_ID;
 
-      const response = await fetch(webhookUrl, {
+      if (!restletUrl || !consumerKey || !consumerSecret || !tokenId || !tokenSecret || !accountId) {
+        return res.status(400).json({ message: "NetSuite RESTlet credentials are not configured. Please set NETSUITE_* environment variables." });
+      }
+
+      const oauth = new OAuth({
+        consumer: { key: consumerKey, secret: consumerSecret },
+        signature_method: "HMAC-SHA256",
+        hash_function(baseString: string, key: string) {
+          return crypto.createHmac("sha256", key).update(baseString).digest("base64");
+        },
+      });
+
+      const token = { key: tokenId, secret: tokenSecret };
+      const requestData = { url: restletUrl, method: "POST" };
+      const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
+
+      const response = await fetch(restletUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader.Authorization,
+          "Cookie": "",
+        },
         body: invoice.netsuiteJson,
       });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
-        return res.status(502).json({ message: `N8N webhook returned error: ${response.status} - ${errorText}` });
+        return res.status(502).json({ message: `NetSuite RESTlet returned error: ${response.status} - ${errorText}` });
       }
 
       let netsuiteId: string | null = null;
-      let parseError = false;
       try {
         const responseData = await response.json();
         if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
         else if (responseData?.id) netsuiteId = String(responseData.id);
+        else if (responseData?.internalId) netsuiteId = String(responseData.internalId);
       } catch {
-        parseError = true;
-      }
-
-      if (parseError && !netsuiteId) {
-        return res.status(502).json({ message: "Webhook returned success but response could not be parsed. Invoice was not marked as sent." });
+        // Response might not be JSON
       }
 
       const updateData: any = {
