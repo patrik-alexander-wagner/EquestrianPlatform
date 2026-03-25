@@ -717,16 +717,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cannot rollback an invoice that has been pushed to ERP" });
       }
 
-      await storage.unbillByInvoiceId(req.params.id);
-
-      await storage.updateInvoice(req.params.id, {
-        status: "DRAFT",
-        soGenerated: false,
-        sentToNetsuite: false,
-        netsuiteId: null,
-        netsuiteJson: null,
-        poNumber: null,
-      });
+      await storage.deleteInvoice(req.params.id);
 
       auditLog(req, "rollback_invoice", "invoice", req.params.id);
       res.json({ success: true });
