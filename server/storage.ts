@@ -74,6 +74,7 @@ export interface IStorage {
   getInvoiceDetails(id: string): Promise<any>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined>;
+  unbillByInvoiceId(invoiceId: string): Promise<void>;
   deleteInvoice(id: string): Promise<boolean>;
   markBillingElementsByIds(elementIds: string[], invoiceId: string): Promise<void>;
   getBilledMonthsForAgreements(agreementIds: string[]): Promise<Record<string, string[]>>;
@@ -596,6 +597,12 @@ export class DatabaseStorage implements IStorage {
     await db.insert(appSettings)
       .values({ key, value })
       .onConflictDoUpdate({ target: appSettings.key, set: { value } });
+  }
+
+  async unbillByInvoiceId(invoiceId: string): Promise<void> {
+    await db.update(billingElements)
+      .set({ billed: false, invoiceId: null })
+      .where(eq(billingElements.invoiceId, invoiceId));
   }
 
   async deleteInvoice(id: string): Promise<boolean> {

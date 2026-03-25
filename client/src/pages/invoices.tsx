@@ -8,13 +8,15 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
 import {
-  Trash2, FileText, Eye, Download, FileJson, Zap, Send, CheckCircle,
+  Trash2, Eye, Download, FileJson, Send, CheckCircle,
   ShieldCheck, XCircle, ArrowRight, Clock, MessageSquare,
+  MoreVertical, RotateCcw,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -129,6 +131,19 @@ export default function InvoicesPage() {
     },
   });
 
+  const rollbackMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/invoices/${id}/rollback`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billed-months"] });
+      toast({ title: "Invoice rolled back to edit" });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to rollback invoice", variant: "destructive" });
+    },
+  });
+
   const handlePdfAction = async (invoiceId: string, action: "view" | "download") => {
     setLoadingPdf(invoiceId);
     try {
@@ -218,7 +233,7 @@ export default function InvoicesPage() {
       render: (item: any) => item.netsuiteId ? (
         <span className="font-mono text-sm" data-testid={`text-netsuite-so-${item.id}`}>{item.netsuiteId}</span>
       ) : (
-        <span className="text-muted-foreground">—</span>
+        <span className="text-muted-foreground">&mdash;</span>
       ),
     },
   ];
@@ -242,59 +257,7 @@ export default function InvoicesPage() {
         isLoading={isLoading}
         emptyMessage="No invoices yet"
         actions={(item) => (
-          <div className="flex items-center gap-1 flex-wrap">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={loadingPdf === item.id}
-                  data-testid={`button-pdf-${item.id}`}
-                >
-                  <FileText className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => handlePdfAction(item.id, "view")}
-                  data-testid={`button-view-pdf-${item.id}`}
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  View PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handlePdfAction(item.id, "download")}
-                  data-testid={`button-download-pdf-${item.id}`}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setHistoryDialog(item)}
-              data-testid={`button-history-${item.id}`}
-            >
-              <Clock className="w-4 h-4" />
-            </Button>
-
-            {canSendForValidation(userRole, item.status) && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
-                onClick={() => sendForValidationMutation.mutate(item.id)}
-                disabled={sendForValidationMutation.isPending}
-                data-testid={`button-send-validation-${item.id}`}
-              >
-                <ArrowRight className="w-4 h-4 mr-1" />
-                Send for Validation
-              </Button>
-            )}
-
+          <div className="flex items-center gap-1">
             {canApproveReject(userRole, item.status) && (
               <>
                 <Button
@@ -320,67 +283,131 @@ export default function InvoicesPage() {
               </>
             )}
 
-            {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (userRole === "ADMIN" || userRole === "FINANCE") && (
-              <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-950"
-                  onClick={() => handleGenerateSO(item.id)}
-                  disabled={generatingSo === item.id}
-                  data-testid={`button-generate-so-${item.id}`}
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                  data-testid={`button-actions-${item.id}`}
                 >
-                  <Zap className="w-4 h-4 mr-1" />
-                  {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+                  <MoreVertical className="w-4 h-4" />
                 </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => handlePdfAction(item.id, "view")}
+                  disabled={loadingPdf === item.id}
+                  data-testid={`button-view-pdf-${item.id}`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handlePdfAction(item.id, "download")}
+                  disabled={loadingPdf === item.id}
+                  data-testid={`button-download-pdf-${item.id}`}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </DropdownMenuItem>
 
-                {item.soGenerated && (
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                  onClick={() => setHistoryDialog(item)}
+                  data-testid={`button-history-${item.id}`}
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  Validation History
+                </DropdownMenuItem>
+
+                {item.soGenerated && item.netsuiteJson && (
+                  <DropdownMenuItem
+                    onClick={() => handleDownloadJson(item)}
+                    data-testid={`button-download-json-${item.id}`}
+                  >
+                    <FileJson className="w-4 h-4 mr-2" />
+                    JSON
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
+                {canSendForValidation(userRole, item.status) && (
+                  <DropdownMenuItem
+                    onClick={() => sendForValidationMutation.mutate(item.id)}
+                    disabled={sendForValidationMutation.isPending}
+                    data-testid={`button-send-validation-${item.id}`}
+                  >
+                    <ArrowRight className="w-4 h-4 mr-2" />
+                    Send for Validation
+                  </DropdownMenuItem>
+                )}
+
+                {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (userRole === "ADMIN" || userRole === "FINANCE") && (
                   <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                      onClick={() => handleDownloadJson(item)}
-                      data-testid={`button-download-json-${item.id}`}
+                    <DropdownMenuItem
+                      onClick={() => handleGenerateSO(item.id)}
+                      disabled={generatingSo === item.id}
+                      data-testid={`button-generate-so-${item.id}`}
                     >
-                      <FileJson className="w-4 h-4 mr-1" />
-                      JSON
-                    </Button>
+                      <FileJson className="w-4 h-4 mr-2" />
+                      {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+                    </DropdownMenuItem>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className={item.sentToNetsuite
-                        ? "text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                        : "text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950"
-                      }
-                      onClick={() => handleSendToNetsuite(item.id)}
-                      disabled={sendingToNetsuite === item.id}
-                      data-testid={`button-send-netsuite-${item.id}`}
-                    >
-                      {item.sentToNetsuite ? <CheckCircle className="w-4 h-4 mr-1" /> : <Send className="w-4 h-4 mr-1" />}
-                      {sendingToNetsuite === item.id ? "Sending..." : item.sentToNetsuite ? "Resend" : "Send"}
-                    </Button>
+                    {item.soGenerated && (
+                      <DropdownMenuItem
+                        onClick={() => handleSendToNetsuite(item.id)}
+                        disabled={sendingToNetsuite === item.id}
+                        data-testid={`button-send-netsuite-${item.id}`}
+                      >
+                        {item.sentToNetsuite ? <CheckCircle className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                        {sendingToNetsuite === item.id ? "Sending..." : item.sentToNetsuite ? "Resend to NetSuite" : "Send to NetSuite"}
+                      </DropdownMenuItem>
+                    )}
                   </>
                 )}
-              </>
-            )}
 
-            {userRole === "ADMIN" && (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => {
-                  if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
-                    deleteMutation.mutate(item.id);
-                  }
-                }}
-                disabled={deleteMutation.isPending}
-                data-testid={`button-delete-invoice-${item.id}`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
+                {item.status !== "PUSHED_TO_ERP" && (userRole === "ADMIN" || userRole === "LIVERY_ADMIN") && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (window.confirm("Rollback this invoice? It will be unbilled and returned to the 'To Invoice' page for editing.")) {
+                          rollbackMutation.mutate(item.id);
+                        }
+                      }}
+                      disabled={rollbackMutation.isPending}
+                      className="text-orange-600 focus:text-orange-600"
+                      data-testid={`button-rollback-${item.id}`}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Rollback to Edit
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                {userRole === "ADMIN" && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (window.confirm("Delete this invoice? This will unbill associated billing elements.")) {
+                          deleteMutation.mutate(item.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="text-red-600 focus:text-red-600"
+                      data-testid={`button-delete-invoice-${item.id}`}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Invoice
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       />

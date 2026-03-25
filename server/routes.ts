@@ -709,6 +709,32 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/invoices/:id/rollback", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      if (invoice.status === "PUSHED_TO_ERP") {
+        return res.status(400).json({ message: "Cannot rollback an invoice that has been pushed to ERP" });
+      }
+
+      await storage.unbillByInvoiceId(req.params.id);
+
+      await storage.updateInvoice(req.params.id, {
+        status: "DRAFT",
+        soGenerated: false,
+        sentToNetsuite: false,
+        netsuiteId: null,
+        netsuiteJson: null,
+        poNumber: null,
+      });
+
+      auditLog(req, "rollback_invoice", "invoice", req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   app.post("/api/invoices/:id/send-for-validation", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
