@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PawPrint, Users, Building2, FileText, Receipt, CreditCard } from "lucide-react";
+import { Users, Building2, FileText, Receipt, CreditCard } from "lucide-react";
+import { Horseshoe } from "@/components/icons/horseshoe";
 import { Link } from "wouter";
 
 export default function DashboardPage() {
@@ -17,7 +18,7 @@ export default function DashboardPage() {
     {
       title: "Active Horses",
       value: horses.filter((h: any) => h.status === "active").length,
-      icon: PawPrint,
+      icon: Horseshoe,
       loading: loadingHorses,
       href: "/horses",
       color: "text-primary",
@@ -105,7 +106,7 @@ export default function DashboardPage() {
                 <CardContent className="flex items-center justify-between gap-4 py-4">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                      <PawPrint className="w-5 h-5 text-primary" />
+                      <Horseshoe className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium">{agreement.horseName || "No Horse"}</p>

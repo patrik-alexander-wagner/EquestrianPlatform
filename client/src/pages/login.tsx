@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PawPrint, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
+import { Horseshoe } from "@/components/icons/horseshoe";
 
 const SSO_ERROR_MESSAGES: Record<string, string> = {
   missing_token: "SSO token is missing",
@@ -62,7 +63,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
             <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
-              <PawPrint className="w-7 h-7 text-primary-foreground" />
+              <Horseshoe className="w-7 h-7 text-primary-foreground" />
             </div>
           </div>
           <CardTitle className="text-xl" data-testid="text-login-title">StableMaster</CardTitle>

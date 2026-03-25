@@ -15,7 +15,6 @@ import {
   Receipt,
   FileText,
   Users,
-  PawPrint,
   Building2,
   Box,
   Package,
@@ -31,6 +30,7 @@ import {
   History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Horseshoe } from "@/components/icons/horseshoe";
 
 const navGroups = [
   {
@@ -54,7 +54,7 @@ const navGroups = [
     adminOnly: false,
     items: [
       { title: "Customers", url: "/customers", icon: Users },
-      { title: "Horses", url: "/horses", icon: PawPrint },
+      { title: "Horses", url: "/horses", icon: Horseshoe },
       { title: "Stables", url: "/stables", icon: Building2 },
       { title: "Boxes", url: "/boxes", icon: Box },
       { title: "Items", url: "/items", icon: Package },
@@ -100,7 +100,7 @@ export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <PawPrint className="w-5 h-5 text-primary-foreground" />
+              <Horseshoe className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">StableMaster</h1>
