@@ -106,7 +106,7 @@ export default function DashboardPage() {
                 <CardContent className="flex items-center justify-between gap-4 py-4">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-md bg-primary flex items-center justify-center">
-                      <Horseshoe className="w-5 h-5" />
+                      <Horseshoe className="w-5 h-5" inverted />
                     </div>
                     <div>
                       <p className="font-medium">{agreement.horseName || "No Horse"}</p>

@@ -100,7 +100,7 @@ export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Horseshoe className="w-5 h-5 text-primary-foreground" />
+              <Horseshoe className="w-5 h-5" inverted />
             </div>
             <div>
               <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">StableMaster</h1>

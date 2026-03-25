@@ -63,7 +63,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
             <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
-              <Horseshoe className="w-7 h-7 text-primary-foreground" />
+              <Horseshoe className="w-7 h-7" inverted />
             </div>
           </div>
           <CardTitle className="text-xl" data-testid="text-login-title">StableMaster</CardTitle>
