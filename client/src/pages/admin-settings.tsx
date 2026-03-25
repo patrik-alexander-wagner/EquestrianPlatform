@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Save, Package, Webhook, Settings2 } from "lucide-react";
-import type { Item, Horse, Box } from "@shared/schema";
+import type { Item, Horse, Box, Stable } from "@shared/schema";
 
 export default function AdminSettingsPage() {
   const [search, setSearch] = useState("");
@@ -44,7 +44,7 @@ export default function AdminSettingsPage() {
     queryKey: ["/api/horses"],
   });
 
-  const { data: allStables = [] } = useQuery<any[]>({
+  const { data: allStables = [] } = useQuery<Stable[]>({
     queryKey: ["/api/stables"],
   });
 
@@ -72,13 +72,13 @@ export default function AdminSettingsPage() {
   }, [items]);
 
   const selectedBox = useMemo(() => allBoxes.find(b => b.id === defaultBoxId), [allBoxes, defaultBoxId]);
-  const selectedHorse = useMemo(() => allHorses.find((h: any) => h.id === defaultHorseId), [allHorses, defaultHorseId]);
+  const selectedHorse = useMemo(() => allHorses.find(h => h.id === defaultHorseId), [allHorses, defaultHorseId]);
 
   const filteredBoxes = useMemo(() => {
     if (!boxSearch.trim()) return allBoxes;
     const s = boxSearch.toLowerCase();
     return allBoxes.filter(b => {
-      const stable = allStables.find((st: any) => st.id === b.stableId);
+      const stable = allStables.find(st => st.id === b.stableId);
       const stableName = stable ? stable.name : "";
       return b.boxNumber.toLowerCase().includes(s) || stableName.toLowerCase().includes(s);
     });
@@ -87,7 +87,7 @@ export default function AdminSettingsPage() {
   const filteredHorses = useMemo(() => {
     if (!horseSearch.trim()) return allHorses;
     const s = horseSearch.toLowerCase();
-    return allHorses.filter((h: any) => h.horseName.toLowerCase().includes(s));
+    return allHorses.filter(h => h.horseName.toLowerCase().includes(s));
   }, [allHorses, horseSearch]);
 
   const saveMutation = useMutation({
@@ -138,7 +138,7 @@ export default function AdminSettingsPage() {
 
   const getStableName = (stableId: string | null) => {
     if (!stableId) return "";
-    const stable = allStables.find((s: any) => s.id === stableId);
+    const stable = allStables.find(s => s.id === stableId);
     return stable ? stable.name : "";
   };
 
@@ -228,7 +228,7 @@ export default function AdminSettingsPage() {
                   <Input
                     data-testid="input-default-horse-search"
                     placeholder="Search horse..."
-                    value={selectedHorse && !horseDropdownOpen ? (selectedHorse as any).horseName : horseSearch}
+                    value={selectedHorse && !horseDropdownOpen ? selectedHorse.horseName : horseSearch}
                     onChange={(e) => {
                       setHorseSearch(e.target.value);
                       setHorseDropdownOpen(true);
@@ -250,7 +250,7 @@ export default function AdminSettingsPage() {
                     {filteredHorses.length === 0 ? (
                       <div className="p-3 text-sm text-muted-foreground">No horses found</div>
                     ) : (
-                      filteredHorses.map((h: any) => (
+                      filteredHorses.map(h => (
                         <button
                           type="button"
                           key={h.id}
@@ -269,7 +269,7 @@ export default function AdminSettingsPage() {
                 )}
                 {selectedHorse && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    NetSuite ID: {(selectedHorse as any).netsuiteId || "Not set"}
+                    NetSuite ID: {selectedHorse.netsuiteId || "Not set"}
                   </p>
                 )}
               </div>
