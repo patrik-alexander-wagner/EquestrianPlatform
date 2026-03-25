@@ -69,10 +69,6 @@ export default function BillingElementsPage() {
     queryKey: ["/api/horses"],
   });
 
-  const { data: erpDefaults } = useQuery<{ defaultBoxId: string; defaultHorseId: string }>({
-    queryKey: ["/api/settings/erp-defaults"],
-  });
-
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/billing-elements", data),
     onSuccess: () => {
@@ -491,14 +487,6 @@ export default function BillingElementsPage() {
             onSubmit={(e) => { e.preventDefault(); }}
             onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
           >
-            {!erpDefaults?.defaultBoxId && (
-              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md flex items-start gap-2" data-testid="warning-no-default-box">
-                <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                <p className="text-sm text-destructive">
-                  Default Box is not configured. Please set it in Settings → ERP Defaults before billing non-livery customers.
-                </p>
-              </div>
-            )}
             <div className="space-y-4">
               <div className="relative">
                 <Label>Customer *</Label>
@@ -598,7 +586,7 @@ export default function BillingElementsPage() {
             <DialogFooter className="mt-4">
               <Button
                 type="button"
-                disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice || !erpDefaults?.defaultBoxId}
+                disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice}
                 data-testid="button-submit-non-livery-billing"
                 onClick={() => {
                   createMutation.mutate({

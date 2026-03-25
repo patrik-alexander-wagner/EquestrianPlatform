@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
 
 export default function NewAgreementPage() {
@@ -47,10 +47,6 @@ export default function NewAgreementPage() {
 
   const { data: liveryItems = [] } = useQuery<Item[]>({
     queryKey: ["/api/items/livery-packages"],
-  });
-
-  const { data: erpDefaults } = useQuery<{ defaultBoxId: string; defaultHorseId: string }>({
-    queryKey: ["/api/settings/erp-defaults"],
   });
 
   const createMutation = useMutation({
@@ -228,15 +224,6 @@ export default function NewAgreementPage() {
                   </Select>
                 </div>
 
-                {agreementCategory === "without_horse" && !erpDefaults?.defaultHorseId && (
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md flex items-start gap-2" data-testid="warning-no-default-horse">
-                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                    <p className="text-sm text-destructive">
-                      Default Horse is not configured. Please set it in Settings → ERP Defaults before creating "Without Horse" agreements.
-                    </p>
-                  </div>
-                )}
-
                 <div className="relative">
                   <Label>Customer</Label>
                   <div className="relative">
@@ -408,7 +395,7 @@ export default function NewAgreementPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || (agreementCategory === "with_horse" && !selectedHorseId) || (agreementCategory === "without_horse" && !erpDefaults?.defaultHorseId) || !selectedItemId} data-testid="button-submit-agreement">
+                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || (agreementCategory === "with_horse" && !selectedHorseId) || !selectedItemId} data-testid="button-submit-agreement">
                   Create Agreement
                 </Button>
               </DialogFooter>
