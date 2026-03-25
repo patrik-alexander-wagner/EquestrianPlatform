@@ -122,6 +122,11 @@ shared/
   - Credentials stored in env vars: NETSUITE_ACCOUNT_ID, NETSUITE_RESTLET_URL, NETSUITE_CONSUMER_KEY, NETSUITE_CONSUMER_SECRET, NETSUITE_TOKEN_ID, NETSUITE_TOKEN_SECRET
   - Uses oauth-1.0a package with HMAC-SHA256 signing
 - N8N webhook integration (legacy): configurable webhook URL in Settings still available
+- ERP Defaults in Settings: configurable default Box ID and default Horse ID
+  - Default Box applied when billing non-livery customers (replaces null boxId)
+  - Default Horse applied when creating "without horse" agreements (replaces null horseId)
+  - Error returned if defaults not configured and user tries to create such records
+  - Stored in app_settings: default_box_id, default_horse_id
 
 ## Input Validation
 - All POST routes use Zod schema validation via `validateBody()`

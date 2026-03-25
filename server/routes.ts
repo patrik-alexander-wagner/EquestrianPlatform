@@ -511,8 +511,12 @@ export async function registerRoutes(
       if (cat === "with_horse" && !data.horseId) {
         return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
       }
-      if (cat === "without_horse" && data.horseId) {
-        return res.status(400).json({ message: "Horse must not be provided for 'Without Horse' agreements" });
+      if (cat === "without_horse") {
+        const defaultHorseId = await storage.getSetting("default_horse_id");
+        if (!defaultHorseId) {
+          return res.status(400).json({ message: "Default Horse ID is not configured. Please set it in Settings → ERP Defaults before creating 'Without Horse' agreements." });
+        }
+        data.horseId = defaultHorseId;
       }
       const agreement = await storage.createLiveryAgreement(data);
       auditLog(req, "create_agreement", "agreement", agreement.id, `Created agreement: ${agreement.referenceNumber}`);
@@ -533,8 +537,12 @@ export async function registerRoutes(
         if (cat === "with_horse" && !horseId) {
           return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
         }
-        if (cat === "without_horse" && horseId) {
-          return res.status(400).json({ message: "Horse must not be provided for 'Without Horse' agreements" });
+        if (cat === "without_horse") {
+          const defaultHorseId = await storage.getSetting("default_horse_id");
+          if (!defaultHorseId) {
+            return res.status(400).json({ message: "Default Horse ID is not configured. Please set it in Settings → ERP Defaults." });
+          }
+          data.horseId = defaultHorseId;
         }
       }
       const agreement = await storage.updateLiveryAgreement(req.params.id, data);
@@ -590,6 +598,13 @@ export async function registerRoutes(
         req.body.billingMonth = req.body.transactionDate.substring(0, 7);
       }
       const data = validateBody(insertBillingElementSchema, req.body);
+      if (!data.boxId) {
+        const defaultBoxId = await storage.getSetting("default_box_id");
+        if (!defaultBoxId) {
+          return res.status(400).json({ message: "Default Box ID is not configured. Please set it in Settings → ERP Defaults before billing non-livery customers." });
+        }
+        data.boxId = defaultBoxId;
+      }
       const element = await storage.createBillingElement(data);
       auditLog(req, "create_billing_element", "billing_element", element.id);
       res.json(element);
@@ -1054,6 +1069,40 @@ export async function registerRoutes(
         }
       }
       auditLog(req, "update_setting", "setting", "livery_packages", `Updated livery packages`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  // Settings - ERP Defaults (default box and horse IDs)
+  app.get("/api/settings/erp-defaults", async (_req, res) => {
+    try {
+      const defaultBoxId = await storage.getSetting("default_box_id");
+      const defaultHorseId = await storage.getSetting("default_horse_id");
+      res.json({ defaultBoxId: defaultBoxId || "", defaultHorseId: defaultHorseId || "" });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/settings/erp-defaults", requireAdmin, async (req, res) => {
+    try {
+      const { defaultBoxId, defaultHorseId } = req.body;
+      if (typeof defaultBoxId !== "string" || typeof defaultHorseId !== "string") {
+        return res.status(400).json({ message: "defaultBoxId and defaultHorseId must be strings" });
+      }
+      if (defaultBoxId) {
+        const box = await storage.getBox(defaultBoxId);
+        if (!box) return res.status(400).json({ message: "Selected default box does not exist" });
+      }
+      if (defaultHorseId) {
+        const horse = await storage.getHorse(defaultHorseId);
+        if (!horse) return res.status(400).json({ message: "Selected default horse does not exist" });
+      }
+      await storage.setSetting("default_box_id", defaultBoxId);
+      await storage.setSetting("default_horse_id", defaultHorseId);
+      auditLog(req, "update_setting", "setting", "erp_defaults", `Updated ERP defaults`);
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
