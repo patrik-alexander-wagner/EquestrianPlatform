@@ -105,8 +105,8 @@ export default function DashboardPage() {
               <Card key={agreement.id}>
                 <CardContent className="flex items-center justify-between gap-4 py-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                      <Horseshoe className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 rounded-md bg-primary flex items-center justify-center">
+                      <Horseshoe className="w-5 h-5" />
                     </div>
                     <div>
                       <p className="font-medium">{agreement.horseName || "No Horse"}</p>
