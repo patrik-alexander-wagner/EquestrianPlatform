@@ -212,6 +212,15 @@ export default function InvoicesPage() {
       label: "Status",
       render: (item: any) => <InvoiceStatusBadge status={item.status} />,
     },
+    {
+      key: "netsuiteId",
+      label: "NetSuite SO",
+      render: (item: any) => item.netsuiteId ? (
+        <span className="font-mono text-sm" data-testid={`text-netsuite-so-${item.id}`}>{item.netsuiteId}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    },
   ];
 
   return (
