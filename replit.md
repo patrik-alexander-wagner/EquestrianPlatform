@@ -51,7 +51,7 @@ shared/
 ```
 
 ## Database Tables
-- users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers, horses, stables, boxes, items
+- users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes, items
 - livery_agreements, billing_elements, invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
 - invoice_validations (audit trail: invoice_id, step, action, user_id, comment, created_at)
 - app_settings, agreement_documents, audit_logs

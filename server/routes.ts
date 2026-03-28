@@ -793,7 +793,7 @@ export async function registerRoutes(
               memoMonth = date.toLocaleString("en-US", { month: "short", year: "numeric" });
             }
             const customerName = details.customer
-              ? `${details.customer.firstname} ${details.customer.lastname}` : "Unknown";
+              ? details.customer.fullname : "Unknown";
             const today = new Date();
             const tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
             const soJson = {
@@ -881,7 +881,7 @@ export async function registerRoutes(
         memoMonth = date.toLocaleString("en-US", { month: "short", year: "numeric" });
       }
       const customerName = details.customer
-        ? `${details.customer.firstname} ${details.customer.lastname}`
+        ? details.customer.fullname
         : "Unknown";
 
       const today = new Date();

@@ -135,10 +135,7 @@ export class DatabaseStorage implements IStorage {
   async getCustomers(search?: string): Promise<Customer[]> {
     if (search) {
       return await db.select().from(customers).where(
-        or(
-          ilike(customers.firstname, `%${search}%`),
-          ilike(customers.lastname, `%${search}%`)
-        )
+        ilike(customers.fullname, `%${search}%`)
       );
     }
     return await db.select().from(customers);
@@ -173,7 +170,7 @@ export class DatabaseStorage implements IStorage {
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       return {
         ...horse,
-        customer: customer ? `${customer.firstname} ${customer.lastname}` : null,
+        customer: customer ? customer.fullname : null,
         customerId: customer?.id || null,
         box: box?.name || null,
         boxId: box?.id || null,
@@ -337,7 +334,7 @@ export class DatabaseStorage implements IStorage {
       return {
         ...agreement,
         horseName: horse?.horseName || null,
-        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        customerName: customer ? customer.fullname : "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
         itemName: item?.name || "Unknown",
@@ -406,7 +403,7 @@ export class DatabaseStorage implements IStorage {
       return {
         ...element,
         horseName: horse?.horseName || null,
-        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        customerName: customer ? customer.fullname : "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
         itemName: item?.name || "Unknown",
@@ -447,7 +444,7 @@ export class DatabaseStorage implements IStorage {
         horseId: horse?.id,
         horseName: horse?.horseName || "Unknown",
         customerId: customer?.id,
-        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        customerName: customer ? customer.fullname : "Unknown",
         boxId: box?.id,
         boxName: box?.name || "Unknown",
         stableId: stable?.id,
@@ -465,7 +462,7 @@ export class DatabaseStorage implements IStorage {
       const customer = allCustomers.find(c => c.id === invoice.customerId);
       return {
         ...invoice,
-        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        customerName: customer ? customer.fullname : "Unknown",
       };
     });
   }
@@ -502,7 +499,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...invoice,
-      customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+      customerName: customer ? customer.fullname : "Unknown",
       customerNumber: customer?.netsuiteId || "",
       lineItems,
     };
@@ -625,7 +622,7 @@ export class DatabaseStorage implements IStorage {
       const grouped: Record<string, any> = {};
       for (const agreement of activeAgreements) {
         const customer = allCustomers.find(c => c.id === agreement.customerId);
-        const key = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+        const key = customer ? customer.fullname : "Unknown";
         if (!grouped[key]) {
           grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
         }
@@ -636,7 +633,7 @@ export class DatabaseStorage implements IStorage {
       }
       for (const el of allBillingElements) {
         const customer = allCustomers.find(c => c.id === el.customerId);
-        const key = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+        const key = customer ? customer.fullname : "Unknown";
         if (!grouped[key]) {
           grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
         }
@@ -707,7 +704,7 @@ export class DatabaseStorage implements IStorage {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const horse = allHorses.find(h => h.id === agreement.horseId);
       const item = allItems.find(i => i.id === agreement.itemId);
-      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+      const customerName = customer ? customer.fullname : "Unknown";
 
       if (!grouped[agreement.customerId]) {
         grouped[agreement.customerId] = {
@@ -738,7 +735,7 @@ export class DatabaseStorage implements IStorage {
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const horse = allHorses.find(h => h.id === agreement.horseId);
-      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+      const customerName = customer ? customer.fullname : "Unknown";
 
       if (!grouped[agreement.customerId]) {
         grouped[agreement.customerId] = {
@@ -770,7 +767,7 @@ export class DatabaseStorage implements IStorage {
     for (const agreement of current) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const horse = allHorses.find(h => h.id === agreement.horseId);
-      const customerName = customer ? `${customer.firstname} ${customer.lastname}` : "Unknown";
+      const customerName = customer ? customer.fullname : "Unknown";
 
       if (!grouped[agreement.customerId]) {
         grouped[agreement.customerId] = {

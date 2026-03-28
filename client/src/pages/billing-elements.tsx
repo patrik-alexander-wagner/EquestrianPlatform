@@ -153,7 +153,7 @@ export default function BillingElementsPage() {
     if (!nlCustomerSearch.trim()) return active;
     const s = nlCustomerSearch.toLowerCase();
     return active.filter(c =>
-      `${c.firstname} ${c.lastname}`.toLowerCase().includes(s) ||
+      (c.fullname || '').toLowerCase().includes(s) ||
       (c.email && c.email.toLowerCase().includes(s))
     );
   }, [allCustomers, nlCustomerSearch]);
@@ -494,7 +494,7 @@ export default function BillingElementsPage() {
                   <Input
                     data-testid="input-nl-customer-search"
                     placeholder="Search customer..."
-                    value={selectedNlCustomer && !nlCustomerDropdownOpen ? `${selectedNlCustomer.firstname} ${selectedNlCustomer.lastname}` : nlCustomerSearch}
+                    value={selectedNlCustomer && !nlCustomerDropdownOpen ? selectedNlCustomer.fullname : nlCustomerSearch}
                     onChange={(e) => {
                       setNlCustomerSearch(e.target.value);
                       setNlCustomerDropdownOpen(true);
@@ -524,7 +524,7 @@ export default function BillingElementsPage() {
                           className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
                           onClick={() => { setNlCustomerId(c.id); setNlCustomerSearch(""); setNlCustomerDropdownOpen(false); }}
                         >
-                          <div className="font-medium">{c.firstname} {c.lastname}</div>
+                          <div className="font-medium">{c.fullname}</div>
                           {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                         </button>
                       ))

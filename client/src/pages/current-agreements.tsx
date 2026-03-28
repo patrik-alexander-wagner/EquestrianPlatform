@@ -153,7 +153,7 @@ export default function CurrentAgreementsPage() {
     if (!editCustomerSearch.trim()) return active;
     const s = editCustomerSearch.toLowerCase();
     return active.filter(c =>
-      `${c.firstname} ${c.lastname}`.toLowerCase().includes(s) ||
+      (c.fullname || '').toLowerCase().includes(s) ||
       (c.email && c.email.toLowerCase().includes(s))
     );
   }, [customers, editCustomerSearch]);
@@ -354,7 +354,7 @@ export default function CurrentAgreementsPage() {
                     <Input
                       data-testid="input-edit-customer-search"
                       placeholder="Search customer..."
-                      value={editSelectedCustomer && !editCustomerDropdownOpen ? `${editSelectedCustomer.firstname} ${editSelectedCustomer.lastname}` : editCustomerSearch}
+                      value={editSelectedCustomer && !editCustomerDropdownOpen ? editSelectedCustomer.fullname : editCustomerSearch}
                       onChange={(e) => {
                         setEditCustomerSearch(e.target.value);
                         setEditCustomerDropdownOpen(true);
@@ -384,7 +384,7 @@ export default function CurrentAgreementsPage() {
                             className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
                             onClick={() => { setEditSelectedCustomerId(c.id); setEditCustomerSearch(""); setEditCustomerDropdownOpen(false); }}
                           >
-                            <div className="font-medium">{c.firstname} {c.lastname}</div>
+                            <div className="font-medium">{c.fullname}</div>
                             {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                           </button>
                         ))

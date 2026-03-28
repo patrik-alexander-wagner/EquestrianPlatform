@@ -242,7 +242,7 @@ export default function ToInvoicePage() {
 
       return {
         customerId: id,
-        customerName: customer ? `${customer.firstname} ${customer.lastname}` : "Unknown",
+        customerName: customer ? customer.fullname : "Unknown",
         lineItems,
         total,
       };

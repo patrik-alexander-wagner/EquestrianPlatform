@@ -43,9 +43,7 @@ export default function CustomersPage() {
   });
 
   const columns = [
-    { key: "netsuiteId", label: "NetSuite ID", render: (item: Customer) => item.netsuiteId || "-" },
-    { key: "firstname", label: "First Name" },
-    { key: "lastname", label: "Last Name" },
+    { key: "fullname", label: "Full Name" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
     {
@@ -57,8 +55,7 @@ export default function CustomersPage() {
 
   const importFields = [
     { targetField: "netsuiteId", label: "NetSuite ID" },
-    { targetField: "firstname", label: "First Name", required: true },
-    { targetField: "lastname", label: "Last Name", required: true },
+    { targetField: "fullname", label: "Full Name", required: true },
     { targetField: "phone", label: "Phone" },
     { targetField: "email", label: "Email" },
     { targetField: "status", label: "Status" },
@@ -67,8 +64,7 @@ export default function CustomersPage() {
   const handleImport = (data: Record<string, string>[]) => {
     const mapped = data.map(row => ({
       netsuiteId: row.netsuiteId || null,
-      firstname: row.firstname || "Unknown",
-      lastname: row.lastname || "Unknown",
+      fullname: row.fullname || "Unknown",
       phone: row.phone || null,
       email: row.email || null,
       status: row.status || "active",
@@ -97,7 +93,7 @@ export default function CustomersPage() {
 
       <div className="mb-4">
         <SearchBar
-          placeholder="Search by first or last name..."
+          placeholder="Search by name..."
           value={search}
           onChange={setSearch}
           className="max-w-sm"
@@ -116,8 +112,7 @@ export default function CustomersPage() {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
               createMutation.mutate({
-                firstname: fd.get("firstname"),
-                lastname: fd.get("lastname"),
+                fullname: fd.get("fullname"),
                 phone: fd.get("phone"),
                 email: fd.get("email"),
                 status: "active",
@@ -126,12 +121,8 @@ export default function CustomersPage() {
           >
             <div className="space-y-4">
               <div>
-                <Label>First Name</Label>
-                <Input name="firstname" required data-testid="input-firstname" />
-              </div>
-              <div>
-                <Label>Last Name</Label>
-                <Input name="lastname" required data-testid="input-lastname" />
+                <Label>Full Name</Label>
+                <Input name="fullname" required data-testid="input-fullname" />
               </div>
               <div>
                 <Label>Phone</Label>

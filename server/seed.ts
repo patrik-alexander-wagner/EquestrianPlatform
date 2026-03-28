@@ -40,11 +40,11 @@ export async function seedDatabase() {
   await db.insert(boxes).values(boxData);
 
   const createdCustomers = await db.insert(customers).values([
-    { firstname: "Sophie", lastname: "Martin", phone: "+33 6 12 34 56 78", email: "sophie.martin@email.com", status: "active" },
-    { firstname: "Jean-Pierre", lastname: "Dubois", phone: "+33 6 23 45 67 89", email: "jp.dubois@email.com", status: "active" },
-    { firstname: "Claire", lastname: "Laurent", phone: "+33 6 34 56 78 90", email: "claire.laurent@email.com", status: "active" },
-    { firstname: "Thomas", lastname: "Bernard", phone: "+33 6 45 67 89 01", email: "t.bernard@email.com", status: "active" },
-    { firstname: "Marie", lastname: "Leroy", phone: "+33 6 56 78 90 12", email: "marie.leroy@email.com", status: "inactive" },
+    { fullname: "Sophie Martin", phone: "+33 6 12 34 56 78", email: "sophie.martin@email.com", status: "active" },
+    { fullname: "Jean-Pierre Dubois", phone: "+33 6 23 45 67 89", email: "jp.dubois@email.com", status: "active" },
+    { fullname: "Claire Laurent", phone: "+33 6 34 56 78 90", email: "claire.laurent@email.com", status: "active" },
+    { fullname: "Thomas Bernard", phone: "+33 6 45 67 89 01", email: "t.bernard@email.com", status: "active" },
+    { fullname: "Marie Leroy", phone: "+33 6 56 78 90 12", email: "marie.leroy@email.com", status: "inactive" },
   ]).returning();
 
   const createdHorses = await db.insert(horses).values([

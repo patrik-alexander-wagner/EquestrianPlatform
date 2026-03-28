@@ -88,7 +88,7 @@ export default function NewAgreementPage() {
     if (!customerSearch.trim()) return active;
     const s = customerSearch.toLowerCase();
     return active.filter(c =>
-      `${c.firstname} ${c.lastname}`.toLowerCase().includes(s) ||
+      (c.fullname || '').toLowerCase().includes(s) ||
       (c.email && c.email.toLowerCase().includes(s))
     );
   }, [customers, customerSearch]);
@@ -230,7 +230,7 @@ export default function NewAgreementPage() {
                     <Input
                       data-testid="input-agreement-customer-search"
                       placeholder="Search customer..."
-                      value={selectedCustomer && !customerDropdownOpen ? `${selectedCustomer.firstname} ${selectedCustomer.lastname}` : customerSearch}
+                      value={selectedCustomer && !customerDropdownOpen ? selectedCustomer.fullname : customerSearch}
                       onChange={(e) => {
                         setCustomerSearch(e.target.value);
                         setCustomerDropdownOpen(true);
@@ -260,7 +260,7 @@ export default function NewAgreementPage() {
                             className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
                             onClick={() => { setSelectedCustomerId(c.id); setCustomerSearch(""); setCustomerDropdownOpen(false); }}
                           >
-                            <div className="font-medium">{c.firstname} {c.lastname}</div>
+                            <div className="font-medium">{c.fullname}</div>
                             {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                           </button>
                         ))

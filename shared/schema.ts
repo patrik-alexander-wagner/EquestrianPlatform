@@ -27,8 +27,9 @@ export type User = typeof users.$inferSelect;
 export const customers = pgTable("customers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   netsuiteId: text("netsuite_id"),
-  firstname: text("firstname").notNull(),
-  lastname: text("lastname").notNull(),
+  fullname: text("fullname").notNull().default(""),
+  firstname: text("firstname").notNull().default(""),
+  lastname: text("lastname").notNull().default(""),
   phone: text("phone"),
   email: text("email"),
   status: text("status").notNull().default("active"),
