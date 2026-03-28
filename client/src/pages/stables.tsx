@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -50,9 +50,7 @@ export default function StablesPage() {
   });
 
   const columns = [
-    { key: "netsuiteId", label: "NetSuite ID", render: (item: Stable) => item.netsuiteId || "-" },
     { key: "name", label: "Stable Name" },
-    { key: "status", label: "Status", render: (item: Stable) => <StatusBadge status={item.status} /> },
   ];
 
   return (

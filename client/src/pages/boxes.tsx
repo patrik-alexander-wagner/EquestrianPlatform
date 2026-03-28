@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
-import { StatusBadge } from "@/components/status-badge";
+
 import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,7 +84,6 @@ export default function BoxesPage() {
   };
 
   const columns = [
-    { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
     { key: "name", label: "Box Name" },
     {
       key: "type",
@@ -94,7 +93,6 @@ export default function BoxesPage() {
       ),
     },
     { key: "stableName", label: "Parent Stable" },
-    { key: "status", label: "Status", render: (item: any) => <StatusBadge status={item.status} /> },
   ];
 
   const importFields = [

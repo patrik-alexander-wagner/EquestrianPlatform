@@ -3,10 +3,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
-import { StatusBadge } from "@/components/status-badge";
+
 import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
@@ -35,9 +35,6 @@ export default function ItemsPage() {
 
   const columns = [
     { key: "name", label: "Item Name" },
-    { key: "department", label: "Department", render: (item: Item) => item.department || "-" },
-    { key: "class", label: "Class", render: (item: Item) => item.class || "-" },
-    { key: "location", label: "Location", render: (item: Item) => item.location || "-" },
     {
       key: "unitFactor",
       label: "Unit Factor",
@@ -47,25 +44,6 @@ export default function ItemsPage() {
       key: "price",
       label: "Price",
       render: (item: Item) => item.price ? `AED ${item.price}` : "-",
-    },
-    {
-      key: "averageCost",
-      label: "Avg Cost",
-      render: (item: Item) => item.averageCost ? `AED ${item.averageCost}` : "-",
-    },
-    {
-      key: "isLiveryPackage",
-      label: "Type",
-      render: (item: Item) => item.isLiveryPackage
-        ? <Badge variant="default">Livery Package</Badge>
-        : <Badge variant="outline">Service/Item</Badge>,
-    },
-    {
-      key: "isInactive",
-      label: "Active",
-      render: (item: Item) => item.isInactive
-        ? <Badge variant="secondary">Inactive</Badge>
-        : <StatusBadge status="active" />,
     },
   ];
 

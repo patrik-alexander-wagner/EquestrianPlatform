@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
-import { StatusBadge } from "@/components/status-badge";
+
 import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -46,11 +46,6 @@ export default function CustomersPage() {
     { key: "fullname", label: "Full Name" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
-    {
-      key: "status",
-      label: "Status",
-      render: (item: Customer) => <StatusBadge status={item.status} />,
-    },
   ];
 
   const importFields = [

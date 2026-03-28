@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
-import { StatusBadge } from "@/components/status-badge";
+
 import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -62,11 +62,9 @@ export default function HorsesPage() {
   });
 
   const columns = [
-    { key: "netsuiteId", label: "NetSuite ID", render: (item: any) => item.netsuiteId || "-" },
     { key: "horseName", label: "Horse Name" },
     { key: "breed", label: "Breed", render: (item: any) => item.breed || "-" },
     { key: "dateOfBirth", label: "Date of Birth", render: (item: any) => item.dateOfBirth || "-" },
-    { key: "status", label: "Status", render: (item: any) => <StatusBadge status={item.status} /> },
     {
       key: "stableBox",
       label: "Stable / Box",
