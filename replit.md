@@ -109,10 +109,10 @@ shared/
   - Validation history viewable per invoice via clock icon button
 - NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download (FINANCE/ADMIN only)
 - NetSuite ID fields on customers, horses, stables, boxes, items — mappable during import
-- Livery reports with bar charts (by month/customer) and detail report tables:
-  - New Livery Horses by month (grouped by owner with horse names, arrival dates, prices)
-  - Departure of Livery Horses by month (grouped by owner with horse names, departure dates, reasons)
-  - Livery Customers Information File (all active customers with horse counts and monthly prices)
+- Reports page with 3 sections:
+  - KPI cards (5): Total Revenue, Livery Revenue, Adhoc Revenue, # Livery Horses, # Livery Customers (with month filter)
+  - Revenue Breakdown stacked histogram (livery + adhoc), toggleable per month / per customer (sorted by total descending)
+  - Bottom lists: Livery Arrivals (by month), Livery Departures (by month), All Customers (columns: customer, horse, # horses, arrival, departure, package)
 - Livery package configuration in settings
 - Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
 - Item price history: item_prices table tracks all price changes per item (id, item_id, price, is_active, created_at, created_by). Only one active price per item. "Change Price" button in Add Billing Element dialog allows updating item price with history preservation. Existing billing records unaffected.

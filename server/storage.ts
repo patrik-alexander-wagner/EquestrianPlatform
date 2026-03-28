@@ -86,10 +86,12 @@ export interface IStorage {
   getItemPriceHistory(itemId: string): Promise<ItemPrice[]>;
   changeItemPrice(itemId: string, newPrice: string, createdBy?: string): Promise<ItemPrice>;
 
+  getReportKpis(month: string): Promise<any>;
   getReportData(groupBy: string): Promise<any[]>;
   getNewLiveryHorses(month: string): Promise<any[]>;
   getDepartedLiveryHorses(month: string): Promise<any[]>;
   getLiveryCustomersInfo(): Promise<any[]>;
+  getAllCustomersReport(): Promise<any[]>;
 
   getAgreementDocuments(agreementId: string): Promise<AgreementDocument[]>;
   getAgreementDocument(id: string): Promise<AgreementDocument | undefined>;
@@ -612,59 +614,115 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  async getReportData(groupBy: string): Promise<any[]> {
+  async getReportKpis(month: string): Promise<any> {
+    const allAgreements = await db.select().from(liveryAgreements);
+    const allBillingElements = await db.select().from(billingElements);
+    const allItems = await db.select().from(items);
+
+    const [year, mon] = month.split("-").map(Number);
+    const monthEnd = new Date(year, mon, 0);
+    const monthEndStr = monthEnd.toISOString().split("T")[0];
+    const monthStartStr = `${month}-01`;
+
+    const activeAtEnd = allAgreements.filter(a => {
+      if (a.status !== "active") return false;
+      if (!a.startDate || a.startDate > monthEndStr) return false;
+      if (a.endDate && a.endDate < monthStartStr) return false;
+      return true;
+    });
+
+    const uniqueHorseIds = new Set(activeAtEnd.map(a => a.horseId).filter(Boolean));
+    const uniqueCustomerIds = new Set(activeAtEnd.map(a => a.customerId));
+
+    const monthBillingElements = allBillingElements.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
+
+    let liveryRevenue = 0;
+    let adhocRevenue = 0;
+
+    for (const el of monthBillingElements) {
+      const item = allItems.find(i => i.id === el.itemId);
+      const amount = parseFloat(el.price || "0");
+      if (el.agreementId && item?.isLiveryPackage) {
+        liveryRevenue += amount;
+      } else {
+        adhocRevenue += amount;
+      }
+    }
+
+    const totalRevenue = liveryRevenue + adhocRevenue;
+
+    return {
+      totalRevenue,
+      liveryRevenue,
+      adhocRevenue,
+      liveryHorses: uniqueHorseIds.size,
+      liveryCustomers: uniqueCustomerIds.size,
+    };
+  }
+
+  async getAllCustomersReport(): Promise<any[]> {
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const today = new Date().toISOString().split("T")[0];
+    const current = activeAgreements.filter(a => !a.endDate || a.endDate >= today);
+
+    const allCustomers = await db.select().from(customers);
+    const allHorses = await db.select().from(horses);
+    const allItems = await db.select().from(items);
+
+    const result: any[] = [];
+    for (const agreement of current) {
+      const customer = allCustomers.find(c => c.id === agreement.customerId);
+      const horse = allHorses.find(h => h.id === agreement.horseId);
+      const item = allItems.find(i => i.id === agreement.itemId);
+      result.push({
+        customerName: customer ? customer.fullname : "Unknown",
+        horseName: horse?.horseName || "N/A",
+        arrivalDate: agreement.startDate || "",
+        departureDate: agreement.endDate || "",
+        liveryPackage: item?.name || "N/A",
+      });
+    }
+    return result;
+  }
+
+  async getReportData(groupBy: string): Promise<any[]> {
+    const allBillingElements = await db.select().from(billingElements);
     const allCustomers = await db.select().from(customers);
     const allItems = await db.select().from(items);
-    const allBillingElements = await db.select().from(billingElements);
 
-    if (groupBy === "customer") {
-      const grouped: Record<string, any> = {};
-      for (const agreement of activeAgreements) {
-        const customer = allCustomers.find(c => c.id === agreement.customerId);
-        const key = customer ? customer.fullname : "Unknown";
-        if (!grouped[key]) {
-          grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
-        }
-        grouped[key].horseCount++;
-        const amount = parseFloat(agreement.monthlyAmount || "0");
-        grouped[key].liveryRevenue += amount;
-        grouped[key].totalRevenue += amount;
-      }
-      for (const el of allBillingElements) {
+    const grouped: Record<string, any> = {};
+
+    for (const el of allBillingElements) {
+      const item = allItems.find(i => i.id === el.itemId);
+      const amount = parseFloat(el.price || "0");
+      const isLivery = !!(el.agreementId && item?.isLiveryPackage);
+
+      let key: string;
+      if (groupBy === "customer") {
         const customer = allCustomers.find(c => c.id === el.customerId);
-        const key = customer ? customer.fullname : "Unknown";
-        if (!grouped[key]) {
-          grouped[key] = { label: key, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
-        }
-        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
-        grouped[key].otherRevenue += amount;
-        grouped[key].totalRevenue += amount;
+        key = customer ? customer.fullname : "Unknown";
+      } else {
+        key = el.billingMonth || el.transactionDate?.substring(0, 7) || "Unknown";
       }
-      return Object.values(grouped);
-    } else {
-      const grouped: Record<string, any> = {};
-      for (const agreement of activeAgreements) {
-        const month = agreement.startDate?.substring(0, 7) || "Unknown";
-        if (!grouped[month]) {
-          grouped[month] = { label: month, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
-        }
-        grouped[month].horseCount++;
-        const amount = parseFloat(agreement.monthlyAmount || "0");
-        grouped[month].liveryRevenue += amount;
-        grouped[month].totalRevenue += amount;
+
+      if (!grouped[key]) {
+        grouped[key] = { label: key, liveryRevenue: 0, adhocRevenue: 0, totalRevenue: 0 };
       }
-      for (const el of allBillingElements) {
-        const month = el.transactionDate?.substring(0, 7) || "Unknown";
-        if (!grouped[month]) {
-          grouped[month] = { label: month, horseCount: 0, liveryRevenue: 0, otherRevenue: 0, totalRevenue: 0 };
-        }
-        const amount = parseFloat(el.price || "0") * (el.quantity || 1);
-        grouped[month].otherRevenue += amount;
-        grouped[month].totalRevenue += amount;
+      if (isLivery) {
+        grouped[key].liveryRevenue += amount;
+      } else {
+        grouped[key].adhocRevenue += amount;
       }
-      return Object.values(grouped).sort((a, b) => a.label.localeCompare(b.label));
+      grouped[key].totalRevenue += amount;
     }
+
+    const result = Object.values(grouped);
+    if (groupBy === "customer") {
+      result.sort((a, b) => b.totalRevenue - a.totalRevenue);
+    } else {
+      result.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return result;
   }
   async getItemPriceHistory(itemId: string): Promise<ItemPrice[]> {
     return await db.select().from(itemPrices)
@@ -716,6 +774,8 @@ export class DatabaseStorage implements IStorage {
       grouped[agreement.customerId].horses.push({
         horseName: horse?.horseName || "Unknown",
         arrivalDate: agreement.startDate,
+        departureDate: agreement.endDate || "",
+        liveryPackage: item?.name || "N/A",
         liveryPrice: agreement.monthlyAmount || (item?.price || "0"),
       });
       grouped[agreement.customerId].horseCount++;
