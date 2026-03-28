@@ -87,7 +87,7 @@ export interface IStorage {
   changeItemPrice(itemId: string, newPrice: string, createdBy?: string): Promise<ItemPrice>;
 
   getReportKpis(month: string): Promise<any>;
-  getReportData(groupBy: string): Promise<any[]>;
+  getReportData(groupBy: string, month?: string): Promise<any[]>;
   getNewLiveryHorses(month: string): Promise<any[]>;
   getDepartedLiveryHorses(month: string): Promise<any[]>;
   getLiveryCustomersInfo(): Promise<any[]>;
@@ -685,14 +685,19 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getReportData(groupBy: string): Promise<any[]> {
+  async getReportData(groupBy: string, month?: string): Promise<any[]> {
     const allBillingElements = await db.select().from(billingElements);
     const allCustomers = await db.select().from(customers);
     const allItems = await db.select().from(items);
 
+    let filtered = allBillingElements;
+    if (month && groupBy === "customer") {
+      filtered = allBillingElements.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
+    }
+
     const grouped: Record<string, any> = {};
 
-    for (const el of allBillingElements) {
+    for (const el of filtered) {
       const item = allItems.find(i => i.id === el.itemId);
       const amount = parseFloat(el.price || "0");
       const isLivery = !!(el.agreementId && item?.isLiveryPackage);

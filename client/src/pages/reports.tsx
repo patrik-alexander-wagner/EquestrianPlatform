@@ -1,11 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { DollarSign, TrendingUp, Zap, Users, Heart } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from "recharts";
+import { DollarSign, TrendingUp, Zap, Users, Heart, Download } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import html2canvas from "html2canvas";
 
 function formatMonthLabel(month: string) {
   if (!month) return "";
@@ -18,7 +22,9 @@ function formatDate(dateStr: string) {
   if (!dateStr) return "-";
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  const day = date.getDate();
+  const suffix = day === 1 || day === 21 || day === 31 ? "st" : day === 2 || day === 22 ? "nd" : day === 3 || day === 23 ? "rd" : "th";
+  return `${day}${suffix} ${date.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
 }
 
 function getCurrentMonth() {
@@ -40,9 +46,106 @@ function formatCurrency(value: number) {
   return `AED ${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
+function formatK(value: number) {
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  return String(value);
+}
+
+interface StyledTableProps {
+  title: string;
+  columns: { key: string; label: string; align?: string }[];
+  groups: any[];
+  loading: boolean;
+  emptyMessage: string;
+  testId: string;
+}
+
+function StyledTable({ title, columns, groups, loading, emptyMessage, testId }: StyledTableProps) {
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-lg">{title}</CardTitle></CardHeader>
+        <CardContent>
+          <div className="h-32 flex items-center justify-center text-muted-foreground">Loading...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-lg">{title}</CardTitle></CardHeader>
+      <CardContent>
+        {groups.length === 0 ? (
+          <div className="h-32 flex items-center justify-center text-muted-foreground">{emptyMessage}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse" data-testid={testId}>
+              <thead>
+                <tr>
+                  <th className="text-center py-3 px-4 font-bold text-white" style={{ backgroundColor: "#4CAF50", width: "50px" }}>#</th>
+                  {columns.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`py-3 px-4 font-bold text-white ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}`}
+                      style={{ backgroundColor: "#4CAF50" }}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group: any, gIdx: number) => (
+                  <tr
+                    key={gIdx}
+                    className="border-b border-green-100"
+                    style={{ backgroundColor: gIdx % 2 === 0 ? "#f0f9f0" : "#e8f5e8" }}
+                    data-testid={`${testId}-row-${gIdx}`}
+                  >
+                    <td
+                      className="py-4 px-4 text-center font-bold text-white text-lg"
+                      style={{ backgroundColor: "#66BB6A" }}
+                    >
+                      {gIdx + 1}
+                    </td>
+                    {columns.map((col) => {
+                      const cellValue = group[col.key];
+                      const isArray = Array.isArray(cellValue);
+                      return (
+                        <td
+                          key={col.key}
+                          className={`py-4 px-4 ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"} ${col.key === columns[0].key ? "font-semibold" : ""}`}
+                        >
+                          {isArray ? (
+                            <div className="space-y-1">
+                              {cellValue.map((v: string, i: number) => (
+                                <div key={i}>{v}</div>
+                              ))}
+                            </div>
+                          ) : (
+                            cellValue
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [chartGroupBy, setChartGroupBy] = useState("month");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const chartMonthRef = useRef<HTMLDivElement>(null);
+  const chartCustomerRef = useRef<HTMLDivElement>(null);
 
   const monthOptions = useMemo(() => generateMonthOptions(), []);
 
@@ -50,8 +153,12 @@ export default function ReportsPage() {
     queryKey: ["/api/reports/kpis", `?month=${selectedMonth}`],
   });
 
-  const { data: chartData = [], isLoading: loadingChart } = useQuery<any[]>({
-    queryKey: ["/api/reports/livery", `?groupBy=${chartGroupBy}`],
+  const { data: chartDataMonth = [], isLoading: loadingChartMonth } = useQuery<any[]>({
+    queryKey: ["/api/reports/livery", "?groupBy=month"],
+  });
+
+  const { data: chartDataCustomer = [], isLoading: loadingChartCustomer } = useQuery<any[]>({
+    queryKey: ["/api/reports/livery", `?groupBy=customer&month=${selectedMonth}`],
   });
 
   const { data: newLiveryData = [], isLoading: loadingNew } = useQuery<any[]>({
@@ -66,102 +173,230 @@ export default function ReportsPage() {
     queryKey: ["/api/reports/all-customers"],
   });
 
-  const arrivalRows = useMemo(() => {
-    const rows: any[] = [];
-    newLiveryData.forEach((group: any) => {
-      group.horses.forEach((h: any) => {
-        rows.push({
-          customerName: group.customerName,
-          horseName: h.horseName,
-          horseCount: group.horseCount,
-          arrivalDate: h.arrivalDate,
-          departureDate: h.departureDate || "",
-          liveryPackage: h.liveryPackage || "N/A",
-        });
-      });
-    });
-    return rows;
+  const formattedChartMonth = useMemo(() => {
+    return chartDataMonth.map((d: any) => ({
+      ...d,
+      label: formatMonthLabel(d.label),
+    }));
+  }, [chartDataMonth]);
+
+  const arrivalGroups = useMemo(() => {
+    return newLiveryData.map((group: any) => ({
+      customerName: group.customerName,
+      horseNames: group.horses.map((h: any) => h.horseName),
+      horseCount: String(group.horseCount),
+      arrivalDates: group.horses.map((h: any) => formatDate(h.arrivalDate)),
+      departureDates: group.horses.map((h: any) => h.departureDate ? formatDate(h.departureDate) : "-"),
+      liveryPackages: group.horses.map((h: any) => h.liveryPackage || "N/A"),
+    }));
   }, [newLiveryData]);
 
-  const departureRows = useMemo(() => {
-    const rows: any[] = [];
-    departedData.forEach((group: any) => {
-      group.horses.forEach((h: any) => {
-        rows.push({
-          customerName: group.customerName,
-          horseName: h.horseName,
-          horseCount: group.horseCount,
-          arrivalDate: "",
-          departureDate: h.departureDate,
-          liveryPackage: "",
-        });
-      });
-    });
-    return rows;
+  const departureGroups = useMemo(() => {
+    return departedData.map((group: any) => ({
+      customerName: group.customerName,
+      horseNames: group.horses.map((h: any) => h.horseName),
+      horseCount: String(group.horseCount),
+      arrivalDates: group.horses.map(() => "-"),
+      departureDates: group.horses.map((h: any) => formatDate(h.departureDate)),
+      liveryPackages: group.horses.map(() => "-"),
+    }));
   }, [departedData]);
 
-  const customerGrouped = useMemo(() => {
+  const allCustomerGroups = useMemo(() => {
     const grouped: Record<string, any> = {};
     for (const row of allCustomersData) {
       if (!grouped[row.customerName]) {
-        grouped[row.customerName] = { customerName: row.customerName, horses: [], horseCount: 0 };
+        grouped[row.customerName] = {
+          customerName: row.customerName,
+          horseNames: [],
+          horseCount: 0,
+          arrivalDates: [],
+          departureDates: [],
+          liveryPackages: [],
+        };
       }
-      grouped[row.customerName].horses.push(row);
+      grouped[row.customerName].horseNames.push(row.horseName);
       grouped[row.customerName].horseCount++;
+      grouped[row.customerName].arrivalDates.push(formatDate(row.arrivalDate));
+      grouped[row.customerName].departureDates.push(row.departureDate ? formatDate(row.departureDate) : "-");
+      grouped[row.customerName].liveryPackages.push(row.liveryPackage);
     }
-    return Object.values(grouped);
+    return Object.values(grouped).map((g: any) => ({ ...g, horseCount: String(g.horseCount) }));
   }, [allCustomersData]);
 
-  const formattedChartData = useMemo(() => {
-    return chartData.map((d: any) => ({
-      ...d,
-      label: chartGroupBy === "month" ? formatMonthLabel(d.label) : d.label,
-    }));
-  }, [chartData, chartGroupBy]);
+  const tableColumns = [
+    { key: "customerName", label: "Livery Customer" },
+    { key: "horseNames", label: "Horse Name", align: "center" },
+    { key: "horseCount", label: "No. of Horses", align: "center" },
+    { key: "arrivalDates", label: "Arrival Date" },
+    { key: "departureDates", label: "Departure Date" },
+    { key: "liveryPackages", label: "Livery Package" },
+  ];
 
   const kpiCards = [
-    {
-      title: "Total Revenue",
-      value: kpis ? formatCurrency(kpis.totalRevenue) : "-",
-      icon: DollarSign,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
-    },
-    {
-      title: "Livery Revenue",
-      value: kpis ? formatCurrency(kpis.liveryRevenue) : "-",
-      icon: TrendingUp,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/30",
-    },
-    {
-      title: "Adhoc Revenue",
-      value: kpis ? formatCurrency(kpis.adhocRevenue) : "-",
-      icon: Zap,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50 dark:bg-orange-950/30",
-    },
-    {
-      title: "Livery Horses",
-      value: kpis ? String(kpis.liveryHorses) : "-",
-      icon: Heart,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50 dark:bg-purple-950/30",
-    },
-    {
-      title: "Livery Customers",
-      value: kpis ? String(kpis.liveryCustomers) : "-",
-      icon: Users,
-      color: "text-pink-600",
-      bgColor: "bg-pink-50 dark:bg-pink-950/30",
-    },
+    { title: "Total Revenue", value: kpis ? formatCurrency(kpis.totalRevenue) : "-", icon: DollarSign, color: "text-emerald-600", bgColor: "bg-emerald-50 dark:bg-emerald-950/30" },
+    { title: "Livery Revenue", value: kpis ? formatCurrency(kpis.liveryRevenue) : "-", icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-50 dark:bg-blue-950/30" },
+    { title: "Adhoc Revenue", value: kpis ? formatCurrency(kpis.adhocRevenue) : "-", icon: Zap, color: "text-orange-600", bgColor: "bg-orange-50 dark:bg-orange-950/30" },
+    { title: "Livery Horses", value: kpis ? String(kpis.liveryHorses) : "-", icon: Heart, color: "text-purple-600", bgColor: "bg-purple-50 dark:bg-purple-950/30" },
+    { title: "Livery Customers", value: kpis ? String(kpis.liveryCustomers) : "-", icon: Users, color: "text-pink-600", bgColor: "bg-pink-50 dark:bg-pink-950/30" },
   ];
+
+  const downloadPdf = useCallback(async () => {
+    setDownloadingPdf(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const monthLabel = formatMonthLabel(selectedMonth);
+
+      const addFooter = () => {
+        pdf.setFontSize(8);
+        pdf.setTextColor(128);
+        pdf.text(`Generated on ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, pw / 2, ph - 5, { align: "center" });
+        pdf.setTextColor(0);
+      };
+
+      pdf.setFontSize(20);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Livery Report", pw / 2, 20, { align: "center" });
+      pdf.setFontSize(14);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(76, 175, 80);
+      pdf.text(monthLabel, pw / 2, 30, { align: "center" });
+      pdf.setTextColor(0);
+
+      const kpiY = 45;
+      const kpiW = (pw - 60) / 5;
+      const kpiLabels = ["Total Revenue", "Livery Revenue", "Adhoc Revenue", "Livery Horses", "Livery Customers"];
+      const kpiValues = kpis ? [
+        formatCurrency(kpis.totalRevenue),
+        formatCurrency(kpis.liveryRevenue),
+        formatCurrency(kpis.adhocRevenue),
+        String(kpis.liveryHorses),
+        String(kpis.liveryCustomers),
+      ] : ["-", "-", "-", "-", "-"];
+
+      for (let i = 0; i < 5; i++) {
+        const x = 15 + i * (kpiW + 7.5);
+        pdf.setFillColor(240, 249, 240);
+        pdf.roundedRect(x, kpiY, kpiW, 30, 3, 3, "F");
+        pdf.setFontSize(8);
+        pdf.setTextColor(100);
+        pdf.text(kpiLabels[i], x + kpiW / 2, kpiY + 10, { align: "center" });
+        pdf.setFontSize(13);
+        pdf.setTextColor(0);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(kpiValues[i], x + kpiW / 2, kpiY + 22, { align: "center" });
+        pdf.setFont("helvetica", "normal");
+      }
+      addFooter();
+
+      const captureChart = async (ref: React.RefObject<HTMLDivElement | null>) => {
+        if (!ref.current) return null;
+        const canvas = await html2canvas(ref.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+        return canvas.toDataURL("image/png");
+      };
+
+      const monthChartImg = await captureChart(chartMonthRef);
+      if (monthChartImg) {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("Revenue Breakdown — Per Month", pw / 2, 18, { align: "center" });
+        const imgW = pw - 30;
+        const imgH = Math.min((imgW * 0.55), ph - 40);
+        pdf.addImage(monthChartImg, "PNG", 15, 25, imgW, imgH);
+        addFooter();
+      }
+
+      const customerChartImg = await captureChart(chartCustomerRef);
+      if (customerChartImg) {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`Revenue Breakdown — Per Customer (${monthLabel})`, pw / 2, 18, { align: "center" });
+        const imgW = pw - 30;
+        const imgH = Math.min((imgW * 0.55), ph - 40);
+        pdf.addImage(customerChartImg, "PNG", 15, 25, imgW, imgH);
+        addFooter();
+      }
+
+      const headStyle = { fillColor: [76, 175, 80] as [number, number, number], textColor: 255 as number, fontStyle: "bold" as const, fontSize: 9 };
+      const altRow = { fillColor: [232, 245, 232] as [number, number, number] };
+      const tblMargin = { left: 15, right: 15 };
+      const tblHead = [["#", "Livery Customer", "Horse Name", "No. of Horses", "Arrival Date", "Departure Date", "Livery Package"]];
+
+      const buildTableRows = (groups: any[]) => {
+        const rows: any[][] = [];
+        groups.forEach((g, idx) => {
+          const count = g.horseNames.length;
+          for (let i = 0; i < count; i++) {
+            rows.push([
+              i === 0 ? String(idx + 1) : "",
+              i === 0 ? g.customerName : "",
+              g.horseNames[i],
+              i === 0 ? g.horseCount : "",
+              g.arrivalDates[i],
+              g.departureDates[i],
+              g.liveryPackages[i],
+            ]);
+          }
+        });
+        return rows;
+      };
+
+      if (arrivalGroups.length > 0) {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`Livery Customers Arrival — ${monthLabel}`, pw / 2, 18, { align: "center" });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(arrivalGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        addFooter();
+      }
+
+      if (departureGroups.length > 0) {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`Livery Customers Departure — ${monthLabel}`, pw / 2, 18, { align: "center" });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(departureGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        addFooter();
+      }
+
+      if (allCustomerGroups.length > 0) {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("List of All Customers", pw / 2, 18, { align: "center" });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(allCustomerGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        addFooter();
+      }
+
+      pdf.save(`livery-report-${selectedMonth}.pdf`);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [selectedMonth, kpis, arrivalGroups, departureGroups, allCustomerGroups]);
+
+  const activeChartData = chartGroupBy === "month" ? formattedChartMonth : chartDataCustomer;
+  const activeChartLoading = chartGroupBy === "month" ? loadingChartMonth : loadingChartCustomer;
 
   return (
     <div className="p-6 space-y-8">
       <PageHeader
         title="Reports"
         description="Key metrics, revenue analysis, and customer details"
+        actions={
+          <Button
+            variant="outline"
+            onClick={downloadPdf}
+            disabled={downloadingPdf || loadingKpis}
+            data-testid="button-download-pdf"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {downloadingPdf ? "Generating..." : "Download to PDF"}
+          </Button>
+        }
       />
 
       {/* Month Filter */}
@@ -204,7 +439,12 @@ export default function ReportsPage() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Revenue Breakdown</CardTitle>
+            <CardTitle className="text-lg">
+              Revenue Breakdown
+              {chartGroupBy === "customer" && (
+                <span className="ml-2 text-green-600 font-normal text-base">for {formatMonthLabel(selectedMonth)}</span>
+              )}
+            </CardTitle>
             <div className="flex items-center gap-2">
               <Label className="text-sm text-muted-foreground">View by</Label>
               <Select value={chartGroupBy} onValueChange={setChartGroupBy}>
@@ -220,13 +460,13 @@ export default function ReportsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {loadingChart ? (
+          {activeChartLoading ? (
             <div className="h-80 flex items-center justify-center text-muted-foreground">Loading chart data...</div>
-          ) : formattedChartData.length === 0 ? (
+          ) : activeChartData.length === 0 ? (
             <div className="h-80 flex items-center justify-center text-muted-foreground">No revenue data available</div>
           ) : (
             <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={formattedChartData} margin={{ top: 5, right: 30, left: 20, bottom: chartGroupBy === "customer" ? 80 : 5 }}>
+              <BarChart data={activeChartData} margin={{ top: 20, right: 30, left: 20, bottom: chartGroupBy === "customer" ? 80 : 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis
                   dataKey="label"
@@ -236,7 +476,7 @@ export default function ReportsPage() {
                   interval={0}
                   height={chartGroupBy === "customer" ? 100 : 30}
                 />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatK(v)} />
                 <Tooltip
                   formatter={(value: number, name: string) => [formatCurrency(value), name]}
                   contentStyle={{
@@ -247,156 +487,86 @@ export default function ReportsPage() {
                   }}
                 />
                 <Legend />
-                <Bar
-                  dataKey="liveryRevenue"
-                  name="Livery Revenue"
-                  stackId="revenue"
-                  fill="hsl(197, 84%, 42%)"
-                  radius={[0, 0, 0, 0]}
-                />
-                <Bar
-                  dataKey="adhocRevenue"
-                  name="Adhoc Revenue"
-                  stackId="revenue"
-                  fill="hsl(25, 95%, 53%)"
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="liveryRevenue" name="Livery Revenue" stackId="revenue" fill="hsl(197, 84%, 42%)">
+                  <LabelList dataKey="liveryRevenue" position="inside" fill="#fff" fontSize={10} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
+                <Bar dataKey="adhocRevenue" name="Adhoc Revenue" stackId="revenue" fill="hsl(25, 95%, 53%)" radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="adhocRevenue" position="inside" fill="#fff" fontSize={10} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
 
-      {/* Bottom Lists Section */}
+      {/* Hidden charts for PDF capture */}
+      <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
+        <div ref={chartMonthRef} style={{ width: 1100, height: 500, backgroundColor: "#fff", padding: 20 }}>
+          {formattedChartMonth.length > 0 && (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={formattedChartMonth} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatK(v)} />
+                <Legend />
+                <Bar dataKey="liveryRevenue" name="Livery Revenue" stackId="revenue" fill="hsl(197, 84%, 42%)">
+                  <LabelList dataKey="liveryRevenue" position="inside" fill="#fff" fontSize={10} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
+                <Bar dataKey="adhocRevenue" name="Adhoc Revenue" stackId="revenue" fill="hsl(25, 95%, 53%)" radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="adhocRevenue" position="inside" fill="#fff" fontSize={10} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div ref={chartCustomerRef} style={{ width: 1100, height: 500, backgroundColor: "#fff", padding: 20 }}>
+          {chartDataCustomer.length > 0 && (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartDataCustomer} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" interval={0} height={100} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatK(v)} />
+                <Legend />
+                <Bar dataKey="liveryRevenue" name="Livery Revenue" stackId="revenue" fill="hsl(197, 84%, 42%)">
+                  <LabelList dataKey="liveryRevenue" position="inside" fill="#fff" fontSize={9} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
+                <Bar dataKey="adhocRevenue" name="Adhoc Revenue" stackId="revenue" fill="hsl(25, 95%, 53%)" radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="adhocRevenue" position="inside" fill="#fff" fontSize={9} formatter={(v: number) => v > 0 ? formatK(v) : ""} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Lists */}
       <div className="space-y-6">
-        {/* Livery Customers Arrival */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg" data-testid="text-arrival-title">
-              Livery Customers Arrival — {formatMonthLabel(selectedMonth)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingNew ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">Loading...</div>
-            ) : arrivalRows.length === 0 ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">No new arrivals this month</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-arrivals">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Customer</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Horse Name</th>
-                      <th className="text-center py-2.5 px-4 font-semibold">No. of Horses</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Arrival Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Departure Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Package</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {arrivalRows.map((row: any, idx: number) => (
-                      <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/30" data-testid={`row-arrival-${idx}`}>
-                        <td className="py-2.5 px-4 font-medium">{row.customerName}</td>
-                        <td className="py-2.5 px-4">{row.horseName}</td>
-                        <td className="py-2.5 px-4 text-center">{row.horseCount}</td>
-                        <td className="py-2.5 px-4">{formatDate(row.arrivalDate)}</td>
-                        <td className="py-2.5 px-4">{row.departureDate ? formatDate(row.departureDate) : "-"}</td>
-                        <td className="py-2.5 px-4">{row.liveryPackage}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <StyledTable
+          title={`Livery Customers Arrival — ${formatMonthLabel(selectedMonth)}`}
+          columns={tableColumns}
+          groups={arrivalGroups}
+          loading={loadingNew}
+          emptyMessage="No new arrivals this month"
+          testId="table-arrivals"
+        />
 
-        {/* Livery Customers Departure */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg" data-testid="text-departure-title">
-              Livery Customers Departure — {formatMonthLabel(selectedMonth)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingDeparted ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">Loading...</div>
-            ) : departureRows.length === 0 ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">No departures this month</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-departures">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Customer</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Horse Name</th>
-                      <th className="text-center py-2.5 px-4 font-semibold">No. of Horses</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Arrival Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Departure Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Package</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {departureRows.map((row: any, idx: number) => (
-                      <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/30" data-testid={`row-departure-${idx}`}>
-                        <td className="py-2.5 px-4 font-medium">{row.customerName}</td>
-                        <td className="py-2.5 px-4">{row.horseName}</td>
-                        <td className="py-2.5 px-4 text-center">{row.horseCount}</td>
-                        <td className="py-2.5 px-4">-</td>
-                        <td className="py-2.5 px-4">{formatDate(row.departureDate)}</td>
-                        <td className="py-2.5 px-4">-</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <StyledTable
+          title={`Livery Customers Departure — ${formatMonthLabel(selectedMonth)}`}
+          columns={tableColumns}
+          groups={departureGroups}
+          loading={loadingDeparted}
+          emptyMessage="No departures this month"
+          testId="table-departures"
+        />
 
-        {/* List of All Customers */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg" data-testid="text-all-customers-title">List of All Customers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingAllCustomers ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">Loading...</div>
-            ) : customerGrouped.length === 0 ? (
-              <div className="h-32 flex items-center justify-center text-muted-foreground">No active customers with agreements</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-all-customers">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Customer</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Horse Name</th>
-                      <th className="text-center py-2.5 px-4 font-semibold">No. of Horses</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Arrival Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Departure Date</th>
-                      <th className="text-left py-2.5 px-4 font-semibold">Livery Package</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerGrouped.map((group: any, gIdx: number) => (
-                      group.horses.map((h: any, hIdx: number) => (
-                        <tr key={`${gIdx}-${hIdx}`} className="border-b last:border-b-0 hover:bg-muted/30" data-testid={`row-all-customer-${gIdx}-${hIdx}`}>
-                          <td className="py-2.5 px-4 font-medium">{hIdx === 0 ? group.customerName : ""}</td>
-                          <td className="py-2.5 px-4">{h.horseName}</td>
-                          <td className="py-2.5 px-4 text-center">{hIdx === 0 ? group.horseCount : ""}</td>
-                          <td className="py-2.5 px-4">{formatDate(h.arrivalDate)}</td>
-                          <td className="py-2.5 px-4">{h.departureDate ? formatDate(h.departureDate) : "-"}</td>
-                          <td className="py-2.5 px-4">{h.liveryPackage}</td>
-                        </tr>
-                      ))
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <StyledTable
+          title="List of All Customers"
+          columns={tableColumns}
+          groups={allCustomerGroups}
+          loading={loadingAllCustomers}
+          emptyMessage="No active customers with agreements"
+          testId="table-all-customers"
+        />
       </div>
     </div>
   );

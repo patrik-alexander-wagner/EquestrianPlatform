@@ -935,7 +935,8 @@ export async function registerRoutes(
   app.get("/api/reports/livery", async (req, res) => {
     try {
       const groupBy = (req.query.groupBy as string) || "month";
-      const data = await storage.getReportData(groupBy);
+      const month = req.query.month as string | undefined;
+      const data = await storage.getReportData(groupBy, month);
       res.json(data);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
