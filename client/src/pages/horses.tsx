@@ -11,10 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Upload, MoreVertical } from "lucide-react";
 
 export default function HorsesPage() {
+  const userRole = useUserRole();
+  const isAdmin = userRole === "ADMIN";
   const [search, setSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableBoxSearch, setStableBoxSearch] = useState("");
@@ -110,7 +113,7 @@ export default function HorsesPage() {
       <PageHeader
         title="Horses"
         description="Manage horses used in livery agreements"
-        actions={
+        actions={isAdmin ? (
           <>
             <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-horses">
               <Upload className="w-4 h-4 mr-2" />
@@ -121,7 +124,7 @@ export default function HorsesPage() {
               New Horse
             </Button>
           </>
-        }
+        ) : undefined}
       />
 
       <div className="flex gap-3 mb-4 flex-wrap">

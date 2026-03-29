@@ -13,11 +13,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MoreVertical, Trash2, Upload } from "lucide-react";
 import type { Stable } from "@shared/schema";
 
 export default function BoxesPage() {
+  const userRole = useUserRole();
+  const isAdmin = userRole === "ADMIN";
   const [stableSearch, setStableSearch] = useState("");
   const [boxSearch, setBoxSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -121,7 +124,7 @@ export default function BoxesPage() {
       <PageHeader
         title="Boxes"
         description="Manage boxes, tack rooms, and storage rooms"
-        actions={
+        actions={isAdmin ? (
           <>
             <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-boxes">
               <Upload className="w-4 h-4 mr-2" />
@@ -132,7 +135,7 @@ export default function BoxesPage() {
               New Box
             </Button>
           </>
-        }
+        ) : undefined}
       />
 
       <div className="flex gap-3 mb-4 flex-wrap">

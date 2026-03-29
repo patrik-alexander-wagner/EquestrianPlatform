@@ -10,11 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Upload, Plus } from "lucide-react";
 import type { Customer } from "@shared/schema";
 
 export default function CustomersPage() {
+  const userRole = useUserRole();
+  const isAdmin = userRole === "ADMIN";
   const [search, setSearch] = useState("");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -72,7 +75,7 @@ export default function CustomersPage() {
       <PageHeader
         title="Customers"
         description="View customers synced from NetSuite"
-        actions={
+        actions={isAdmin ? (
           <>
             <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-customers">
               <Upload className="w-4 h-4 mr-2" />
@@ -83,7 +86,7 @@ export default function CustomersPage() {
               New Customer (Temp)
             </Button>
           </>
-        }
+        ) : undefined}
       />
 
       <div className="mb-4">

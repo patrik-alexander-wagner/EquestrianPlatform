@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MoreVertical, Trash2 } from "lucide-react";
 import type { Stable } from "@shared/schema";
 
 export default function StablesPage() {
+  const userRole = useUserRole();
+  const isAdmin = userRole === "ADMIN";
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingStable, setEditingStable] = useState<Stable | null>(null);
@@ -58,12 +61,12 @@ export default function StablesPage() {
       <PageHeader
         title="Stables"
         description="Manage stable infrastructure"
-        actions={
+        actions={isAdmin ? (
           <Button onClick={() => setShowCreateDialog(true)} data-testid="button-new-stable">
             <Plus className="w-4 h-4 mr-2" />
             New Stable
           </Button>
-        }
+        ) : undefined}
       />
 
       <DataTable

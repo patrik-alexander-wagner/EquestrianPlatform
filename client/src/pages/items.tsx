@@ -8,11 +8,14 @@ import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
 import type { Item } from "@shared/schema";
 
 export default function ItemsPage() {
+  const userRole = useUserRole();
+  const isAdmin = userRole === "ADMIN";
   const [search, setSearch] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
   const { toast } = useToast();
@@ -82,12 +85,12 @@ export default function ItemsPage() {
       <PageHeader
         title="Items"
         description="Items and service items. Unit Factor = quantity unit for pricing, Price = price for that unit factor."
-        actions={
+        actions={isAdmin ? (
           <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-items">
             <Upload className="w-4 h-4 mr-2" />
             Import (Temp)
           </Button>
-        }
+        ) : undefined}
       />
 
       <div className="mb-4">
