@@ -170,7 +170,6 @@ export function ImportDialog({
   const handleImport = () => {
     const data = getMappedData();
     onImport(data);
-    reset();
   };
 
   return (

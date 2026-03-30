@@ -232,7 +232,12 @@ export async function registerRoutes(
       if (!Array.isArray(data)) throw { status: 400, message: "customers must be an array" };
       const results = [];
       for (const c of data) {
-        const validated = validateBody(insertCustomerSchema, c);
+        const withDefaults = {
+          ...c,
+          firstname: c.firstname || "",
+          lastname: c.lastname || "",
+        };
+        const validated = validateBody(insertCustomerSchema, withDefaults);
         const created = await storage.createCustomer(validated);
         results.push(created);
       }

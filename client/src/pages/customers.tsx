@@ -43,6 +43,9 @@ export default function CustomersPage() {
       setShowImportDialog(false);
       toast({ title: "Customers imported successfully" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Import failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const columns = [
