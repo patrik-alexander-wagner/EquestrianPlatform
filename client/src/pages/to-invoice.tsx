@@ -5,6 +5,7 @@ import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,8 +18,8 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { FileText, Trash2 } from "lucide-react";
-import type { Customer } from "@shared/schema";
+import { FileText, Trash2, Pencil } from "lucide-react";
+import type { Customer, Item } from "@shared/schema";
 
 type LineItem = {
   key: string;
@@ -90,6 +91,18 @@ export default function ToInvoicePage() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingElement, setEditingElement] = useState<any>(null);
+  const [editHorseId, setEditHorseId] = useState("");
+  const [editHorseSearch, setEditHorseSearch] = useState("");
+  const [editHorseDropdownOpen, setEditHorseDropdownOpen] = useState(false);
+  const [editItemId, setEditItemId] = useState("");
+  const [editItemSearch, setEditItemSearch] = useState("");
+  const [editItemDropdownOpen, setEditItemDropdownOpen] = useState(false);
+  const [editQuantity, setEditQuantity] = useState(1);
+  const [editFinalPrice, setEditFinalPrice] = useState("");
+  const [editTransactionDate, setEditTransactionDate] = useState("");
+
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
@@ -100,6 +113,14 @@ export default function ToInvoicePage() {
 
   const { data: billingElements = [] } = useQuery<any[]>({
     queryKey: ["/api/billing-elements", "?billed=false"],
+  });
+
+  const { data: nonLiveryItems = [] } = useQuery<Item[]>({
+    queryKey: ["/api/items/non-livery-packages"],
+  });
+
+  const { data: allHorses = [] } = useQuery<any[]>({
+    queryKey: ["/api/horses"],
   });
 
   const agreementIds = useMemo(() => agreements.map((a: any) => a.id), [agreements]);
@@ -167,6 +188,76 @@ export default function ToInvoicePage() {
       toast({ title: "Failed to delete billing element", variant: "destructive" });
     },
   });
+
+  const editBillingMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PATCH", `/api/billing-elements/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
+      setShowEditDialog(false);
+      toast({ title: "Billing element updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update billing element", variant: "destructive" });
+    },
+  });
+
+  const openEditDialog = (li: LineItem) => {
+    const be = billingElements.find((b: any) => b.id === li.billingElementId);
+    if (!be) return;
+    setEditingElement(be);
+    setEditHorseId(be.horseId || "");
+    setEditHorseSearch("");
+    setEditHorseDropdownOpen(false);
+    setEditItemId(be.itemId || "");
+    setEditItemSearch("");
+    setEditItemDropdownOpen(false);
+    setEditQuantity(be.quantity || 1);
+    setEditFinalPrice(be.price ? String(parseFloat(be.price)) : "");
+    setEditTransactionDate(be.transactionDate || "");
+    setShowEditDialog(true);
+  };
+
+  const editSelectedItem = nonLiveryItems.find(i => i.id === editItemId);
+  const editItemPrice = editSelectedItem?.price ? parseFloat(editSelectedItem.price) : 0;
+  const editItemUnitFactor = editSelectedItem?.unitFactor ? parseFloat(editSelectedItem.unitFactor) : 1;
+  const editComputedPrice = editItemUnitFactor > 0 ? (editItemPrice / editItemUnitFactor) * editQuantity : 0;
+
+  const handleEditItemChange = (val: string) => {
+    setEditItemId(val);
+    const item = nonLiveryItems.find(i => i.id === val);
+    const price = item?.price ? parseFloat(item.price) : 0;
+    const uf = item?.unitFactor ? parseFloat(item.unitFactor) : 1;
+    const computed = uf > 0 ? (price / uf) * editQuantity : 0;
+    setEditFinalPrice(computed.toFixed(2));
+  };
+
+  const handleEditQuantityChange = (newQty: number) => {
+    setEditQuantity(newQty);
+    if (editSelectedItem) {
+      const computed = editItemUnitFactor > 0 ? (editItemPrice / editItemUnitFactor) * newQty : 0;
+      setEditFinalPrice(computed.toFixed(2));
+    }
+  };
+
+  const filteredEditItems = useMemo(() => {
+    if (!editItemSearch.trim()) return nonLiveryItems;
+    const search = editItemSearch.toLowerCase();
+    return nonLiveryItems.filter((i: Item) =>
+      i.name.toLowerCase().includes(search) ||
+      (i.department && i.department.toLowerCase().includes(search)) ||
+      (i.location && i.location.toLowerCase().includes(search))
+    );
+  }, [nonLiveryItems, editItemSearch]);
+
+  const filteredEditHorses = useMemo(() => {
+    const active = allHorses.filter((h: any) => h.status === "active");
+    if (!editHorseSearch.trim()) return active;
+    const s = editHorseSearch.toLowerCase();
+    return active.filter((h: any) => h.horseName.toLowerCase().includes(s));
+  }, [allHorses, editHorseSearch]);
+
+  const selectedEditHorse = allHorses.find((h: any) => h.id === editHorseId);
 
   const billingMonthLabel = useMemo(() => {
     if (!billingMonth) return "";
@@ -371,16 +462,27 @@ export default function ToInvoicePage() {
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
                           <TableCell>
                             {li.type === "billing" && li.billingElementId && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => deleteBillingMutation.mutate(li.billingElementId!)}
-                                disabled={deleteBillingMutation.isPending}
-                                data-testid={`button-delete-billing-${li.billingElementId}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openEditDialog(li)}
+                                  data-testid={`button-edit-billing-${li.billingElementId}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive"
+                                  onClick={() => deleteBillingMutation.mutate(li.billingElementId!)}
+                                  disabled={deleteBillingMutation.isPending}
+                                  data-testid={`button-delete-billing-${li.billingElementId}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>
@@ -407,6 +509,219 @@ export default function ToInvoicePage() {
           })}
         </div>
       )}
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Billing Element</DialogTitle>
+            <DialogDescription>Update the billing element details</DialogDescription>
+          </DialogHeader>
+          {editingElement && (
+            <form
+              onSubmit={(e) => { e.preventDefault(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+            >
+              <div className="space-y-4">
+                <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                  <div>Customer: <strong>{customers.find(c => c.id === editingElement.customerId)?.fullname || "Unknown"}</strong></div>
+                </div>
+
+                <div className="relative">
+                  <Label>Horse</Label>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-edit-horse-search"
+                      placeholder="Search horse..."
+                      value={selectedEditHorse && !editHorseDropdownOpen ? selectedEditHorse.horseName : editHorseSearch}
+                      onChange={(e) => {
+                        setEditHorseSearch(e.target.value);
+                        setEditHorseDropdownOpen(true);
+                        if (editHorseId) setEditHorseId("");
+                      }}
+                      onFocus={() => setEditHorseDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setEditHorseDropdownOpen(false), 200)}
+                    />
+                    {editHorseId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => { setEditHorseId(""); setEditHorseSearch(""); setEditHorseDropdownOpen(true); }}
+                      >✕</button>
+                    )}
+                  </div>
+                  {editHorseDropdownOpen && !editHorseId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {filteredEditHorses.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No horses found</div>
+                      ) : (
+                        filteredEditHorses.map((h: any) => (
+                          <button
+                            type="button"
+                            key={h.id}
+                            data-testid={`edit-horse-option-${h.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => { setEditHorseId(h.id); setEditHorseSearch(""); setEditHorseDropdownOpen(false); }}
+                          >
+                            <div className="font-medium">{h.horseName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <Label>Item</Label>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-edit-item-search"
+                      placeholder="Search items by name, department, or location..."
+                      value={editSelectedItem && !editItemDropdownOpen ? `${editSelectedItem.name}${editSelectedItem.price ? ` - AED ${editSelectedItem.price}` : ""}` : editItemSearch}
+                      onChange={(e) => {
+                        setEditItemSearch(e.target.value);
+                        setEditItemDropdownOpen(true);
+                        if (editItemId) {
+                          setEditItemId("");
+                          setEditFinalPrice("");
+                        }
+                      }}
+                      onFocus={() => setEditItemDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setEditItemDropdownOpen(false), 200)}
+                    />
+                    {editItemId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => {
+                          setEditItemId("");
+                          setEditItemSearch("");
+                          setEditFinalPrice("");
+                          setEditItemDropdownOpen(true);
+                        }}
+                        data-testid="button-edit-clear-item"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {editItemDropdownOpen && !editItemId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {filteredEditItems.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No items found</div>
+                      ) : (
+                        filteredEditItems.map(i => (
+                          <button
+                            type="button"
+                            key={i.id}
+                            data-testid={`edit-item-option-${i.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => {
+                              handleEditItemChange(i.id);
+                              setEditItemSearch("");
+                              setEditItemDropdownOpen(false);
+                            }}
+                          >
+                            <div className="font-medium">{i.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {i.price ? `AED ${i.price}` : "No price"}{i.department ? ` · ${i.department}` : ""}{i.location ? ` · ${i.location}` : ""}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {editSelectedItem && (
+                  <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span>Unit Factor:</span>
+                      <span>{editItemUnitFactor}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Base Price (per unit factor):</span>
+                      <span>AED {editItemPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Quantity</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={editQuantity}
+                    onChange={(e) => handleEditQuantityChange(parseInt(e.target.value) || 1)}
+                    data-testid="input-edit-quantity"
+                  />
+                </div>
+
+                {editSelectedItem && (
+                  <div className="flex gap-4 items-end">
+                    <div className="flex-1">
+                      <Label className="text-muted-foreground">Computed Price</Label>
+                      <Input
+                        type="text"
+                        value={`AED ${editComputedPrice.toFixed(2)}`}
+                        readOnly
+                        className="bg-muted"
+                        data-testid="text-edit-computed-price"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label>Final Selling Price</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editFinalPrice}
+                        onChange={(e) => setEditFinalPrice(e.target.value)}
+                        data-testid="input-edit-final-price"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Transaction Date</Label>
+                  <Input
+                    type="date"
+                    value={editTransactionDate}
+                    onChange={(e) => setEditTransactionDate(e.target.value)}
+                    required
+                    data-testid="input-edit-date"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="mt-4">
+                <Button
+                  type="button"
+                  disabled={editBillingMutation.isPending || !editItemId || !editFinalPrice || !editTransactionDate || editQuantity < 1 || parseFloat(editFinalPrice) <= 0}
+                  data-testid="button-submit-edit-billing"
+                  onClick={() => {
+                    if (!editTransactionDate || !/^\d{4}-\d{2}-\d{2}$/.test(editTransactionDate)) return;
+                    if (!editFinalPrice || parseFloat(editFinalPrice) <= 0) return;
+                    editBillingMutation.mutate({
+                      id: editingElement.id,
+                      data: {
+                        horseId: editHorseId || null,
+                        itemId: editItemId,
+                        quantity: editQuantity,
+                        price: parseFloat(editFinalPrice).toFixed(2),
+                        transactionDate: editTransactionDate,
+                      },
+                    });
+                  }}
+                >
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

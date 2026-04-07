@@ -66,6 +66,7 @@ export interface IStorage {
   getBillingElements(billed?: boolean): Promise<any[]>;
   getBillingElement(id: string): Promise<BillingElement | undefined>;
   createBillingElement(element: InsertBillingElement): Promise<BillingElement>;
+  updateBillingElement(id: string, data: Partial<InsertBillingElement>): Promise<BillingElement | undefined>;
   deleteBillingElement(id: string): Promise<boolean>;
   getHorsesWithActiveAgreements(): Promise<any[]>;
 
@@ -421,6 +422,11 @@ export class DatabaseStorage implements IStorage {
   async createBillingElement(element: InsertBillingElement): Promise<BillingElement> {
     const [created] = await db.insert(billingElements).values(element).returning();
     return created;
+  }
+
+  async updateBillingElement(id: string, data: Partial<InsertBillingElement>): Promise<BillingElement | undefined> {
+    const [updated] = await db.update(billingElements).set(data).where(eq(billingElements.id, id)).returning();
+    return updated;
   }
 
   async deleteBillingElement(id: string): Promise<boolean> {

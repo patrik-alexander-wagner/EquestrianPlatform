@@ -12,7 +12,7 @@ import {
   insertAgreementDocumentSchema, VALID_ROLES,
 } from "@shared/schema";
 import type { UserRole, InvoiceStatus } from "@shared/schema";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 function validateBody(schema: any, body: any) {
   const result = schema.safeParse(body);
@@ -593,6 +593,43 @@ export async function registerRoutes(
       auditLog(req, "create_billing_element", "billing_element", element.id);
       res.json(element);
     } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.patch("/api/billing-elements/:id", async (req, res) => {
+    try {
+      const existing = await storage.getBillingElement(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Billing element not found" });
+      if (existing.billed) return res.status(400).json({ message: "Cannot edit a billed element" });
+
+      const editSchema = z.object({
+        horseId: z.string().uuid().nullable().optional(),
+        itemId: z.string().uuid().optional(),
+        quantity: z.number().int().min(1).optional(),
+        price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid price format").optional(),
+        transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format").optional(),
+      });
+      const parsed = editSchema.parse(req.body);
+      const allowedFields: Record<string, any> = {};
+      if (parsed.horseId !== undefined) allowedFields.horseId = parsed.horseId;
+      if (parsed.itemId !== undefined) allowedFields.itemId = parsed.itemId;
+      if (parsed.quantity !== undefined) allowedFields.quantity = parsed.quantity;
+      if (parsed.price !== undefined) allowedFields.price = parsed.price;
+      if (parsed.transactionDate !== undefined) {
+        allowedFields.transactionDate = parsed.transactionDate;
+        allowedFields.billingMonth = parsed.transactionDate.substring(0, 7);
+      }
+      if (Object.keys(allowedFields).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+      const updated = await storage.updateBillingElement(req.params.id, allowedFields);
+      auditLog(req, "update_billing_element", "billing_element", req.params.id);
+      res.json(updated);
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ message: e.errors.map((err: any) => err.message).join(", ") });
+      }
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });
