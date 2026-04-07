@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
@@ -48,6 +48,7 @@ export default function BillingElementsPage() {
   const [newPrice, setNewPrice] = useState("");
 
   const { toast } = useToast();
+  const saveAndCreateNewRef = useRef(false);
 
   const { data: horsesWithAgreements = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/horses-with-agreements"],
@@ -74,9 +75,19 @@ export default function BillingElementsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horses-with-agreements"] });
-      setShowAddDialog(false);
-      setShowNonLiveryDialog(false);
       toast({ title: "Billing element added successfully" });
+      if (saveAndCreateNewRef.current) {
+        saveAndCreateNewRef.current = false;
+        setSelectedItemId("");
+        setItemSearch("");
+        setItemDropdownOpen(false);
+        setQuantity(1);
+        setFinalSellingPrice("");
+        setTransactionDate(getTodayString());
+      } else {
+        setShowAddDialog(false);
+        setShowNonLiveryDialog(false);
+      }
     },
   });
 
@@ -450,12 +461,35 @@ export default function BillingElementsPage() {
                 {itemSearchDropdown}
                 {pricingFields}
               </div>
-              <DialogFooter className="mt-4">
+              <DialogFooter className="mt-4 flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice}
+                  data-testid="button-save-and-new-billing"
+                  onClick={() => {
+                    saveAndCreateNewRef.current = true;
+                    createMutation.mutate({
+                      horseId: selectedAgreementHorse.horseId,
+                      customerId: selectedAgreementHorse.customerId,
+                      boxId: selectedAgreementHorse.boxId,
+                      itemId: selectedItemId,
+                      quantity,
+                      price: finalSellingPrice,
+                      transactionDate,
+                      billingMonth: deriveBillingMonth(transactionDate),
+                      billed: false,
+                    });
+                  }}
+                >
+                  Save & Create New
+                </Button>
                 <Button
                   type="button"
                   disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice}
                   data-testid="button-submit-billing"
                   onClick={() => {
+                    saveAndCreateNewRef.current = false;
                     createMutation.mutate({
                       horseId: selectedAgreementHorse.horseId,
                       customerId: selectedAgreementHorse.customerId,
@@ -583,12 +617,36 @@ export default function BillingElementsPage() {
               {itemSearchDropdown}
               {pricingFields}
             </div>
-            <DialogFooter className="mt-4">
+            <DialogFooter className="mt-4 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice}
+                data-testid="button-save-and-new-non-livery-billing"
+                onClick={() => {
+                  saveAndCreateNewRef.current = true;
+                  createMutation.mutate({
+                    horseId: nlHorseId,
+                    customerId: nlCustomerId,
+                    boxId: null,
+                    itemId: selectedItemId,
+                    agreementId: null,
+                    quantity,
+                    price: finalSellingPrice,
+                    transactionDate,
+                    billingMonth: deriveBillingMonth(transactionDate),
+                    billed: false,
+                  });
+                }}
+              >
+                Save & Create New
+              </Button>
               <Button
                 type="button"
                 disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice}
                 data-testid="button-submit-non-livery-billing"
                 onClick={() => {
+                  saveAndCreateNewRef.current = false;
                   createMutation.mutate({
                     horseId: nlHorseId,
                     customerId: nlCustomerId,
