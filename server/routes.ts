@@ -1322,5 +1322,50 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/horse-movements/enriched", async (_req, res) => {
+    try {
+      const movements = await storage.getEnrichedHorseMovements();
+      res.json(movements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/box-grid", async (_req, res) => {
+    try {
+      const grid = await storage.getBoxGridWithOccupants();
+      res.json(grid);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/horse-movements/move", async (req, res) => {
+    try {
+      const schema = z.object({ movementId: z.string().uuid(), newBoxId: z.string().uuid() });
+      const data = validateBody(schema, req.body);
+      const newMovement = await storage.moveHorseToBox(data.movementId, data.newBoxId);
+      auditLog(req, "move_horse", "horse_movement", newMovement.id, `Moved horse to new box`);
+      res.json(newMovement);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/horse-movements/swap", async (req, res) => {
+    try {
+      const schema = z.object({
+        movementIdA: z.string().uuid(),
+        movementIdB: z.string().uuid(),
+      }).refine(d => d.movementIdA !== d.movementIdB, { message: "Cannot swap a movement with itself" });
+      const data = validateBody(schema, req.body);
+      const result = await storage.swapHorses(data.movementIdA, data.movementIdB);
+      auditLog(req, "swap_horses", "horse_movement", result.movementA.id, `Swapped horses between two boxes`);
+      res.json(result);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   return httpServer;
 }

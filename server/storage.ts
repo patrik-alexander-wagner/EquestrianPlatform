@@ -997,6 +997,124 @@ export class DatabaseStorage implements IStorage {
   async getHorseMovements(): Promise<HorseMovement[]> {
     return await db.select().from(horseMovements).orderBy(desc(horseMovements.createdAt));
   }
+
+  async getEnrichedHorseMovements(): Promise<any[]> {
+    const allMovements = await db.select().from(horseMovements).orderBy(desc(horseMovements.createdAt));
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allAgreements = await db.select().from(liveryAgreements);
+
+    return allMovements.map(m => {
+      const horse = allHorses.find(h => h.id === m.horseId);
+      const box = allBoxes.find(b => b.id === m.stableboxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const agreement = m.agreementId ? allAgreements.find(a => a.id === m.agreementId) : null;
+      const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
+      return {
+        ...m,
+        horseName: horse?.horseName || "Unknown",
+        customerName: customer?.fullname || "Unknown",
+        boxName: box?.name || "Unknown",
+        stableName: stable?.name || "Unknown",
+      };
+    });
+  }
+
+  async moveHorseToBox(movementId: string, newBoxId: string): Promise<any> {
+    return await db.transaction(async (tx) => {
+      const [currentMovement] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementId));
+      if (!currentMovement || currentMovement.checkOut) {
+        throw { status: 400, message: "No active movement found with that ID" };
+      }
+      const [existingOccupant] = await tx.select().from(horseMovements)
+        .where(and(eq(horseMovements.stableboxId, newBoxId), sql`${horseMovements.checkOut} IS NULL`));
+      if (existingOccupant) {
+        throw { status: 400, message: "Target box already has a horse checked in" };
+      }
+      const [targetBox] = await tx.select().from(boxes).where(eq(boxes.id, newBoxId));
+      if (!targetBox) {
+        throw { status: 400, message: "Target box does not exist" };
+      }
+      const today = new Date().toISOString().split("T")[0];
+      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementId));
+      const [newMovement] = await tx.insert(horseMovements).values({
+        agreementId: currentMovement.agreementId,
+        horseId: currentMovement.horseId,
+        stableboxId: newBoxId,
+        checkIn: today,
+      }).returning();
+      if (currentMovement.agreementId) {
+        await tx.update(liveryAgreements).set({ boxId: newBoxId }).where(eq(liveryAgreements.id, currentMovement.agreementId));
+      }
+      return newMovement;
+    });
+  }
+
+  async swapHorses(movementIdA: string, movementIdB: string): Promise<any> {
+    return await db.transaction(async (tx) => {
+      const [moveA] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementIdA));
+      const [moveB] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementIdB));
+      if (!moveA || moveA.checkOut || !moveB || moveB.checkOut) {
+        throw { status: 400, message: "Both boxes must have active movements to swap" };
+      }
+      const today = new Date().toISOString().split("T")[0];
+      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementIdA));
+      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementIdB));
+      const [newMoveA] = await tx.insert(horseMovements).values({
+        agreementId: moveA.agreementId,
+        horseId: moveA.horseId,
+        stableboxId: moveB.stableboxId,
+        checkIn: today,
+      }).returning();
+      const [newMoveB] = await tx.insert(horseMovements).values({
+        agreementId: moveB.agreementId,
+        horseId: moveB.horseId,
+        stableboxId: moveA.stableboxId,
+        checkIn: today,
+      }).returning();
+      if (moveA.agreementId) {
+        await tx.update(liveryAgreements).set({ boxId: moveB.stableboxId }).where(eq(liveryAgreements.id, moveA.agreementId));
+      }
+      if (moveB.agreementId) {
+        await tx.update(liveryAgreements).set({ boxId: moveA.stableboxId }).where(eq(liveryAgreements.id, moveB.agreementId));
+      }
+      return { movementA: newMoveA, movementB: newMoveB };
+    });
+  }
+
+  async getBoxGridWithOccupants(): Promise<any[]> {
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allMovements = await db.select().from(horseMovements);
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
+    const allAgreements = await db.select().from(liveryAgreements);
+    const allItems = await db.select().from(items);
+
+    return allBoxes.map(box => {
+      const stable = allStables.find(s => s.id === box.stableId);
+      const activeMovement = allMovements.find(m => m.stableboxId === box.id && !m.checkOut);
+      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
+      const agreement = activeMovement?.agreementId ? allAgreements.find(a => a.id === activeMovement.agreementId) : null;
+      const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
+      const item = agreement ? allItems.find(i => i.id === agreement.itemId) : null;
+      return {
+        ...box,
+        stableName: stable?.name || "Unknown",
+        isOccupied: !!activeMovement,
+        movementId: activeMovement?.id || null,
+        horseId: horse?.id || null,
+        horseName: horse?.horseName || null,
+        customerId: customer?.id || null,
+        customerName: customer?.fullname || null,
+        agreementId: agreement?.id || null,
+        itemName: item?.name || null,
+        checkIn: activeMovement?.checkIn || null,
+      };
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();

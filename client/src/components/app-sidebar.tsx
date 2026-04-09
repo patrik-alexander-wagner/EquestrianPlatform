@@ -28,6 +28,7 @@ import {
   LogOut,
   Shield,
   History,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
@@ -58,6 +59,13 @@ const navGroups = [
       { title: "Stables", url: "/stables", icon: Building2 },
       { title: "Boxes", url: "/boxes", icon: Box },
       { title: "Items", url: "/items", icon: Package },
+    ],
+  },
+  {
+    label: "Stable Management",
+    adminOnly: false,
+    items: [
+      { title: "Horse Movements", url: "/stable-management/horse-movements", icon: ArrowRightLeft },
     ],
   },
   {

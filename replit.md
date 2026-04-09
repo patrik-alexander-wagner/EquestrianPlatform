@@ -37,6 +37,7 @@ client/src/
     admin-users.tsx          - User management
     admin-settings.tsx       - Livery package + N8N webhook configuration
     admin-audit-logs.tsx     - Audit log viewer (admin-only, paginated)
+    horse-movements.tsx      - Stable Management: box grid + move/swap + movement log
 
 server/
   index.ts                   - Express server + session + passport setup
@@ -123,6 +124,12 @@ shared/
 - NetSuite RESTlet integration: "Send to NetSuite" button on invoices sends SO JSON directly to NetSuite RESTlet via OAuth 1.0 TBA authentication, stores sent status and NetSuite ID from response
   - Credentials stored in env vars: NETSUITE_ACCOUNT_ID, NETSUITE_RESTLET_URL, NETSUITE_CONSUMER_KEY, NETSUITE_CONSUMER_SECRET, NETSUITE_TOKEN_ID, NETSUITE_TOKEN_SECRET
   - Uses oauth-1.0a package with HMAC-SHA256 signing
+- Stable Management — Horse Movements page (/stable-management/horse-movements):
+  - Box grid grouped by stable showing occupied (green) and empty boxes; click occupied box for detail panel
+  - Move horse: closes current movement, creates new in target empty box, updates agreement boxId (transactional)
+  - Swap horses: closes both movements, creates new swapped movements, updates both agreements (transactional)
+  - Movement log table: chronological (newest first), filterable by customer or box/stable
+  - API: GET /api/box-grid, GET /api/horse-movements/enriched, POST /api/horse-movements/move, POST /api/horse-movements/swap
 - N8N webhook integration (legacy): configurable webhook URL in Settings still available
 
 ## Input Validation

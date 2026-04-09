@@ -24,6 +24,7 @@ import ReportsPage from "@/pages/reports";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminSettingsPage from "@/pages/admin-settings";
 import AdminAuditLogsPage from "@/pages/admin-audit-logs";
+import HorseMovementsPage from "@/pages/horse-movements";
 
 function AdminRoute({ component: Component, userRole }: { component: React.ComponentType; userRole: string }) {
   if (userRole !== "ADMIN") {
@@ -48,6 +49,7 @@ function Router({ userRole }: { userRole: string }) {
       <Route path="/billing/to-invoice" component={ToInvoicePage} />
       <Route path="/billing/invoices" component={InvoicesPage} />
       <Route path="/reports/livery" component={ReportsPage} />
+      <Route path="/stable-management/horse-movements" component={HorseMovementsPage} />
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} userRole={userRole} />}</Route>
       <Route path="/admin/settings">{() => <AdminRoute component={AdminSettingsPage} userRole={userRole} />}</Route>
       <Route path="/admin/audit-logs">{() => <AdminRoute component={AdminAuditLogsPage} userRole={userRole} />}</Route>
