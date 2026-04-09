@@ -585,6 +585,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/available-boxes", async (_req, res) => {
+    try {
+      const boxes = await storage.getBoxesWithAgreementStatus();
+      res.json(boxes.filter((b: any) => b.isAvailable));
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Billing Elements
   app.get("/api/billing-elements", async (req, res) => {
     try {
