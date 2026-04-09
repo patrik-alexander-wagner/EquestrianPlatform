@@ -73,6 +73,7 @@ export interface IStorage {
   updateBillingElement(id: string, data: Partial<InsertBillingElement>): Promise<BillingElement | undefined>;
   deleteBillingElement(id: string): Promise<boolean>;
   getHorsesWithActiveAgreements(): Promise<any[]>;
+  getHorsesWithOwners(): Promise<any[]>;
 
   getInvoices(): Promise<any[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
@@ -505,6 +506,35 @@ export class DatabaseStorage implements IStorage {
         stableId: stable?.id,
         stableName: stable?.name || "Unknown",
         agreementId: agreement.id,
+      };
+    });
+  }
+
+  async getHorsesWithOwners(): Promise<any[]> {
+    const allHorses = await db.select().from(horses).where(eq(horses.status, "active"));
+    const allOwnership = await db.select().from(horseOwnership);
+    const allCustomers = await db.select().from(customers);
+    const allMovements = await db.select().from(horseMovements);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+
+    return allHorses.map(horse => {
+      const ownershipRecords = allOwnership.filter(o => o.horseId === horse.id);
+      const ownership = ownershipRecords.length > 0
+        ? ownershipRecords.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))[0]
+        : null;
+      const owner = ownership ? allCustomers.find(c => c.id === ownership.customerId) : null;
+      const activeMovement = allMovements.find(m => m.horseId === horse.id && !m.checkOut);
+      const box = activeMovement ? allBoxes.find(b => b.id === activeMovement.stableboxId) : null;
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      return {
+        horseId: horse.id,
+        horseName: horse.horseName,
+        ownerId: owner?.id || null,
+        ownerName: owner?.fullname || "—",
+        boxId: box?.id || null,
+        boxName: box?.name || null,
+        stableName: stable?.name || null,
       };
     });
   }

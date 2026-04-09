@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, UserPlus, DollarSign } from "lucide-react";
+import { Plus, DollarSign } from "lucide-react";
 import { AlertTriangle } from "lucide-react";
-import type { Item, Customer, Horse } from "@shared/schema";
+import type { Item } from "@shared/schema";
 
 function getTodayString() {
   const now = new Date();
@@ -27,21 +27,13 @@ export default function BillingElementsPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableSearch, setStableSearch] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showNonLiveryDialog, setShowNonLiveryDialog] = useState(false);
-  const [selectedAgreementHorse, setSelectedAgreementHorse] = useState<any>(null);
+  const [selectedHorse, setSelectedHorse] = useState<any>(null);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [itemDropdownOpen, setItemDropdownOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [finalSellingPrice, setFinalSellingPrice] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayString());
-
-  const [nlCustomerId, setNlCustomerId] = useState("");
-  const [nlCustomerSearch, setNlCustomerSearch] = useState("");
-  const [nlCustomerDropdownOpen, setNlCustomerDropdownOpen] = useState(false);
-  const [nlHorseId, setNlHorseId] = useState("");
-  const [nlHorseSearch, setNlHorseSearch] = useState("");
-  const [nlHorseDropdownOpen, setNlHorseDropdownOpen] = useState(false);
 
   const [showChangePriceDialog, setShowChangePriceDialog] = useState(false);
   const [changePriceItem, setChangePriceItem] = useState<Item | null>(null);
@@ -50,8 +42,8 @@ export default function BillingElementsPage() {
   const { toast } = useToast();
   const saveAndCreateNewRef = useRef(false);
 
-  const { data: horsesWithAgreements = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/horses-with-agreements"],
+  const { data: horsesWithOwners = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/horses-with-owners"],
   });
 
   const { data: nonLiveryItems = [] } = useQuery<Item[]>({
@@ -62,19 +54,11 @@ export default function BillingElementsPage() {
     queryKey: ["/api/billing-elements"],
   });
 
-  const { data: allCustomers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-  });
-
-  const { data: allHorses = [] } = useQuery<any[]>({
-    queryKey: ["/api/horses"],
-  });
-
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/billing-elements", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/horses-with-agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horses-with-owners"] });
       toast({ title: "Billing element added successfully" });
       if (saveAndCreateNewRef.current) {
         saveAndCreateNewRef.current = false;
@@ -86,7 +70,6 @@ export default function BillingElementsPage() {
         setTransactionDate(getTodayString());
       } else {
         setShowAddDialog(false);
-        setShowNonLiveryDialog(false);
       }
     },
   });
@@ -125,21 +108,22 @@ export default function BillingElementsPage() {
   }, [nonLiveryItems, itemSearch]);
 
   const filteredHorses = useMemo(() => {
-    let result = horsesWithAgreements.filter((h: any) => h.horseId !== null);
+    let result = horsesWithOwners;
     if (horseSearch) {
       result = result.filter((h: any) => (h.horseName || "").toLowerCase().includes(horseSearch.toLowerCase()));
     }
     if (customerSearch) {
-      result = result.filter((h: any) => (h.customerName || "").toLowerCase().includes(customerSearch.toLowerCase()));
+      result = result.filter((h: any) => (h.ownerName || "").toLowerCase().includes(customerSearch.toLowerCase()));
     }
     if (stableSearch) {
+      const s = stableSearch.toLowerCase();
       result = result.filter((h: any) =>
-        h.stableName.toLowerCase().includes(stableSearch.toLowerCase()) ||
-        h.boxName.toLowerCase().includes(stableSearch.toLowerCase())
+        (h.stableName && h.stableName.toLowerCase().includes(s)) ||
+        (h.boxName && h.boxName.toLowerCase().includes(s))
       );
     }
     return result;
-  }, [horsesWithAgreements, horseSearch, customerSearch, stableSearch]);
+  }, [horsesWithOwners, horseSearch, customerSearch, stableSearch]);
 
   const filteredBillingElements = useMemo(() => {
     let result = billingElements;
@@ -159,40 +143,19 @@ export default function BillingElementsPage() {
     return result;
   }, [billingElements, horseSearch, customerSearch, stableSearch]);
 
-  const filteredNlCustomers = useMemo(() => {
-    const active = allCustomers.filter(c => c.status === "active");
-    if (!nlCustomerSearch.trim()) return active;
-    const s = nlCustomerSearch.toLowerCase();
-    return active.filter(c =>
-      (c.fullname || '').toLowerCase().includes(s) ||
-      (c.email && c.email.toLowerCase().includes(s))
-    );
-  }, [allCustomers, nlCustomerSearch]);
-
-  const { data: nlCustomerHorseOwnership = [] } = useQuery<any[]>({
-    queryKey: ["/api/horse-ownership/customer", nlCustomerId],
-    queryFn: async () => {
-      if (!nlCustomerId) return [];
-      const res = await fetch(`/api/horse-ownership/customer/${nlCustomerId}`);
-      return res.json();
-    },
-    enabled: !!nlCustomerId,
-  });
-
-  const filteredNlHorses = useMemo(() => {
-    if (!nlCustomerId) return [];
-    const ownedHorseIds = new Set(nlCustomerHorseOwnership.map((o: any) => o.horseId));
-    const active = allHorses.filter((h: any) => h.status === "active" && ownedHorseIds.has(h.id));
-    if (!nlHorseSearch.trim()) return active;
-    const s = nlHorseSearch.toLowerCase();
-    return active.filter((h: any) => h.horseName.toLowerCase().includes(s));
-  }, [allHorses, nlHorseSearch, nlCustomerId, nlCustomerHorseOwnership]);
-
   const columns = [
     { key: "horseName", label: "Horse" },
-    { key: "customerName", label: "Customer" },
-    { key: "stableName", label: "Stable" },
-    { key: "boxName", label: "Box" },
+    { key: "ownerName", label: "Owner" },
+    {
+      key: "stableName",
+      label: "Stable",
+      render: (item: any) => item.stableName || "—",
+    },
+    {
+      key: "boxName",
+      label: "Box",
+      render: (item: any) => item.boxName || "—",
+    },
   ];
 
   const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
@@ -227,193 +190,29 @@ export default function BillingElementsPage() {
   };
 
   const openDialog = (horse: any) => {
-    setSelectedAgreementHorse(horse);
+    setSelectedHorse(horse);
     resetDialogState();
     setShowAddDialog(true);
   };
-
-  const openNonLiveryDialog = () => {
-    resetDialogState();
-    setNlCustomerId("");
-    setNlCustomerSearch("");
-    setNlCustomerDropdownOpen(false);
-    setNlHorseId("");
-    setNlHorseSearch("");
-    setNlHorseDropdownOpen(false);
-    setShowNonLiveryDialog(true);
-  };
-
-  const selectedNlCustomer = allCustomers.find(c => c.id === nlCustomerId);
-  const selectedNlHorse = allHorses.find((h: any) => h.id === nlHorseId);
-
-  const itemSearchDropdown = (
-    <div className="relative">
-      <Label>Item</Label>
-      <div className="relative">
-        <Input
-          data-testid="input-item-search"
-          placeholder="Search items by name, department, or location..."
-          value={selectedItem && !itemDropdownOpen ? `${selectedItem.name}${selectedItem.price ? ` - AED ${selectedItem.price}` : ""}` : itemSearch}
-          onChange={(e) => {
-            setItemSearch(e.target.value);
-            setItemDropdownOpen(true);
-            if (selectedItemId) {
-              setSelectedItemId("");
-              setFinalSellingPrice("");
-            }
-          }}
-          onFocus={() => setItemDropdownOpen(true)}
-          onBlur={() => setTimeout(() => setItemDropdownOpen(false), 200)}
-        />
-        {selectedItemId && (
-          <button
-            type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
-            onClick={() => {
-              setSelectedItemId("");
-              setItemSearch("");
-              setFinalSellingPrice("");
-              setItemDropdownOpen(true);
-            }}
-            data-testid="button-clear-item"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-      {itemDropdownOpen && !selectedItemId && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-          {filteredItems.length === 0 ? (
-            <div className="p-3 text-sm text-muted-foreground">No items found</div>
-          ) : (
-            filteredItems.map(i => (
-              <button
-                type="button"
-                key={i.id}
-                data-testid={`item-option-${i.id}`}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                onClick={() => {
-                  handleItemChange(i.id);
-                  setItemSearch("");
-                  setItemDropdownOpen(false);
-                }}
-              >
-                <div className="font-medium">{i.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {i.price ? `AED ${i.price}` : "No price"}{i.department ? ` · ${i.department}` : ""}{i.location ? ` · ${i.location}` : ""}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  const pricingFields = (
-    <>
-      {selectedItem && (
-        <div className="p-3 rounded-md bg-muted text-sm space-y-1">
-          <div className="flex justify-between">
-            <span>Unit Factor:</span>
-            <span>{itemUnitFactor}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Base Price (per unit factor):</span>
-            <span className="flex items-center gap-2">
-              AED {itemPrice.toFixed(2)}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => openChangePriceDialog(selectedItem)}
-                data-testid="button-change-price"
-              >
-                <DollarSign className="w-3 h-3 mr-1" />
-                Change Price
-              </Button>
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div>
-        <Label>Quantity</Label>
-        <Input
-          type="number"
-          min="1"
-          value={quantity}
-          onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-          data-testid="input-billing-quantity"
-        />
-      </div>
-
-      {selectedItem && (
-        <div className="flex gap-4 items-end">
-          <div className="flex-1">
-            <Label className="text-muted-foreground">Computed Price</Label>
-            <Input
-              type="text"
-              value={`AED ${computedSellingPrice.toFixed(2)}`}
-              readOnly
-              className="bg-muted"
-              data-testid="text-computed-price"
-            />
-          </div>
-          <div className="flex-1">
-            <Label>Final Selling Price</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={finalSellingPrice}
-              onChange={(e) => setFinalSellingPrice(e.target.value)}
-              data-testid="input-final-selling-price"
-            />
-          </div>
-        </div>
-      )}
-
-      <div>
-        <Label>Transaction Date</Label>
-        <Input
-          type="date"
-          value={transactionDate}
-          onChange={(e) => setTransactionDate(e.target.value)}
-          required
-          data-testid="input-billing-date"
-        />
-      </div>
-    </>
-  );
 
   return (
     <div className="p-6">
       <PageHeader
         title="Billing Elements"
-        description="Add extra billable items per horse with active livery agreements"
+        description="Add extra billable items per horse"
       />
 
       <div className="flex gap-3 mb-4 flex-wrap items-center">
         <SearchBar placeholder="Horse..." value={horseSearch} onChange={setHorseSearch} className="w-52" />
-        <SearchBar placeholder="Customer..." value={customerSearch} onChange={setCustomerSearch} className="w-52" />
+        <SearchBar placeholder="Owner..." value={customerSearch} onChange={setCustomerSearch} className="w-52" />
         <SearchBar placeholder="Stable / Box..." value={stableSearch} onChange={setStableSearch} className="w-52" />
-        <Button
-          variant="outline"
-          className="bg-gray-200 hover:bg-gray-300 text-gray-700 border-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:border-gray-600"
-          onClick={openNonLiveryDialog}
-          data-testid="button-bill-non-livery"
-        >
-          <UserPlus className="w-4 h-4 mr-1" />
-          Bill on Horse
-        </Button>
       </div>
 
       <DataTable
         columns={columns}
         data={filteredHorses}
         isLoading={isLoading}
-        emptyMessage="No horses with active livery agreements"
+        emptyMessage="No horses found"
         actions={(item) => (
           <Button
             size="sm"
@@ -459,33 +258,167 @@ export default function BillingElementsPage() {
             <DialogTitle>Add Billing Element</DialogTitle>
             <DialogDescription>Add a billable item for the selected horse</DialogDescription>
           </DialogHeader>
-          {selectedAgreementHorse && (
+          {selectedHorse && (
             <form
               onSubmit={(e) => { e.preventDefault(); }}
               onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
             >
               <div className="space-y-4">
                 <div className="p-3 rounded-md bg-muted text-sm space-y-1">
-                  <div>Horse: <strong>{selectedAgreementHorse.horseName}</strong></div>
-                  <div>Customer: <strong>{selectedAgreementHorse.customerName}</strong></div>
-                  <div>Location: <strong>{selectedAgreementHorse.stableName} / {selectedAgreementHorse.boxName}</strong></div>
+                  <div>Horse: <strong>{selectedHorse.horseName}</strong></div>
+                  <div>Owner: <strong>{selectedHorse.ownerName}</strong></div>
+                  {selectedHorse.stableName && selectedHorse.boxName && (
+                    <div>Location: <strong>{selectedHorse.stableName} / {selectedHorse.boxName}</strong></div>
+                  )}
                 </div>
 
-                {itemSearchDropdown}
-                {pricingFields}
+                <div className="relative">
+                  <Label>Item</Label>
+                  <div className="relative">
+                    <Input
+                      data-testid="input-item-search"
+                      placeholder="Search items by name, department, or location..."
+                      value={selectedItem && !itemDropdownOpen ? `${selectedItem.name}${selectedItem.price ? ` - AED ${selectedItem.price}` : ""}` : itemSearch}
+                      onChange={(e) => {
+                        setItemSearch(e.target.value);
+                        setItemDropdownOpen(true);
+                        if (selectedItemId) {
+                          setSelectedItemId("");
+                          setFinalSellingPrice("");
+                        }
+                      }}
+                      onFocus={() => setItemDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setItemDropdownOpen(false), 200)}
+                    />
+                    {selectedItemId && (
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                        onClick={() => {
+                          setSelectedItemId("");
+                          setItemSearch("");
+                          setFinalSellingPrice("");
+                          setItemDropdownOpen(true);
+                        }}
+                        data-testid="button-clear-item"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {itemDropdownOpen && !selectedItemId && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {filteredItems.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No items found</div>
+                      ) : (
+                        filteredItems.map(i => (
+                          <button
+                            type="button"
+                            key={i.id}
+                            data-testid={`item-option-${i.id}`}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                            onClick={() => {
+                              handleItemChange(i.id);
+                              setItemSearch("");
+                              setItemDropdownOpen(false);
+                            }}
+                          >
+                            <div className="font-medium">{i.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {i.price ? `AED ${i.price}` : "No price"}{i.department ? ` · ${i.department}` : ""}{i.location ? ` · ${i.location}` : ""}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {selectedItem && (
+                  <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span>Unit Factor:</span>
+                      <span>{itemUnitFactor}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Base Price (per unit factor):</span>
+                      <span className="flex items-center gap-2">
+                        AED {itemPrice.toFixed(2)}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => openChangePriceDialog(selectedItem)}
+                          data-testid="button-change-price"
+                        >
+                          <DollarSign className="w-3 h-3 mr-1" />
+                          Change Price
+                        </Button>
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Quantity</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={quantity}
+                    onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                    data-testid="input-billing-quantity"
+                  />
+                </div>
+
+                {selectedItem && (
+                  <div className="flex gap-4 items-end">
+                    <div className="flex-1">
+                      <Label className="text-muted-foreground">Computed Price</Label>
+                      <Input
+                        type="text"
+                        value={`AED ${computedSellingPrice.toFixed(2)}`}
+                        readOnly
+                        className="bg-muted"
+                        data-testid="text-computed-price"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label>Final Selling Price</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={finalSellingPrice}
+                        onChange={(e) => setFinalSellingPrice(e.target.value)}
+                        data-testid="input-final-selling-price"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Transaction Date</Label>
+                  <Input
+                    type="date"
+                    value={transactionDate}
+                    onChange={(e) => setTransactionDate(e.target.value)}
+                    required
+                    data-testid="input-billing-date"
+                  />
+                </div>
               </div>
               <DialogFooter className="mt-4 flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice}
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId}
                   data-testid="button-save-and-new-billing"
                   onClick={() => {
                     saveAndCreateNewRef.current = true;
                     createMutation.mutate({
-                      horseId: selectedAgreementHorse.horseId,
-                      customerId: selectedAgreementHorse.customerId,
-                      boxId: selectedAgreementHorse.boxId,
+                      horseId: selectedHorse.horseId,
+                      customerId: selectedHorse.ownerId,
+                      boxId: selectedHorse.boxId || null,
                       itemId: selectedItemId,
                       quantity,
                       price: finalSellingPrice,
@@ -499,14 +432,14 @@ export default function BillingElementsPage() {
                 </Button>
                 <Button
                   type="button"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice}
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId}
                   data-testid="button-submit-billing"
                   onClick={() => {
                     saveAndCreateNewRef.current = false;
                     createMutation.mutate({
-                      horseId: selectedAgreementHorse.horseId,
-                      customerId: selectedAgreementHorse.customerId,
-                      boxId: selectedAgreementHorse.boxId,
+                      horseId: selectedHorse.horseId,
+                      customerId: selectedHorse.ownerId,
+                      boxId: selectedHorse.boxId || null,
                       itemId: selectedItemId,
                       quantity,
                       price: finalSellingPrice,
@@ -521,163 +454,6 @@ export default function BillingElementsPage() {
               </DialogFooter>
             </form>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showNonLiveryDialog} onOpenChange={setShowNonLiveryDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Bill on Horse</DialogTitle>
-            <DialogDescription>Create a billing element for a specific horse owned by the selected customer</DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => { e.preventDefault(); }}
-            onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-          >
-            <div className="space-y-4">
-              <div className="relative">
-                <Label>Customer *</Label>
-                <div className="relative">
-                  <Input
-                    data-testid="input-nl-customer-search"
-                    placeholder="Search customer..."
-                    value={selectedNlCustomer && !nlCustomerDropdownOpen ? selectedNlCustomer.fullname : nlCustomerSearch}
-                    onChange={(e) => {
-                      setNlCustomerSearch(e.target.value);
-                      setNlCustomerDropdownOpen(true);
-                      if (nlCustomerId) setNlCustomerId("");
-                    }}
-                    onFocus={() => setNlCustomerDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setNlCustomerDropdownOpen(false), 200)}
-                  />
-                  {nlCustomerId && (
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
-                      onClick={() => { setNlCustomerId(""); setNlCustomerSearch(""); setNlCustomerDropdownOpen(true); }}
-                    >✕</button>
-                  )}
-                </div>
-                {nlCustomerDropdownOpen && !nlCustomerId && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                    {filteredNlCustomers.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">No customers found</div>
-                    ) : (
-                      filteredNlCustomers.map(c => (
-                        <button
-                          type="button"
-                          key={c.id}
-                          data-testid={`nl-customer-option-${c.id}`}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                          onClick={() => { setNlCustomerId(c.id); setNlCustomerSearch(""); setNlCustomerDropdownOpen(false); setNlHorseId(""); setNlHorseSearch(""); }}
-                        >
-                          <div className="font-medium">{c.fullname}</div>
-                          {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <Label>Horse *</Label>
-                <div className="relative">
-                  <Input
-                    data-testid="input-nl-horse-search"
-                    placeholder="Search horse..."
-                    value={selectedNlHorse && !nlHorseDropdownOpen ? selectedNlHorse.horseName : nlHorseSearch}
-                    onChange={(e) => {
-                      setNlHorseSearch(e.target.value);
-                      setNlHorseDropdownOpen(true);
-                      if (nlHorseId) setNlHorseId("");
-                    }}
-                    onFocus={() => setNlHorseDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setNlHorseDropdownOpen(false), 200)}
-                  />
-                  {nlHorseId && (
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
-                      onClick={() => { setNlHorseId(""); setNlHorseSearch(""); setNlHorseDropdownOpen(true); }}
-                    >✕</button>
-                  )}
-                </div>
-                {nlHorseDropdownOpen && !nlHorseId && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                    {filteredNlHorses.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">No horses found</div>
-                    ) : (
-                      filteredNlHorses.map((h: any) => (
-                        <button
-                          type="button"
-                          key={h.id}
-                          data-testid={`nl-horse-option-${h.id}`}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                          onClick={() => { setNlHorseId(h.id); setNlHorseSearch(""); setNlHorseDropdownOpen(false); }}
-                        >
-                          <div className="font-medium">{h.horseName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {itemSearchDropdown}
-              {pricingFields}
-            </div>
-            <DialogFooter className="mt-4 flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice}
-                data-testid="button-save-and-new-non-livery-billing"
-                onClick={() => {
-                  saveAndCreateNewRef.current = true;
-                  createMutation.mutate({
-                    horseId: nlHorseId,
-                    customerId: nlCustomerId,
-                    boxId: null,
-                    itemId: selectedItemId,
-                    agreementId: null,
-                    quantity,
-                    price: finalSellingPrice,
-                    transactionDate,
-                    billingMonth: deriveBillingMonth(transactionDate),
-                    billed: false,
-                  });
-                }}
-              >
-                Save & Create New
-              </Button>
-              <Button
-                type="button"
-                disabled={createMutation.isPending || !nlCustomerId || !nlHorseId || !selectedItemId || !finalSellingPrice}
-                data-testid="button-submit-non-livery-billing"
-                onClick={() => {
-                  saveAndCreateNewRef.current = false;
-                  createMutation.mutate({
-                    horseId: nlHorseId,
-                    customerId: nlCustomerId,
-                    boxId: null,
-                    itemId: selectedItemId,
-                    agreementId: null,
-                    quantity,
-                    price: finalSellingPrice,
-                    transactionDate,
-                    billingMonth: deriveBillingMonth(transactionDate),
-                    billed: false,
-                  });
-                }}
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
 

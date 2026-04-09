@@ -676,6 +676,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/horses-with-owners", async (_req, res) => {
+    try {
+      const horses = await storage.getHorsesWithOwners();
+      res.json(horses);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Invoices
   app.get("/api/invoices", async (_req, res) => {
     try {

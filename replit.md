@@ -89,7 +89,7 @@ shared/
 - Search/filter on all list pages
 - Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
 - Livery agreement creation via box-first grid view (no horse field on agreement; horse check-in via post-save modal using horse_movements)
-- Billing element management for horses with active agreements (unit price + total display) + "Bill on Horse" button (light grey) for billing specific horses owned by selected customer (horses filtered by ownership)
+- Billing element management: shows all horses with their owners; if horse is checked into a stable/box, displays the location; Add button per horse to create adhoc billing elements (no agreement dependency)
 - Billing month auto-derived from transaction date (YYYY-MM format)
 - To-invoice page filters billing elements by selected billing month
 - Agreement document management: PDF upload/download/delete on current agreements page (base64 storage)
