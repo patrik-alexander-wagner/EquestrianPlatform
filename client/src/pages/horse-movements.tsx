@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowRightLeft, MoveRight, X, Search, Filter, Plus } from "lucide-react";
 import { Horseshoe } from "@/components/icons/horseshoe";
 
@@ -210,13 +209,7 @@ export default function HorseMovementsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="grid">
-        <TabsList data-testid="tabs-movements">
-          <TabsTrigger value="grid" data-testid="tab-box-grid">Box Grid</TabsTrigger>
-          <TabsTrigger value="log" data-testid="tab-movement-log">Movement Log</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="grid" className="space-y-4">
+      <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Filter className="w-4 h-4 text-muted-foreground" />
             <Select value={stableFilter} onValueChange={setStableFilter}>
@@ -340,9 +333,10 @@ export default function HorseMovementsPage() {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
+      </div>
 
-        <TabsContent value="log" className="space-y-4">
+      <div className="space-y-4">
+          <h2 className="text-lg font-semibold" data-testid="text-movement-log-title">Movement Log</h2>
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
@@ -412,8 +406,7 @@ export default function HorseMovementsPage() {
               </Table>
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+      </div>
 
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent data-testid="dialog-move-horse">
