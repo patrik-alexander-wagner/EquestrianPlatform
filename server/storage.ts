@@ -1062,6 +1062,15 @@ export class DatabaseStorage implements IStorage {
       if (!newHorse) {
         throw { status: 400, message: "Horse not found" };
       }
+      if (currentMovement.agreementId) {
+        const [agreement] = await tx.select().from(liveryAgreements).where(eq(liveryAgreements.id, currentMovement.agreementId));
+        if (agreement) {
+          const [ownership] = await tx.select().from(horseOwnership).where(eq(horseOwnership.horseId, newHorseId));
+          if (!ownership || ownership.customerId !== agreement.customerId) {
+            throw { status: 400, message: "Replacement horse must belong to the same customer as the agreement" };
+          }
+        }
+      }
       const [existingActiveMovement] = await tx.select().from(horseMovements)
         .where(and(eq(horseMovements.horseId, newHorseId), sql`${horseMovements.checkOut} IS NULL`));
       if (existingActiveMovement) {
