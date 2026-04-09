@@ -52,7 +52,9 @@ shared/
 
 ## Database Tables
 - users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes, items
-- livery_agreements, billing_elements, invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
+- livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId), invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
+- horse_ownership (horseId → customerId: tracks which customer owns which horse)
+- horse_movements (agreementId, horseId, stableboxId, checkIn, checkOut: tracks horse occupancy per agreement; active movement = no checkOut)
 - invoice_validations (audit trail: invoice_id, step, action, user_id, comment, created_at)
 - app_settings, agreement_documents, audit_logs
 
@@ -85,7 +87,7 @@ shared/
 - Pagination (25 rows/page) on all lists
 - Search/filter on all list pages
 - Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
-- Livery agreement creation via box grid view
+- Livery agreement creation via box-first grid view (no horse field on agreement; horse check-in via post-save modal using horse_movements)
 - Billing element management for horses with active agreements (unit price + total display) + "Bill Non-Livery Customer" for customers without agreements
 - Billing month auto-derived from transaction date (YYYY-MM format)
 - To-invoice page filters billing elements by selected billing month

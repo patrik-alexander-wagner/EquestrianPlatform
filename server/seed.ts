@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { customers, horses, stables, boxes, items, liveryAgreements } from "@shared/schema";
+import { customers, horses, stables, boxes, items, liveryAgreements, horseOwnership, horseMovements } from "@shared/schema";
 
 async function ensureAdminUser() {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
@@ -69,10 +69,9 @@ export async function seedDatabase() {
   const allBoxes = await storage.getBoxes();
   const boxTypeBoxes = allBoxes.filter(b => b.type === "box");
 
-  await db.insert(liveryAgreements).values([
+  const createdAgreements = await db.insert(liveryAgreements).values([
     {
       referenceNumber: "LA-2025-001",
-      horseId: createdHorses[0].id,
       customerId: createdCustomers[0].id,
       boxId: boxTypeBoxes[0].id,
       itemId: createdItems[0].id,
@@ -83,7 +82,6 @@ export async function seedDatabase() {
     },
     {
       referenceNumber: "LA-2025-002",
-      horseId: createdHorses[1].id,
       customerId: createdCustomers[1].id,
       boxId: boxTypeBoxes[1].id,
       itemId: createdItems[1].id,
@@ -94,7 +92,6 @@ export async function seedDatabase() {
     },
     {
       referenceNumber: "LA-2025-003",
-      horseId: createdHorses[2].id,
       customerId: createdCustomers[2].id,
       boxId: boxTypeBoxes[2].id,
       itemId: createdItems[0].id,
@@ -104,6 +101,18 @@ export async function seedDatabase() {
       status: "active",
       monthlyAmount: "1200",
     },
+  ]).returning();
+
+  await db.insert(horseOwnership).values([
+    { horseId: createdHorses[0].id, customerId: createdCustomers[0].id },
+    { horseId: createdHorses[1].id, customerId: createdCustomers[1].id },
+    { horseId: createdHorses[2].id, customerId: createdCustomers[2].id },
+  ]);
+
+  await db.insert(horseMovements).values([
+    { agreementId: createdAgreements[0].id, horseId: createdHorses[0].id, stableboxId: boxTypeBoxes[0].id, checkIn: "2025-01-15" },
+    { agreementId: createdAgreements[1].id, horseId: createdHorses[1].id, stableboxId: boxTypeBoxes[1].id, checkIn: "2025-02-01" },
+    { agreementId: createdAgreements[2].id, horseId: createdHorses[2].id, stableboxId: boxTypeBoxes[2].id, checkIn: "2025-01-20", checkOut: "2025-06-20" },
   ]);
 
   console.log("Database seeded successfully");

@@ -21,16 +21,20 @@ export default function NewAgreementPage() {
   const [boxSearch, setBoxSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedBox, setSelectedBox] = useState<any>(null);
-  const [agreementCategory, setAgreementCategory] = useState("with_horse");
   const [agreementType, setAgreementType] = useState("permanent");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
-  const [selectedHorseId, setSelectedHorseId] = useState("");
-  const [horseSearch, setHorseSearch] = useState("");
-  const [horseDropdownOpen, setHorseDropdownOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState("");
   const [monthlyAmount, setMonthlyAmount] = useState("");
+
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkInAgreement, setCheckInAgreement] = useState<any>(null);
+  const [checkInBoxName, setCheckInBoxName] = useState("");
+  const [selectedCheckInHorseId, setSelectedCheckInHorseId] = useState("");
+  const [checkInHorseSearch, setCheckInHorseSearch] = useState("");
+  const [checkInHorseDropdownOpen, setCheckInHorseDropdownOpen] = useState(false);
+
   const { toast } = useToast();
 
   const { data: boxesWithStatus = [], isLoading } = useQuery<any[]>({
@@ -41,21 +45,62 @@ export default function NewAgreementPage() {
     queryKey: ["/api/customers"],
   });
 
-  const { data: horses = [] } = useQuery<any[]>({
-    queryKey: ["/api/horses/available"],
-  });
-
   const { data: liveryItems = [] } = useQuery<Item[]>({
     queryKey: ["/api/items/livery-packages"],
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/livery-agreements", data),
+  const { data: customerHorses = [] } = useQuery<any[]>({
+    queryKey: ["/api/horse-ownership/customer", selectedCustomerId || checkInAgreement?.customerId, "checkin-eligible"],
+    queryFn: async () => {
+      const custId = checkInAgreement?.customerId || selectedCustomerId;
+      if (!custId) return [];
+      const res = await fetch(`/api/horse-ownership/customer/${custId}`);
+      const ownership = await res.json();
+      if (!Array.isArray(ownership) || ownership.length === 0) return [];
+      const [horsesRes, movementsRes] = await Promise.all([
+        fetch("/api/horses"),
+        fetch("/api/horse-movements"),
+      ]);
+      const allHorses = await horsesRes.json();
+      const allMovements = await movementsRes.json();
+      const activeHorseIds = new Set(
+        (allMovements as any[]).filter((m: any) => !m.checkOut).map((m: any) => m.horseId)
+      );
+      return ownership
+        .map((o: any) => allHorses.find((h: any) => h.id === o.horseId))
+        .filter((h: any) => h && h.status === "active" && !activeHorseIds.has(h.id));
+    },
+    enabled: !!(checkInAgreement?.customerId || selectedCustomerId),
+  });
+
+  const checkInMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/horse-movements", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/boxes-with-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements"] });
+      setShowCheckInModal(false);
+      toast({ title: "Horse checked in successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to check in horse", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/livery-agreements", data),
+    onSuccess: async (res) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes-with-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/horses/available"] });
       setShowCreateDialog(false);
+
+      const agreement = await res.json();
+      setCheckInAgreement({ ...agreement, customerId: selectedCustomerId });
+      setCheckInBoxName(selectedBox?.name || "");
+      setSelectedCheckInHorseId("");
+      setCheckInHorseSearch("");
+      setShowCheckInModal(true);
+
       toast({ title: "Livery agreement created successfully" });
     },
     onError: (error: any) => {
@@ -93,18 +138,7 @@ export default function NewAgreementPage() {
     );
   }, [customers, customerSearch]);
 
-  const activeHorses = useMemo(() => {
-    const active = horses.filter((h: any) => h.status === "active");
-    if (!horseSearch.trim()) return active;
-    const s = horseSearch.toLowerCase();
-    return active.filter((h: any) =>
-      h.horseName.toLowerCase().includes(s) ||
-      (h.breed && h.breed.toLowerCase().includes(s))
-    );
-  }, [horses, horseSearch]);
-
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
-  const selectedHorse = horses.find((h: any) => h.id === selectedHorseId);
   const selectedItem = liveryItems.find(i => i.id === selectedItemId);
 
   const handleItemChange = (itemId: string) => {
@@ -115,16 +149,21 @@ export default function NewAgreementPage() {
 
   const openCreateDialog = (box: any) => {
     setSelectedBox(box);
-    setAgreementCategory("with_horse");
     setSelectedCustomerId("");
     setCustomerSearch("");
-    setSelectedHorseId("");
-    setHorseSearch("");
     setSelectedItemId("");
     setMonthlyAmount("");
     setAgreementType("permanent");
     setShowCreateDialog(true);
   };
+
+  const filteredCheckInHorses = useMemo(() => {
+    if (!checkInHorseSearch.trim()) return customerHorses;
+    const s = checkInHorseSearch.toLowerCase();
+    return customerHorses.filter((h: any) => h.horseName.toLowerCase().includes(s));
+  }, [customerHorses, checkInHorseSearch]);
+
+  const selectedCheckInHorse = customerHorses.find((h: any) => h.id === selectedCheckInHorseId);
 
   return (
     <div className="p-6">
@@ -191,8 +230,7 @@ export default function NewAgreementPage() {
                 const refNum = `LA-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
                 createMutation.mutate({
                   referenceNumber: refNum,
-                  agreementCategory,
-                  horseId: agreementCategory === "with_horse" ? selectedHorseId : null,
+                  agreementCategory: "with_horse",
                   customerId: selectedCustomerId,
                   boxId: selectedBox.id,
                   itemId: selectedItemId,
@@ -209,19 +247,6 @@ export default function NewAgreementPage() {
               <div className="space-y-4">
                 <div className="p-3 rounded-md bg-muted text-sm">
                   Box: <strong>{selectedBox.name}</strong> ({selectedBox.stableName})
-                </div>
-
-                <div>
-                  <Label>Agreement Type</Label>
-                  <Select value={agreementCategory} onValueChange={(v) => { setAgreementCategory(v); if (v === "without_horse") { setSelectedHorseId(""); setHorseSearch(""); } }}>
-                    <SelectTrigger data-testid="select-agreement-category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="with_horse">With Horse</SelectItem>
-                      <SelectItem value="without_horse">Without Horse</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="relative">
@@ -268,55 +293,6 @@ export default function NewAgreementPage() {
                     </div>
                   )}
                 </div>
-
-                {agreementCategory === "with_horse" && (
-                <div className="relative">
-                  <Label>Horse</Label>
-                  <div className="relative">
-                    <Input
-                      data-testid="input-agreement-horse-search"
-                      placeholder="Search horse..."
-                      value={selectedHorse && !horseDropdownOpen ? selectedHorse.horseName : horseSearch}
-                      onChange={(e) => {
-                        setHorseSearch(e.target.value);
-                        setHorseDropdownOpen(true);
-                        if (selectedHorseId) setSelectedHorseId("");
-                      }}
-                      onFocus={() => setHorseDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setHorseDropdownOpen(false), 200)}
-                    />
-                    {selectedHorseId && (
-                      <button
-                        type="button"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
-                        onClick={() => { setSelectedHorseId(""); setHorseSearch(""); setHorseDropdownOpen(true); }}
-                      >✕</button>
-                    )}
-                  </div>
-                  {horseDropdownOpen && !selectedHorseId && (
-                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                      {activeHorses.length === 0 ? (
-                        <div className="p-3 text-sm text-muted-foreground">No horses found</div>
-                      ) : (
-                        activeHorses.map((h: any) => (
-                          <button
-                            type="button"
-                            key={h.id}
-                            data-testid={`agreement-horse-option-${h.id}`}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                            onClick={() => { setSelectedHorseId(h.id); setHorseSearch(""); setHorseDropdownOpen(false); }}
-                          >
-                            <div className="font-medium">{h.horseName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                )}
 
                 <div>
                   <Label>Livery Package</Label>
@@ -395,12 +371,100 @@ export default function NewAgreementPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || (agreementCategory === "with_horse" && !selectedHorseId) || !selectedItemId} data-testid="button-submit-agreement">
+                <Button type="submit" disabled={createMutation.isPending || !selectedCustomerId || !selectedItemId} data-testid="button-submit-agreement">
                   Create Agreement
                 </Button>
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCheckInModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowCheckInModal(false);
+          setCheckInAgreement(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Check In Horse</DialogTitle>
+            <DialogDescription>
+              Do you want to check a horse into box <strong>{checkInBoxName}</strong> now?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Label>Select Horse</Label>
+              <div className="relative">
+                <Input
+                  data-testid="input-checkin-horse-search"
+                  placeholder="Search horse..."
+                  value={selectedCheckInHorse && !checkInHorseDropdownOpen ? selectedCheckInHorse.horseName : checkInHorseSearch}
+                  onChange={(e) => {
+                    setCheckInHorseSearch(e.target.value);
+                    setCheckInHorseDropdownOpen(true);
+                    if (selectedCheckInHorseId) setSelectedCheckInHorseId("");
+                  }}
+                  onFocus={() => setCheckInHorseDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setCheckInHorseDropdownOpen(false), 200)}
+                />
+                {selectedCheckInHorseId && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                    onClick={() => { setSelectedCheckInHorseId(""); setCheckInHorseSearch(""); setCheckInHorseDropdownOpen(true); }}
+                  >✕</button>
+                )}
+              </div>
+              {checkInHorseDropdownOpen && !selectedCheckInHorseId && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                  {filteredCheckInHorses.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No horses found for this customer</div>
+                  ) : (
+                    filteredCheckInHorses.map((h: any) => (
+                      <button
+                        type="button"
+                        key={h.id}
+                        data-testid={`checkin-horse-option-${h.id}`}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => { setSelectedCheckInHorseId(h.id); setCheckInHorseSearch(""); setCheckInHorseDropdownOpen(false); }}
+                      >
+                        <div className="font-medium">{h.horseName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="mt-4 flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowCheckInModal(false); setCheckInAgreement(null); }}
+              data-testid="button-skip-checkin"
+            >
+              Skip
+            </Button>
+            <Button
+              disabled={!selectedCheckInHorseId || checkInMutation.isPending}
+              onClick={() => {
+                if (!checkInAgreement || !selectedCheckInHorseId) return;
+                checkInMutation.mutate({
+                  agreementId: checkInAgreement.id,
+                  horseId: selectedCheckInHorseId,
+                  stableboxId: checkInAgreement.boxId,
+                  checkIn: new Date().toISOString().split("T")[0],
+                });
+              }}
+              data-testid="button-confirm-checkin"
+            >
+              Check In
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

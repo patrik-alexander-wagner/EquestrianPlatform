@@ -28,9 +28,6 @@ export default function CurrentAgreementsPage() {
   const [editSelectedCustomerId, setEditSelectedCustomerId] = useState("");
   const [editCustomerSearch, setEditCustomerSearch] = useState("");
   const [editCustomerDropdownOpen, setEditCustomerDropdownOpen] = useState(false);
-  const [editSelectedHorseId, setEditSelectedHorseId] = useState("");
-  const [editHorseSearch, setEditHorseSearch] = useState("");
-  const [editHorseDropdownOpen, setEditHorseDropdownOpen] = useState(false);
   const [editSelectedItemId, setEditSelectedItemId] = useState("");
   const [editMonthlyAmount, setEditMonthlyAmount] = useState("");
 
@@ -52,10 +49,6 @@ export default function CurrentAgreementsPage() {
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
-  });
-
-  const { data: allHorses = [] } = useQuery<any[]>({
-    queryKey: ["/api/horses"],
   });
 
   const { data: liveryItems = [] } = useQuery<Item[]>({
@@ -158,24 +151,7 @@ export default function CurrentAgreementsPage() {
     );
   }, [customers, editCustomerSearch]);
 
-  const editActiveHorses = useMemo(() => {
-    const currentHorseId = editAgreement?.horseId;
-    const active = allHorses.filter((h: any) => h.status === "active");
-    const availableOrCurrent = active.filter((h: any) => {
-      if (h.id === currentHorseId) return true;
-      const hasActiveAgreement = visibleAgreements.some((a: any) => a.horseId === h.id && a.id !== editAgreement?.id);
-      return !hasActiveAgreement;
-    });
-    if (!editHorseSearch.trim()) return availableOrCurrent;
-    const s = editHorseSearch.toLowerCase();
-    return availableOrCurrent.filter((h: any) =>
-      h.horseName.toLowerCase().includes(s) ||
-      (h.breed && h.breed.toLowerCase().includes(s))
-    );
-  }, [allHorses, editHorseSearch, editAgreement, visibleAgreements]);
-
   const editSelectedCustomer = customers.find(c => c.id === editSelectedCustomerId);
-  const editSelectedHorse = allHorses.find((h: any) => h.id === editSelectedHorseId);
   const editSelectedItem = liveryItems.find(i => i.id === editSelectedItemId);
 
   const handleEditItemChange = (itemId: string) => {
@@ -189,8 +165,6 @@ export default function CurrentAgreementsPage() {
     setEditAgreementCategory(agreement.agreementCategory || "with_horse");
     setEditSelectedCustomerId(agreement.customerId);
     setEditCustomerSearch("");
-    setEditSelectedHorseId(agreement.horseId || "");
-    setEditHorseSearch("");
     setEditSelectedItemId(agreement.itemId);
     setEditMonthlyAmount(agreement.monthlyAmount || "");
     setEditAgreementType(agreement.type || "permanent");
@@ -306,7 +280,6 @@ export default function CurrentAgreementsPage() {
                   id: editAgreement.id,
                   updates: {
                     agreementCategory: editAgreementCategory,
-                    horseId: editAgreementCategory === "with_horse" ? editSelectedHorseId : null,
                     customerId: editSelectedCustomerId,
                     boxId,
                     itemId: editSelectedItemId,
@@ -337,7 +310,7 @@ export default function CurrentAgreementsPage() {
 
                 <div>
                   <Label>Agreement Type</Label>
-                  <Select value={editAgreementCategory} onValueChange={(v) => { setEditAgreementCategory(v); if (v === "without_horse") { setEditSelectedHorseId(""); setEditHorseSearch(""); } }}>
+                  <Select value={editAgreementCategory} onValueChange={setEditAgreementCategory}>
                     <SelectTrigger data-testid="select-edit-agreement-category">
                       <SelectValue />
                     </SelectTrigger>
@@ -392,55 +365,6 @@ export default function CurrentAgreementsPage() {
                     </div>
                   )}
                 </div>
-
-                {editAgreementCategory === "with_horse" && (
-                <div className="relative">
-                  <Label>Horse</Label>
-                  <div className="relative">
-                    <Input
-                      data-testid="input-edit-horse-search"
-                      placeholder="Search horse..."
-                      value={editSelectedHorse && !editHorseDropdownOpen ? editSelectedHorse.horseName : editHorseSearch}
-                      onChange={(e) => {
-                        setEditHorseSearch(e.target.value);
-                        setEditHorseDropdownOpen(true);
-                        if (editSelectedHorseId) setEditSelectedHorseId("");
-                      }}
-                      onFocus={() => setEditHorseDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setEditHorseDropdownOpen(false), 200)}
-                    />
-                    {editSelectedHorseId && (
-                      <button
-                        type="button"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
-                        onClick={() => { setEditSelectedHorseId(""); setEditHorseSearch(""); setEditHorseDropdownOpen(true); }}
-                      >✕</button>
-                    )}
-                  </div>
-                  {editHorseDropdownOpen && !editSelectedHorseId && (
-                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                      {editActiveHorses.length === 0 ? (
-                        <div className="p-3 text-sm text-muted-foreground">No horses found</div>
-                      ) : (
-                        editActiveHorses.map((h: any) => (
-                          <button
-                            type="button"
-                            key={h.id}
-                            data-testid={`edit-horse-option-${h.id}`}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                            onClick={() => { setEditSelectedHorseId(h.id); setEditHorseSearch(""); setEditHorseDropdownOpen(false); }}
-                          >
-                            <div className="font-medium">{h.horseName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                )}
 
                 <div>
                   <Label>Livery Package</Label>
@@ -519,7 +443,7 @@ export default function CurrentAgreementsPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={editMutation.isPending || !editSelectedCustomerId || (editAgreementCategory === "with_horse" && !editSelectedHorseId) || !editSelectedItemId} data-testid="button-submit-edit">
+                <Button type="submit" disabled={editMutation.isPending || !editSelectedCustomerId || !editSelectedItemId} data-testid="button-submit-edit">
                   Save Changes
                 </Button>
               </DialogFooter>

@@ -525,10 +525,6 @@ export async function registerRoutes(
   app.post("/api/livery-agreements", async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema, req.body);
-      const cat = data.agreementCategory || "with_horse";
-      if (cat === "with_horse" && !data.horseId) {
-        return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
-      }
       const agreement = await storage.createLiveryAgreement(data);
       auditLog(req, "create_agreement", "agreement", agreement.id, `Created agreement: ${agreement.referenceNumber}`);
       res.json(agreement);
@@ -540,15 +536,6 @@ export async function registerRoutes(
   app.patch("/api/livery-agreements/:id", async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
-      if (data.agreementCategory) {
-        const existing = await storage.getLiveryAgreement(req.params.id);
-        if (!existing) return res.status(404).json({ message: "Agreement not found" });
-        const cat = data.agreementCategory;
-        const horseId = data.horseId !== undefined ? data.horseId : existing.horseId;
-        if (cat === "with_horse" && !horseId) {
-          return res.status(400).json({ message: "Horse is required for 'With Horse' agreements" });
-        }
-      }
       const agreement = await storage.updateLiveryAgreement(req.params.id, data);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
       if (data.endDate) {
@@ -625,7 +612,7 @@ export async function registerRoutes(
       });
       const parsed = editSchema.parse(req.body);
       const allowedFields: Record<string, any> = {};
-      if (parsed.horseId !== undefined) allowedFields.horseId = parsed.horseId;
+      if (parsed.horseId !== undefined) allowedFields.horseId = parsed.horseId; // billing_elements still has horseId
       if (parsed.itemId !== undefined) allowedFields.itemId = parsed.itemId;
       if (parsed.quantity !== undefined) allowedFields.quantity = parsed.quantity;
       if (parsed.price !== undefined) allowedFields.price = parsed.price;
@@ -1284,6 +1271,17 @@ export async function registerRoutes(
   app.post("/api/horse-movements", async (req, res) => {
     try {
       const data = validateBody(insertHorseMovementSchema, req.body);
+      const allMovements = await storage.getHorseMovements();
+      const activeHorseMovement = allMovements.find(m => m.horseId === data.horseId && !m.checkOut);
+      if (activeHorseMovement) {
+        return res.status(400).json({ message: "This horse is already checked in to another box" });
+      }
+      if (data.stableboxId) {
+        const activeBoxMovement = await storage.getActiveMovementByBoxId(data.stableboxId);
+        if (activeBoxMovement) {
+          return res.status(400).json({ message: "This box already has a horse checked in" });
+        }
+      }
       const movement = await storage.createHorseMovement(data);
       res.json(movement);
     } catch (e: any) {
