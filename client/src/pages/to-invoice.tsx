@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { FileText, Trash2, Pencil } from "lucide-react";
+import { FileText, Trash2, Pencil, AlertTriangle } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
 
 type LineItem = {
@@ -102,6 +102,11 @@ export default function ToInvoicePage() {
   const [editQuantity, setEditQuantity] = useState(1);
   const [editFinalPrice, setEditFinalPrice] = useState("");
   const [editTransactionDate, setEditTransactionDate] = useState("");
+
+  const [showHorseWarning, setShowHorseWarning] = useState(false);
+  const [unassignedAgreements, setUnassignedAgreements] = useState<any[]>([]);
+  const [pendingGenerate, setPendingGenerate] = useState<{ customerId: string; lineItems: LineItem[] } | null>(null);
+  const [preCheckLoading, setPreCheckLoading] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -201,6 +206,31 @@ export default function ToInvoicePage() {
       toast({ title: "Failed to update billing element", variant: "destructive" });
     },
   });
+
+  const handleGenerateClick = async (customerId: string, lineItems: LineItem[]) => {
+    setPreCheckLoading(true);
+    try {
+      const res = await fetch(`/api/horse-assignment-check?billingMonth=${billingMonth}&customerId=${customerId}`, { credentials: "include" });
+      if (!res.ok) {
+        toast({ title: "Pre-check failed", description: "Could not verify horse assignments", variant: "destructive" });
+        setPreCheckLoading(false);
+        return;
+      }
+      const unassigned = await res.json();
+      if (unassigned.length > 0) {
+        setUnassignedAgreements(unassigned);
+        setPendingGenerate(null);
+        setShowHorseWarning(true);
+        setPreCheckLoading(false);
+        return;
+      }
+      setPreCheckLoading(false);
+      generateMutation.mutate({ customerId, lineItems });
+    } catch {
+      toast({ title: "Pre-check failed", variant: "destructive" });
+      setPreCheckLoading(false);
+    }
+  };
 
   const openEditDialog = (li: LineItem) => {
     const be = billingElements.find((b: any) => b.id === li.billingElementId);
@@ -420,12 +450,12 @@ export default function ToInvoicePage() {
                     <CardTitle className="text-lg">{c.customerName}</CardTitle>
                   </div>
                   <Button
-                    onClick={() => generateMutation.mutate({ customerId: c.customerId, lineItems: c.lineItems })}
-                    disabled={generateMutation.isPending || !someSelected}
+                    onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
+                    disabled={generateMutation.isPending || preCheckLoading || !someSelected}
                     data-testid={`button-generate-invoice-${c.customerId}`}
                   >
                     <FileText className="w-4 h-4 mr-2" />
-                    Generate Invoice
+                    {preCheckLoading ? "Checking..." : "Generate Invoice"}
                   </Button>
                 </CardHeader>
                 <CardContent>
@@ -720,6 +750,46 @@ export default function ToInvoicePage() {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showHorseWarning} onOpenChange={setShowHorseWarning}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Invoice generation blocked
+            </DialogTitle>
+            <DialogDescription>
+              The following boxes have no horse assigned for this billing period ({billingMonth}).
+              Please assign a horse via Horse Movements before generating invoices.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-64 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Box</TableHead>
+                  <TableHead>Package</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unassignedAgreements.map((ua: any) => (
+                  <TableRow key={ua.agreementId} data-testid={`row-unassigned-${ua.agreementId}`}>
+                    <TableCell>{ua.customerName}</TableCell>
+                    <TableCell>{ua.boxName}</TableCell>
+                    <TableCell>{ua.itemName}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHorseWarning(false)} data-testid="button-close-horse-warning">
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

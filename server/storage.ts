@@ -123,6 +123,7 @@ export interface IStorage {
   getBoxGridWithOccupants(): Promise<any[]>;
   moveHorseToBox(movementId: string, newBoxId: string): Promise<any>;
   swapHorseInBox(movementId: string, newHorseId: string): Promise<any>;
+  checkAgreementsHorseAssignment(billingMonth: string, customerId?: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1122,6 +1123,51 @@ export class DatabaseStorage implements IStorage {
         checkIn: activeMovement?.checkIn || null,
       };
     });
+  }
+
+  async checkAgreementsHorseAssignment(billingMonth: string, customerId?: string): Promise<any[]> {
+    const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
+    const periodStart = `${bmYear}-${String(bmMonth).padStart(2, "0")}-01`;
+    const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
+    const periodEnd = `${bmYear}-${String(bmMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+
+    const allAgreements = customerId
+      ? await db.select().from(liveryAgreements).where(eq(liveryAgreements.customerId, customerId))
+      : await db.select().from(liveryAgreements);
+    const activeAgreements = allAgreements.filter(a => {
+      if (a.status !== "active" && a.status !== "ended") return false;
+      if (a.startDate && a.startDate > periodEnd) return false;
+      if (a.endDate && a.endDate < periodStart) return false;
+      return true;
+    });
+
+    const allMovements = await db.select().from(horseMovements);
+    const allCustomers = await db.select().from(customers);
+    const allBoxes = await db.select().from(boxes);
+    const allItems = await db.select().from(items);
+
+    const unassigned: any[] = [];
+    for (const agreement of activeAgreements) {
+      const hasOverlapping = allMovements.some(m => {
+        if (m.agreementId !== agreement.id) return false;
+        if (m.checkIn > periodEnd) return false;
+        if (m.checkOut && m.checkOut < periodStart) return false;
+        return true;
+      });
+      if (!hasOverlapping) {
+        const customer = allCustomers.find(c => c.id === agreement.customerId);
+        const box = allBoxes.find(b => b.id === agreement.boxId);
+        const item = allItems.find(i => i.id === agreement.itemId);
+        unassigned.push({
+          agreementId: agreement.id,
+          referenceNumber: agreement.referenceNumber,
+          customerName: customer?.fullname || "Unknown",
+          boxName: box?.name || "Unknown",
+          itemName: item?.name || "Unknown",
+        });
+      }
+    }
+    return unassigned;
   }
 }
 

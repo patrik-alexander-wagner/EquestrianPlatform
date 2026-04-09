@@ -131,6 +131,11 @@ shared/
   - Movement log table: chronological (newest first), filterable by customer or box/stable
   - Empty box click → navigates to new agreement page
   - API: GET /api/box-grid, GET /api/horse-movements/enriched, POST /api/horse-movements/move, POST /api/horse-movements/swap
+- Invoice Generation Horse Assignment Pre-check:
+  - Before generating an invoice, the system checks that all active agreements for the billing period have at least one horse_movement overlapping (checkIn <= period end AND checkOut null or >= period start)
+  - If any agreements lack a horse assignment, a blocking modal appears listing Customer, Box, and Package for each unassigned agreement
+  - Pre-check is scoped per customer (not global) and enforced both client-side and server-side (POST /api/invoices returns 400)
+  - API: GET /api/horse-assignment-check?billingMonth=YYYY-MM&customerId=UUID
 - N8N webhook integration (legacy): configurable webhook URL in Settings still available
 
 ## Input Validation

@@ -710,6 +710,17 @@ export async function registerRoutes(
     try {
       const { customerId, invoiceDate, billingMonth, totalAmount, billingElementIds, liveryItems } = req.body;
       if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
+
+      if (billingMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+        const unassigned = await storage.checkAgreementsHorseAssignment(billingMonth, customerId);
+        if (unassigned.length > 0) {
+          return res.status(400).json({
+            message: "Invoice generation blocked — some boxes have no horse assigned for this period",
+            unassignedAgreements: unassigned,
+          });
+        }
+      }
+
       const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "DRAFT" });
 
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
@@ -1317,6 +1328,20 @@ export async function registerRoutes(
       const movement = await storage.updateHorseMovement(req.params.id, data);
       if (!movement) return res.status(404).json({ message: "Movement not found" });
       res.json(movement);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-assignment-check", async (req, res) => {
+    try {
+      const billingMonth = req.query.billingMonth as string;
+      const customerId = req.query.customerId as string | undefined;
+      if (!billingMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+        return res.status(400).json({ message: "billingMonth query param required (YYYY-MM, valid month 01-12)" });
+      }
+      const unassigned = await storage.checkAgreementsHorseAssignment(billingMonth, customerId);
+      res.json(unassigned);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
