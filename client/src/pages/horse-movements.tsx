@@ -408,7 +408,7 @@ export default function HorseMovementsPage() {
           )}
       </div>
 
-      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+      <Dialog open={moveDialogOpen} onOpenChange={(open) => { setMoveDialogOpen(open); if (!open) setTargetBoxId(""); }}>
         <DialogContent data-testid="dialog-move-horse">
           <DialogHeader>
             <DialogTitle>Move {selectedBox?.horseName} to Empty Box</DialogTitle>
@@ -437,7 +437,7 @@ export default function HorseMovementsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
+      <Dialog open={swapDialogOpen} onOpenChange={(open) => { setSwapDialogOpen(open); if (!open) setSwapHorseId(""); }}>
         <DialogContent data-testid="dialog-swap-horse">
           <DialogHeader>
             <DialogTitle>Swap Horse in {selectedBox?.name}</DialogTitle>

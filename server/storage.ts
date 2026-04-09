@@ -119,6 +119,10 @@ export interface IStorage {
   getHorseMovementsByAgreementId(agreementId: string): Promise<HorseMovement[]>;
   getActiveMovementByBoxId(boxId: string): Promise<HorseMovement | undefined>;
   getHorseMovements(): Promise<HorseMovement[]>;
+  getEnrichedHorseMovements(): Promise<any[]>;
+  getBoxGridWithOccupants(): Promise<any[]>;
+  moveHorseToBox(movementId: string, newBoxId: string): Promise<any>;
+  swapHorseInBox(movementId: string, newHorseId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
