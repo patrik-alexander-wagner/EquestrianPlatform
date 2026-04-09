@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, FileText, Upload, Download, Trash2, Pencil } from "lucide-react";
+import { LogOut, FileText, Upload, Download, Trash2, Pencil, MoveRight } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
 
 export default function CurrentAgreementsPage() {
@@ -30,6 +30,13 @@ export default function CurrentAgreementsPage() {
   const [editCustomerDropdownOpen, setEditCustomerDropdownOpen] = useState(false);
   const [editSelectedItemId, setEditSelectedItemId] = useState("");
   const [editMonthlyAmount, setEditMonthlyAmount] = useState("");
+
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkInAgreement, setCheckInAgreement] = useState<any>(null);
+  const [checkInBoxName, setCheckInBoxName] = useState("");
+  const [selectedCheckInHorseId, setSelectedCheckInHorseId] = useState("");
+  const [checkInHorseSearch, setCheckInHorseSearch] = useState("");
+  const [checkInHorseDropdownOpen, setCheckInHorseDropdownOpen] = useState(false);
 
   const { toast } = useToast();
 
@@ -73,16 +80,65 @@ export default function CurrentAgreementsPage() {
 
   const editMutation = useMutation({
     mutationFn: (data: any) => apiRequest("PATCH", `/api/livery-agreements/${data.id}`, data.updates),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/boxes-with-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements"] });
       setShowEditDialog(false);
       toast({ title: "Agreement updated successfully" });
+
+      if (variables.boxChanged && editAgreement) {
+        const newBox = boxesWithStatus.find((b: any) => b.id === variables.updates.boxId);
+        setCheckInAgreement({ id: editAgreement.id, customerId: editSelectedCustomerId, boxId: variables.updates.boxId });
+        setCheckInBoxName(newBox?.name || "New Box");
+        setSelectedCheckInHorseId("");
+        setCheckInHorseSearch("");
+        setShowCheckInModal(true);
+      }
     },
     onError: (error: any) => {
       toast({ title: "Failed to update agreement", description: error.message, variant: "destructive" });
     },
+  });
+
+  const checkInMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/horse-movements", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/boxes-with-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
+      setShowCheckInModal(false);
+      toast({ title: "Horse checked in successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to check in horse", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const { data: customerHorses = [] } = useQuery<any[]>({
+    queryKey: ["/api/horse-ownership/customer", checkInAgreement?.customerId, "checkin-eligible"],
+    queryFn: async () => {
+      const custId = checkInAgreement?.customerId;
+      if (!custId) return [];
+      const res = await fetch(`/api/horse-ownership/customer/${custId}`);
+      const ownership = await res.json();
+      if (!Array.isArray(ownership) || ownership.length === 0) return [];
+      const [horsesRes, movementsRes] = await Promise.all([
+        fetch("/api/horses"),
+        fetch("/api/horse-movements"),
+      ]);
+      const allHorses = await horsesRes.json();
+      const allMovements = await movementsRes.json();
+      const activeHorseIds = new Set(
+        (allMovements as any[]).filter((m: any) => !m.checkOut).map((m: any) => m.horseId)
+      );
+      return ownership
+        .map((o: any) => allHorses.find((h: any) => h.id === o.horseId))
+        .filter((h: any) => h && h.status === "active" && !activeHorseIds.has(h.id));
+    },
+    enabled: !!checkInAgreement?.customerId,
   });
 
   const deleteDocMutation = useMutation({
@@ -276,8 +332,10 @@ export default function CurrentAgreementsPage() {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
                 const boxId = editSelectedBoxId || editAgreement.boxId;
+                const boxChanged = boxId !== editAgreement.boxId;
                 editMutation.mutate({
                   id: editAgreement.id,
+                  boxChanged,
                   updates: {
                     agreementCategory: editAgreementCategory,
                     customerId: editSelectedCustomerId,
@@ -562,6 +620,100 @@ export default function CurrentAgreementsPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCheckInModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowCheckInModal(false);
+          setCheckInAgreement(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Check In Horse</DialogTitle>
+            <DialogDescription>
+              The box was changed. Do you want to check a horse into box <strong>{checkInBoxName}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Label>Select Horse</Label>
+              <div className="relative">
+                <Input
+                  data-testid="input-recheckin-horse-search"
+                  placeholder="Search horse..."
+                  value={customerHorses.find((h: any) => h.id === selectedCheckInHorseId) && !checkInHorseDropdownOpen
+                    ? customerHorses.find((h: any) => h.id === selectedCheckInHorseId)?.horseName
+                    : checkInHorseSearch}
+                  onChange={(e) => {
+                    setCheckInHorseSearch(e.target.value);
+                    setCheckInHorseDropdownOpen(true);
+                    if (selectedCheckInHorseId) setSelectedCheckInHorseId("");
+                  }}
+                  onFocus={() => setCheckInHorseDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setCheckInHorseDropdownOpen(false), 200)}
+                />
+                {selectedCheckInHorseId && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm"
+                    onClick={() => { setSelectedCheckInHorseId(""); setCheckInHorseSearch(""); setCheckInHorseDropdownOpen(true); }}
+                  >✕</button>
+                )}
+              </div>
+              {checkInHorseDropdownOpen && !selectedCheckInHorseId && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                  {customerHorses.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No eligible horses found</div>
+                  ) : (
+                    customerHorses.filter((h: any) => {
+                      if (!checkInHorseSearch.trim()) return true;
+                      return h.horseName.toLowerCase().includes(checkInHorseSearch.toLowerCase());
+                    }).map((h: any) => (
+                      <button
+                        type="button"
+                        key={h.id}
+                        data-testid={`recheckin-horse-option-${h.id}`}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => { setSelectedCheckInHorseId(h.id); setCheckInHorseSearch(""); setCheckInHorseDropdownOpen(false); }}
+                      >
+                        <div className="font-medium">{h.horseName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {h.breed || ""}{h.color ? ` · ${h.color}` : ""}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="mt-4 flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowCheckInModal(false); setCheckInAgreement(null); }}
+              data-testid="button-skip-recheckin"
+            >
+              Skip
+            </Button>
+            <Button
+              disabled={!selectedCheckInHorseId || checkInMutation.isPending}
+              onClick={() => {
+                if (!checkInAgreement || !selectedCheckInHorseId) return;
+                checkInMutation.mutate({
+                  agreementId: checkInAgreement.id,
+                  horseId: selectedCheckInHorseId,
+                  stableboxId: checkInAgreement.boxId,
+                  checkIn: new Date().toISOString().split("T")[0],
+                });
+              }}
+              data-testid="button-confirm-recheckin"
+            >
+              <MoveRight className="w-4 h-4 mr-1" />
+              Check In
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

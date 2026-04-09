@@ -536,8 +536,21 @@ export async function registerRoutes(
   app.patch("/api/livery-agreements/:id", async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
+      const existing = await storage.getLiveryAgreement(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Agreement not found" });
+
+      const movements = await storage.getHorseMovementsByAgreementId(req.params.id);
+      const activeMovement = movements.find(m => !m.checkOut);
+
+      if (data.endDate && activeMovement) {
+        await storage.updateHorseMovement(activeMovement.id, { checkOut: data.endDate });
+      }
+
+      if (data.boxId && data.boxId !== existing.boxId && activeMovement) {
+        await storage.updateHorseMovement(activeMovement.id, { checkOut: new Date().toISOString().split("T")[0] });
+      }
+
       const agreement = await storage.updateLiveryAgreement(req.params.id, data);
-      if (!agreement) return res.status(404).json({ message: "Agreement not found" });
       if (data.endDate) {
         auditLog(req, "checkout_agreement", "agreement", req.params.id, `Checkout agreement, end date: ${data.endDate}`);
       }
