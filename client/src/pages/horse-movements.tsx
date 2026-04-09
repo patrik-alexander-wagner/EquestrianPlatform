@@ -209,11 +209,7 @@ export default function HorseMovementsPage() {
   });
 
   const handleBoxClick = (box: BoxGridItem) => {
-    if (box.isOccupied) {
-      setSelectedBox(prev => prev?.id === box.id ? null : box);
-    } else {
-      navigate("/agreements/new");
-    }
+    setSelectedBox(prev => prev?.id === box.id ? null : box);
   };
 
   const handleMove = () => {
@@ -387,10 +383,12 @@ export default function HorseMovementsPage() {
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-lg font-semibold" data-testid="text-detail-title">
-                {selectedBox.name} · {getCustomerShortName(selectedBox.customerName)}
+                {selectedBox.name} {selectedBox.isOccupied ? `· ${getCustomerShortName(selectedBox.customerName)}` : ""}
               </h3>
               <p className="text-sm text-muted-foreground" data-testid="text-detail-checkin">
-                Occupied since {formatDate(selectedBox.checkIn)}
+                {selectedBox.isOccupied
+                  ? `Occupied since ${formatDate(selectedBox.checkIn)}`
+                  : "Empty box — no horse currently assigned"}
               </p>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setSelectedBox(null)} data-testid="button-close-detail">
@@ -398,71 +396,86 @@ export default function HorseMovementsPage() {
             </Button>
           </div>
 
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Horse</span>
-              <span className="font-semibold" data-testid="text-detail-horse">{selectedBox.horseName || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Customer</span>
-              <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Package</span>
-              <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
-            </div>
-            {selectedBox.monthlyAmount && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Agreed price</span>
-                <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
+          {selectedBox.isOccupied ? (
+            <>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Horse</span>
+                  <span className="font-semibold" data-testid="text-detail-horse">{selectedBox.horseName || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer</span>
+                  <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Package</span>
+                  <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
+                </div>
+                {selectedBox.monthlyAmount && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Agreed price</span>
+                    <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
-            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setMoveDialogOpen(true)}
+                    disabled={emptyBoxes.length === 0}
+                    data-testid="button-move-horse"
+                  >
+                    <MoveRight className="w-4 h-4 mr-2" />
+                    Move to another box
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSwapDialogOpen(true)}
+                    data-testid="button-swap-horse"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                    Swap horse
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (selectedBox.agreementId) {
+                        navigate(`/agreements/current`);
+                      }
+                    }}
+                    disabled={!selectedBox.agreementId}
+                    data-testid="button-view-agreement"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View agreement
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCheckoutDialogOpen(true)}
+                    disabled={!selectedBox.agreementId}
+                    data-testid="button-checkout-horse"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Check out horse
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">This box has no horse assigned.</p>
               <Button
                 variant="outline"
-                onClick={() => setMoveDialogOpen(true)}
-                disabled={emptyBoxes.length === 0}
-                data-testid="button-move-horse"
+                onClick={() => navigate("/agreements/new")}
+                data-testid="button-create-agreement"
               >
-                <MoveRight className="w-4 h-4 mr-2" />
-                Move to another box
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setSwapDialogOpen(true)}
-                data-testid="button-swap-horse"
-              >
-                <ArrowRightLeft className="w-4 h-4 mr-2" />
-                Swap horse
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (selectedBox.agreementId) {
-                    navigate(`/agreements/current`);
-                  }
-                }}
-                disabled={!selectedBox.agreementId}
-                data-testid="button-view-agreement"
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                View agreement
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setCheckoutDialogOpen(true)}
-                disabled={!selectedBox.agreementId}
-                data-testid="button-checkout-horse"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Check out horse
+                Create new agreement
               </Button>
             </div>
-          </div>
+          )}
         </div>
       )}
 
