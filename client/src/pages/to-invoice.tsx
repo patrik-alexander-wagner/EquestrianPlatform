@@ -105,7 +105,6 @@ export default function ToInvoicePage() {
 
   const [showHorseWarning, setShowHorseWarning] = useState(false);
   const [unassignedAgreements, setUnassignedAgreements] = useState<any[]>([]);
-  const [pendingGenerate, setPendingGenerate] = useState<{ customerId: string; lineItems: LineItem[] } | null>(null);
   const [preCheckLoading, setPreCheckLoading] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -219,7 +218,6 @@ export default function ToInvoicePage() {
       const unassigned = await res.json();
       if (unassigned.length > 0) {
         setUnassignedAgreements(unassigned);
-        setPendingGenerate(null);
         setShowHorseWarning(true);
         setPreCheckLoading(false);
         return;
@@ -758,11 +756,10 @@ export default function ToInvoicePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
-              Invoice generation blocked
+              Invoice generation blocked — the following boxes have no horse assigned for this period
             </DialogTitle>
             <DialogDescription>
-              The following boxes have no horse assigned for this billing period ({billingMonth}).
-              Please assign a horse via Horse Movements before generating invoices.
+              Please assign a horse via Horse Movements before generating invoices for {billingMonth}.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-64 overflow-y-auto">
