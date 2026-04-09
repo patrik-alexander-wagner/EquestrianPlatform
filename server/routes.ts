@@ -274,7 +274,15 @@ export async function registerRoutes(
     try {
       const horse = await storage.getHorse(req.params.id);
       if (!horse) return res.status(404).json({ message: "Horse not found" });
-      res.json(horse);
+      const ownership = await storage.getHorseOwnershipByHorseId(horse.id);
+      let ownerName = null;
+      let ownerId = null;
+      if (ownership) {
+        const owner = await storage.getCustomer(ownership.customerId);
+        ownerName = owner?.fullname || null;
+        ownerId = ownership.customerId;
+      }
+      res.json({ ...horse, ownerName, ownerId });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
