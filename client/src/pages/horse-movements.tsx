@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowRightLeft, MoveRight, X, Search, Filter } from "lucide-react";
+import { ArrowRightLeft, MoveRight, X, Search, Filter, Plus } from "lucide-react";
 import { Horseshoe } from "@/components/icons/horseshoe";
 
 interface BoxGridItem {
@@ -45,13 +46,26 @@ interface EnrichedMovement {
   stableName: string;
 }
 
+interface HorseOwnershipEntry {
+  id: string;
+  horseId: string;
+  customerId: string;
+}
+
+interface HorseEntry {
+  id: string;
+  horseName: string;
+  status: string;
+}
+
 export default function HorseMovementsPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [selectedBox, setSelectedBox] = useState<BoxGridItem | null>(null);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
   const [targetBoxId, setTargetBoxId] = useState("");
-  const [swapTargetBoxId, setSwapTargetBoxId] = useState("");
+  const [swapHorseId, setSwapHorseId] = useState("");
   const [stableFilter, setStableFilter] = useState("all");
   const [logCustomerFilter, setLogCustomerFilter] = useState("");
   const [logBoxFilter, setLogBoxFilter] = useState("");
@@ -63,6 +77,30 @@ export default function HorseMovementsPage() {
   const { data: movementLog = [], isLoading: logLoading } = useQuery<EnrichedMovement[]>({
     queryKey: ["/api/horse-movements/enriched"],
   });
+
+  const { data: customerHorses = [] } = useQuery<HorseOwnershipEntry[]>({
+    queryKey: ["/api/horse-ownership/customer", selectedBox?.customerId],
+    enabled: !!selectedBox?.customerId && swapDialogOpen,
+  });
+
+  const { data: allHorses = [] } = useQuery<HorseEntry[]>({
+    queryKey: ["/api/horses"],
+    enabled: swapDialogOpen,
+  });
+
+  const activeHorseIds = useMemo(() => {
+    return new Set(boxGrid.filter(b => b.isOccupied && b.horseId).map(b => b.horseId!));
+  }, [boxGrid]);
+
+  const eligibleSwapHorses = useMemo(() => {
+    const customerHorseIds = new Set(customerHorses.map(ch => ch.horseId));
+    return allHorses.filter(h =>
+      customerHorseIds.has(h.id) &&
+      h.id !== selectedBox?.horseId &&
+      !activeHorseIds.has(h.id) &&
+      h.status === "active"
+    );
+  }, [customerHorses, allHorses, selectedBox, activeHorseIds]);
 
   const stables = useMemo(() => {
     const set = new Set(boxGrid.map(b => b.stableName));
@@ -87,10 +125,6 @@ export default function HorseMovementsPage() {
   const emptyBoxes = useMemo(() => {
     return boxGrid.filter(b => !b.isOccupied);
   }, [boxGrid]);
-
-  const occupiedBoxes = useMemo(() => {
-    return boxGrid.filter(b => b.isOccupied && b.id !== selectedBox?.id);
-  }, [boxGrid, selectedBox]);
 
   const filteredLog = useMemo(() => {
     let result = movementLog;
@@ -122,7 +156,7 @@ export default function HorseMovementsPage() {
   });
 
   const swapMutation = useMutation({
-    mutationFn: async (data: { movementIdA: string; movementIdB: string }) => {
+    mutationFn: async (data: { movementId: string; newHorseId: string }) => {
       const res = await apiRequest("POST", "/api/horse-movements/swap", data);
       return res.json();
     },
@@ -131,8 +165,8 @@ export default function HorseMovementsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/horse-movements/enriched"] });
       setSwapDialogOpen(false);
       setSelectedBox(null);
-      setSwapTargetBoxId("");
-      toast({ title: "Horses swapped successfully" });
+      setSwapHorseId("");
+      toast({ title: "Horse swapped successfully" });
     },
     onError: (err: Error) => {
       toast({ title: "Swap failed", description: err.message, variant: "destructive" });
@@ -142,6 +176,8 @@ export default function HorseMovementsPage() {
   const handleBoxClick = (box: BoxGridItem) => {
     if (box.isOccupied) {
       setSelectedBox(box);
+    } else {
+      navigate("/agreements/new");
     }
   };
 
@@ -151,14 +187,17 @@ export default function HorseMovementsPage() {
   };
 
   const handleSwap = () => {
-    if (!selectedBox?.movementId || !swapTargetBoxId) return;
-    const targetBox = boxGrid.find(b => b.id === swapTargetBoxId);
-    if (!targetBox?.movementId) return;
-    swapMutation.mutate({ movementIdA: selectedBox.movementId, movementIdB: targetBox.movementId });
+    if (!selectedBox?.movementId || !swapHorseId) return;
+    swapMutation.mutate({ movementId: selectedBox.movementId, newHorseId: swapHorseId });
   };
 
   const occupiedCount = boxGrid.filter(b => b.isOccupied).length;
   const totalCount = boxGrid.length;
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "—";
+    return dateStr;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -216,14 +255,13 @@ export default function HorseMovementsPage() {
                     <button
                       key={box.id}
                       onClick={() => handleBoxClick(box)}
-                      className={`relative p-3 rounded-lg border text-left transition-all ${
+                      className={`relative p-3 rounded-lg border text-left transition-all cursor-pointer ${
                         selectedBox?.id === box.id
                           ? "ring-2 ring-primary border-primary"
                           : box.isOccupied
-                            ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60 cursor-pointer"
-                            : "bg-muted/30 border-border hover:border-border/80"
+                            ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60"
+                            : "bg-muted/30 border-border hover:border-primary/40 hover:bg-muted/50"
                       }`}
-                      disabled={!box.isOccupied}
                       data-testid={`box-cell-${box.id}`}
                     >
                       <div className="text-xs font-semibold truncate" data-testid={`text-box-name-${box.id}`}>{box.name}</div>
@@ -236,7 +274,10 @@ export default function HorseMovementsPage() {
                           <div className="text-[10px] text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>{box.customerName}</div>
                         </div>
                       ) : (
-                        <div className="mt-1 text-[10px] text-muted-foreground">Empty</div>
+                        <div className="mt-1 flex items-center gap-1">
+                          <Plus className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Empty</span>
+                        </div>
                       )}
                     </button>
                   ))}
@@ -280,6 +321,7 @@ export default function HorseMovementsPage() {
                   <Button
                     size="sm"
                     onClick={() => setMoveDialogOpen(true)}
+                    disabled={emptyBoxes.length === 0}
                     data-testid="button-move-horse"
                   >
                     <MoveRight className="w-4 h-4 mr-1" />
@@ -289,11 +331,10 @@ export default function HorseMovementsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => setSwapDialogOpen(true)}
-                    disabled={occupiedBoxes.length === 0}
                     data-testid="button-swap-horse"
                   >
                     <ArrowRightLeft className="w-4 h-4 mr-1" />
-                    Swap with Another Horse
+                    Swap Horse
                   </Button>
                 </div>
               </CardContent>
@@ -338,10 +379,10 @@ export default function HorseMovementsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Date</TableHead>
                     <TableHead>Horse</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Box</TableHead>
-                    <TableHead>Stable</TableHead>
                     <TableHead>Check In</TableHead>
                     <TableHead>Check Out</TableHead>
                     <TableHead>Status</TableHead>
@@ -350,12 +391,14 @@ export default function HorseMovementsPage() {
                 <TableBody>
                   {filteredLog.map(m => (
                     <TableRow key={m.id} data-testid={`row-movement-${m.id}`}>
+                      <TableCell className="text-muted-foreground" data-testid={`text-log-date-${m.id}`}>
+                        {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
+                      </TableCell>
                       <TableCell className="font-medium" data-testid={`text-log-horse-${m.id}`}>{m.horseName}</TableCell>
                       <TableCell data-testid={`text-log-customer-${m.id}`}>{m.customerName}</TableCell>
-                      <TableCell data-testid={`text-log-box-${m.id}`}>{m.boxName}</TableCell>
-                      <TableCell>{m.stableName}</TableCell>
-                      <TableCell>{m.checkIn}</TableCell>
-                      <TableCell>{m.checkOut || "—"}</TableCell>
+                      <TableCell data-testid={`text-log-box-${m.id}`}>{m.boxName} ({m.stableName})</TableCell>
+                      <TableCell>{formatDate(m.checkIn)}</TableCell>
+                      <TableCell>{formatDate(m.checkOut)}</TableCell>
                       <TableCell>
                         {m.checkOut ? (
                           <Badge variant="secondary" data-testid={`badge-status-${m.id}`}>Closed</Badge>
@@ -404,28 +447,32 @@ export default function HorseMovementsPage() {
       <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
         <DialogContent data-testid="dialog-swap-horse">
           <DialogHeader>
-            <DialogTitle>Swap {selectedBox?.horseName} with Another Horse</DialogTitle>
+            <DialogTitle>Swap Horse in {selectedBox?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Currently in: <strong>{selectedBox?.name}</strong> ({selectedBox?.stableName})
+              Replace <strong>{selectedBox?.horseName}</strong> with another horse from {selectedBox?.customerName}
             </p>
-            <Select value={swapTargetBoxId} onValueChange={setSwapTargetBoxId}>
-              <SelectTrigger data-testid="select-swap-target">
-                <SelectValue placeholder="Select box to swap with..." />
-              </SelectTrigger>
-              <SelectContent>
-                {occupiedBoxes.map(b => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name} — {b.horseName} ({b.stableName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {eligibleSwapHorses.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic" data-testid="text-no-eligible-horses">
+                No other eligible horses available for this customer.
+              </p>
+            ) : (
+              <Select value={swapHorseId} onValueChange={setSwapHorseId}>
+                <SelectTrigger data-testid="select-swap-horse">
+                  <SelectValue placeholder="Select horse..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligibleSwapHorses.map(h => (
+                    <SelectItem key={h.id} value={h.id}>{h.horseName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSwapDialogOpen(false)} data-testid="button-cancel-swap">Cancel</Button>
-            <Button onClick={handleSwap} disabled={!swapTargetBoxId || swapMutation.isPending} data-testid="button-confirm-swap">
+            <Button onClick={handleSwap} disabled={!swapHorseId || swapMutation.isPending || eligibleSwapHorses.length === 0} data-testid="button-confirm-swap">
               {swapMutation.isPending ? "Swapping..." : "Confirm Swap"}
             </Button>
           </DialogFooter>

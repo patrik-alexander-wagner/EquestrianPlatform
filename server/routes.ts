@@ -1355,13 +1355,13 @@ export async function registerRoutes(
   app.post("/api/horse-movements/swap", async (req, res) => {
     try {
       const schema = z.object({
-        movementIdA: z.string().uuid(),
-        movementIdB: z.string().uuid(),
-      }).refine(d => d.movementIdA !== d.movementIdB, { message: "Cannot swap a movement with itself" });
+        movementId: z.string().uuid(),
+        newHorseId: z.string().uuid(),
+      });
       const data = validateBody(schema, req.body);
-      const result = await storage.swapHorses(data.movementIdA, data.movementIdB);
-      auditLog(req, "swap_horses", "horse_movement", result.movementA.id, `Swapped horses between two boxes`);
-      res.json(result);
+      const newMovement = await storage.swapHorseInBox(data.movementId, data.newHorseId);
+      auditLog(req, "swap_horse", "horse_movement", newMovement.id, `Swapped horse in box`);
+      res.json(newMovement);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }

@@ -1052,35 +1052,30 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async swapHorses(movementIdA: string, movementIdB: string): Promise<any> {
+  async swapHorseInBox(movementId: string, newHorseId: string): Promise<any> {
     return await db.transaction(async (tx) => {
-      const [moveA] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementIdA));
-      const [moveB] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementIdB));
-      if (!moveA || moveA.checkOut || !moveB || moveB.checkOut) {
-        throw { status: 400, message: "Both boxes must have active movements to swap" };
+      const [currentMovement] = await tx.select().from(horseMovements).where(eq(horseMovements.id, movementId));
+      if (!currentMovement || currentMovement.checkOut) {
+        throw { status: 400, message: "No active movement found with that ID" };
+      }
+      const [newHorse] = await tx.select().from(horses).where(eq(horses.id, newHorseId));
+      if (!newHorse) {
+        throw { status: 400, message: "Horse not found" };
+      }
+      const [existingActiveMovement] = await tx.select().from(horseMovements)
+        .where(and(eq(horseMovements.horseId, newHorseId), sql`${horseMovements.checkOut} IS NULL`));
+      if (existingActiveMovement) {
+        throw { status: 400, message: "This horse is already checked in to another box" };
       }
       const today = new Date().toISOString().split("T")[0];
-      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementIdA));
-      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementIdB));
-      const [newMoveA] = await tx.insert(horseMovements).values({
-        agreementId: moveA.agreementId,
-        horseId: moveA.horseId,
-        stableboxId: moveB.stableboxId,
+      await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementId));
+      const [newMovement] = await tx.insert(horseMovements).values({
+        agreementId: currentMovement.agreementId,
+        horseId: newHorseId,
+        stableboxId: currentMovement.stableboxId,
         checkIn: today,
       }).returning();
-      const [newMoveB] = await tx.insert(horseMovements).values({
-        agreementId: moveB.agreementId,
-        horseId: moveB.horseId,
-        stableboxId: moveA.stableboxId,
-        checkIn: today,
-      }).returning();
-      if (moveA.agreementId) {
-        await tx.update(liveryAgreements).set({ boxId: moveB.stableboxId }).where(eq(liveryAgreements.id, moveA.agreementId));
-      }
-      if (moveB.agreementId) {
-        await tx.update(liveryAgreements).set({ boxId: moveA.stableboxId }).where(eq(liveryAgreements.id, moveB.agreementId));
-      }
-      return { movementA: newMoveA, movementB: newMoveB };
+      return newMovement;
     });
   }
 

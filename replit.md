@@ -127,8 +127,9 @@ shared/
 - Stable Management — Horse Movements page (/stable-management/horse-movements):
   - Box grid grouped by stable showing occupied (green) and empty boxes; click occupied box for detail panel
   - Move horse: closes current movement, creates new in target empty box, updates agreement boxId (transactional)
-  - Swap horses: closes both movements, creates new swapped movements, updates both agreements (transactional)
+  - Swap horse: replaces current horse in box with another horse from the same customer (via horse_ownership, transactional)
   - Movement log table: chronological (newest first), filterable by customer or box/stable
+  - Empty box click → navigates to new agreement page
   - API: GET /api/box-grid, GET /api/horse-movements/enriched, POST /api/horse-movements/move, POST /api/horse-movements/swap
 - N8N webhook integration (legacy): configurable webhook URL in Settings still available
 
