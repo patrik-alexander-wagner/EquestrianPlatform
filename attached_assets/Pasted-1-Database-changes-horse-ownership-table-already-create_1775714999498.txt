@@ -1,0 +1,121 @@
+1. Database changes
+horse_ownership table — already created, no changes needed.
+agreements table — remove horse_id column
+Drop the horse_id column from the agreements table entirely. Before running the migration, verify no existing query, API route, or UI component references agreements.horse_id. If any do, remove those references first. The stablebox_id column already exists on agreements and stays as-is.
+New table: horse_movements
+Create the following table if it does not already exist:
+
+id — primary key
+agreement_id — foreign key → agreements.id, not null
+horse_id — foreign key → horses.id, not null
+stablebox_id — foreign key → stableboxes.id, not null
+check_in — date, not null
+check_out — date, nullable (null means currently checked in)
+created_at — timestamp, default now
+
+
+2. Horse creation — add mandatory owner field
+On the horse creation form add a mandatory "Owner" field.
+Behaviour:
+
+Renders as a searchable dropdown listing all customers
+A search bar sits at the top of the dropdown — typing filters the list in real time by customer name
+Field is mandatory — form cannot be submitted without a selected owner
+On save, insert the new horse record then insert one row into horse_ownership with horse_id and customer_id
+Display the owner name on the horse detail view
+
+
+3. Agreement creation — box-first flow
+Entry point — stable box overview page
+The agreement creation flow starts from a stable box overview page, not from an agreements list. This page is described in section 5 (Stable Management). On this page, empty boxes are displayed visually. The admin clicks on an empty box and hits "Create new agreement". The selected box is passed automatically into the agreement form — the admin never manually picks a box.
+Agreement form
+The form contains the following fields in this order:
+
+Stable box — pre-filled and read-only, inherited from the box the admin clicked on
+Customer — searchable dropdown of all customers, mandatory
+Service item (package) — dropdown of all service items, mandatory. When selected, auto-fills the agreed price field with service_item.base_price
+Agreed price — numeric field, pre-filled from service item but editable, mandatory
+
+All four fields are mandatory. The form cannot be submitted unless all are filled.
+On save, insert the agreement record with stablebox_id already set. No prompt or second step for box assignment — it is done.
+Horse check-in prompt
+Immediately after the agreement is saved, display a modal:
+
+"Do you want to check a horse into box [box name] now?"
+
+Two actions: "Check in horse" or "Later".
+If "Check in horse":
+
+Display a searchable dropdown of horses owned by this customer only — filtered via horse_ownership where customer_id matches the agreement's customer
+Admin selects a horse and confirms
+System inserts a row into horse_movements: agreement_id, horse_id, stablebox_id, check_in = today, check_out = null
+
+If "Later": close the modal. Horse can be checked in later from the Stable Management page.
+
+4. Story 2 — Change box on existing agreement
+On the agreement edit page, the stablebox_id field is editable via a dropdown showing only boxes that are not currently assigned to another active agreement.
+When the admin changes the box and saves:
+
+Update stablebox_id on the agreement record directly — no close or reopen
+If an open movement exists for this agreement (a horse_movements row where agreement_id matches and check_out is null), automatically set check_out = today on that row
+Then show a modal: "Do you want to check the horse into the new box?" — if yes, insert a new horse_movements row with the new stablebox_id, check_in = today, check_out = null, same horse_id and agreement_id as the closed movement
+
+
+5. New page — Stable Management
+Add a new top-level navigation section called Stable Management. It contains one sub-page for now: Horse Movements. This section appears in the navigation above the Billing section.
+Horse Movements page — layout
+The page has two parts: a visual stable overview at the top and a movements log below.
+Top section — stable box grid
+Display all stable boxes as a grid of cards. Each card shows:
+
+Box name or number (large, top of card)
+Status: either the horse name and customer name currently checked in, or "Empty" if no active movement
+Cards for occupied boxes have a neutral filled style
+Cards for empty boxes have a distinct visual treatment (e.g. dashed border, lighter background) to make them immediately identifiable
+Clicking an empty box opens the "Create new agreement" flow described in section 3
+Clicking an occupied box opens a detail panel or modal showing: current horse, current customer, agreement package, check-in date, and two action buttons — "Move horse" and "Swap horse"
+
+"Move horse" action (Story 2 — same price, new box)
+Opens a modal. Admin selects a new box from a list of empty boxes. On confirm:
+
+Sets check_out = today on the current movement
+Inserts a new horse_movements row with the new stablebox_id, same horse_id and agreement_id, check_in = today
+Updates stablebox_id on the agreement record to the new box
+
+"Swap horse" action (Story 3 — different horse, same box)
+Opens a modal. Admin selects a different horse from the same customer's owned horses (filtered via horse_ownership). On confirm:
+
+Sets check_out = today on the current movement for the outgoing horse
+Inserts a new horse_movements row with the same stablebox_id and agreement_id, new horse_id, check_in = today
+Agreement is not touched
+
+Bottom section — movements log
+A chronological table showing all movement records, most recent first. Columns:
+
+Date (check-in date)
+Horse name
+Customer name
+Box name
+Check-in date
+Check-out date (blank if currently active)
+Status badge: "Active" or "Closed"
+
+The log is filterable by customer name and by box. No editing from this table — it is read-only history.
+
+6. Billing — invoice generation warning
+When the admin initiates invoice generation for a given billing period, before generating anything the system must run the following check:
+For every active agreement in the billing period, verify that at least one horse_movements row exists where agreement_id matches and the movement overlaps with the billing period (i.e. check_in is before the end of the period and check_out is either null or after the start of the period).
+If any agreements fail this check, block invoice generation and display a warning modal listing every agreement that has no horse assigned, showing: customer name, box name, agreement package. The modal title should read:
+
+"Invoice generation blocked — the following boxes have no horse assigned for this period"
+
+The admin must resolve each case (by checking in a horse via the Stable Management page) before the system allows invoice generation to proceed.
+If all agreements pass the check, proceed with invoice generation as normal.
+
+7. What not to change
+
+Billing elements flow — no changes
+Non-livery customer flow — no changes
+Existing invoice generation logic and NetSuite push — only add the pre-check described in section 6, do not modify anything else
+Existing horse and customer records — no backfilling required for horse_ownership, applies to new records only
+Any existing agreement records that still reference horse_id — handle via migration script before dropping the column, do not silently break existing data
