@@ -378,118 +378,101 @@ export default function HorseMovementsPage() {
         )}
       </div>
 
-      {selectedBox && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => setSelectedBox(null)}
-            data-testid="overlay-box-detail"
-          />
-          <div
-            className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t rounded-t-2xl shadow-2xl p-6 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
-            data-testid="card-box-detail"
-          >
-            <div className="max-w-lg mx-auto space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold" data-testid="text-detail-title">
-                    Box {selectedBox.name} {selectedBox.isOccupied ? `· ${getCustomerShortName(selectedBox.customerName)}` : ""}
-                  </h3>
-                  <p className="text-sm text-muted-foreground" data-testid="text-detail-checkin">
-                    {selectedBox.isOccupied
-                      ? `Occupied since ${formatDate(selectedBox.checkIn)}`
-                      : "Empty box — no horse currently assigned"}
-                  </p>
+      <Dialog open={!!selectedBox} onOpenChange={(open) => { if (!open) setSelectedBox(null); }}>
+        <DialogContent className="max-w-md" data-testid="card-box-detail">
+          <DialogHeader>
+            <DialogTitle data-testid="text-detail-title">
+              Box {selectedBox?.name} {selectedBox?.isOccupied ? `· ${getCustomerShortName(selectedBox.customerName)}` : ""}
+            </DialogTitle>
+            <DialogDescription data-testid="text-detail-checkin">
+              {selectedBox?.isOccupied
+                ? `Occupied since ${formatDate(selectedBox.checkIn)}`
+                : "Empty box — no horse currently assigned"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBox?.isOccupied ? (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Horse</span>
+                  <span className="font-semibold" data-testid="text-detail-horse">{selectedBox.horseName || "—"}</span>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setSelectedBox(null)} data-testid="button-close-detail">
-                  <X className="w-4 h-4" />
-                </Button>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer</span>
+                  <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Package</span>
+                  <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
+                </div>
+                {selectedBox.monthlyAmount && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Agreed price</span>
+                    <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
+                  </div>
+                )}
               </div>
 
-              {selectedBox.isOccupied ? (
-                <>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Horse</span>
-                      <span className="font-semibold" data-testid="text-detail-horse">{selectedBox.horseName || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Customer</span>
-                      <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Package</span>
-                      <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
-                    </div>
-                    {selectedBox.monthlyAmount && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Agreed price</span>
-                        <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setMoveDialogOpen(true)}
-                        disabled={emptyBoxes.length === 0}
-                        data-testid="button-move-horse"
-                      >
-                        <MoveRight className="w-4 h-4 mr-2" />
-                        Move to another box
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setSwapDialogOpen(true)}
-                        data-testid="button-swap-horse"
-                      >
-                        <ArrowRightLeft className="w-4 h-4 mr-2" />
-                        Swap horse
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (selectedBox.agreementId) {
-                            navigate(`/agreements/current`);
-                          }
-                        }}
-                        disabled={!selectedBox.agreementId}
-                        data-testid="button-view-agreement"
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        View agreement
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setCheckoutDialogOpen(true)}
-                        disabled={!selectedBox.agreementId}
-                        data-testid="button-checkout-horse"
-                      >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Check out horse
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-3">This box has no horse assigned.</p>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => navigate("/agreements/new")}
-                    data-testid="button-create-agreement"
+                    onClick={() => setMoveDialogOpen(true)}
+                    disabled={emptyBoxes.length === 0}
+                    data-testid="button-move-horse"
                   >
-                    Create new agreement
+                    <MoveRight className="w-4 h-4 mr-2" />
+                    Move to another box
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSwapDialogOpen(true)}
+                    data-testid="button-swap-horse"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                    Swap horse
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (selectedBox.agreementId) {
+                        navigate(`/agreements/current`);
+                      }
+                    }}
+                    disabled={!selectedBox.agreementId}
+                    data-testid="button-view-agreement"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View agreement
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCheckoutDialogOpen(true)}
+                    disabled={!selectedBox.agreementId}
+                    data-testid="button-checkout-horse"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Check out horse
                   </Button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          ) : (
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">This box has no horse assigned.</p>
+              <Button
+                variant="outline"
+                onClick={() => navigate("/agreements/new")}
+                data-testid="button-create-agreement"
+              >
+                Create new agreement
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold" data-testid="text-movement-log-title">Movement Log</h2>
