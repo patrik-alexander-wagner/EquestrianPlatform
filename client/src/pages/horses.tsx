@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
@@ -10,10 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Upload, MoreVertical } from "lucide-react";
+import { Plus, Upload, MoreVertical, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function HorsesPage() {
   const userRole = useUserRole();
@@ -25,7 +28,21 @@ export default function HorsesPage() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingHorse, setEditingHorse] = useState<any>(null);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
+  const [ownerComboOpen, setOwnerComboOpen] = useState(false);
+  const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
   const { toast } = useToast();
+
+  const { data: allCustomers = [] } = useQuery<any[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const filteredCustomers = useMemo(() => {
+    if (!ownerSearchTerm) return allCustomers;
+    return allCustomers.filter((c: any) =>
+      c.fullname.toLowerCase().includes(ownerSearchTerm.toLowerCase())
+    );
+  }, [allCustomers, ownerSearchTerm]);
 
   const queryParams = new URLSearchParams();
   if (search) queryParams.set("search", search);
@@ -66,6 +83,11 @@ export default function HorsesPage() {
 
   const columns = [
     { key: "horseName", label: "Horse Name" },
+    {
+      key: "ownerName",
+      label: "Owner",
+      render: (item: any) => item.ownerName || "-",
+    },
     { key: "breed", label: "Breed", render: (item: any) => item.breed || "-" },
     { key: "dateOfBirth", label: "Date of Birth", render: (item: any) => item.dateOfBirth || "-" },
     {
@@ -156,7 +178,10 @@ export default function HorsesPage() {
         )}
       />
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        setShowCreateDialog(open);
+        if (!open) { setSelectedOwnerId(""); setOwnerSearchTerm(""); }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Horse</DialogTitle>
@@ -164,6 +189,10 @@ export default function HorsesPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (!selectedOwnerId) {
+                toast({ title: "Owner is required", variant: "destructive" });
+                return;
+              }
               const fd = new FormData(e.currentTarget);
               createMutation.mutate({
                 horseName: fd.get("horseName"),
@@ -173,10 +202,60 @@ export default function HorsesPage() {
                 color: fd.get("color") || null,
                 size: fd.get("size") || null,
                 status: "active",
+                ownerId: selectedOwnerId,
               });
             }}
           >
             <div className="space-y-4">
+              <div>
+                <Label>Owner <span className="text-destructive">*</span></Label>
+                <Popover open={ownerComboOpen} onOpenChange={setOwnerComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={ownerComboOpen}
+                      className="w-full justify-between font-normal"
+                      data-testid="select-owner"
+                    >
+                      {selectedOwnerId
+                        ? allCustomers.find((c: any) => c.id === selectedOwnerId)?.fullname || "Select owner..."
+                        : "Select owner..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search customers..."
+                        value={ownerSearchTerm}
+                        onValueChange={setOwnerSearchTerm}
+                        data-testid="input-owner-search"
+                      />
+                      <CommandList>
+                        <CommandEmpty>No customer found.</CommandEmpty>
+                        <CommandGroup>
+                          {filteredCustomers.map((c: any) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.id}
+                              onSelect={() => {
+                                setSelectedOwnerId(c.id);
+                                setOwnerComboOpen(false);
+                                setOwnerSearchTerm("");
+                              }}
+                              data-testid={`option-owner-${c.id}`}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", selectedOwnerId === c.id ? "opacity-100" : "opacity-0")} />
+                              {c.fullname}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div>
                 <Label>Horse Name</Label>
                 <Input name="horseName" required data-testid="input-horse-name" />

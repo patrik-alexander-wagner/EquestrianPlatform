@@ -220,6 +220,31 @@ export const insertInvoiceValidationSchema = createInsertSchema(invoiceValidatio
 export type InsertInvoiceValidation = z.infer<typeof insertInvoiceValidationSchema>;
 export type InvoiceValidation = typeof invoiceValidations.$inferSelect;
 
+export const horseOwnership = pgTable("horse_ownership", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertHorseOwnershipSchema = createInsertSchema(horseOwnership).omit({ id: true, createdAt: true });
+export type InsertHorseOwnership = z.infer<typeof insertHorseOwnershipSchema>;
+export type HorseOwnership = typeof horseOwnership.$inferSelect;
+
+export const horseMovements = pgTable("horse_movements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  agreementId: uuid("agreement_id").references(() => liveryAgreements.id),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  stableboxId: uuid("stablebox_id").notNull().references(() => boxes.id),
+  checkIn: text("check_in").notNull(),
+  checkOut: text("check_out"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertHorseMovementSchema = createInsertSchema(horseMovements).omit({ id: true, createdAt: true });
+export type InsertHorseMovement = z.infer<typeof insertHorseMovementSchema>;
+export type HorseMovement = typeof horseMovements.$inferSelect;
+
 export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE"] as const;
 export type UserRole = typeof VALID_ROLES[number];
 

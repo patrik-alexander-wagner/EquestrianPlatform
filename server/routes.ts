@@ -9,7 +9,8 @@ import {
   insertUserSchema, insertCustomerSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
   insertLiveryAgreementSchema, insertBillingElementSchema, insertInvoiceSchema,
-  insertAgreementDocumentSchema, VALID_ROLES,
+  insertAgreementDocumentSchema, insertHorseOwnershipSchema, insertHorseMovementSchema,
+  VALID_ROLES,
 } from "@shared/schema";
 import type { UserRole, InvoiceStatus } from "@shared/schema";
 import { z, ZodError } from "zod";
@@ -281,8 +282,12 @@ export async function registerRoutes(
 
   app.post("/api/horses", async (req, res) => {
     try {
-      const data = validateBody(insertHorseSchema, req.body);
-      const horse = await storage.createHorse(data);
+      const { ownerId, ...horseData } = req.body;
+      if (!ownerId) {
+        return res.status(400).json({ message: "Owner (ownerId) is required" });
+      }
+      const data = validateBody(insertHorseSchema, horseData);
+      const horse = await storage.createHorseWithOwner(data, ownerId);
       res.json(horse);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -1208,6 +1213,82 @@ export async function registerRoutes(
       const offset = (page - 1) * limit;
       const logs = await storage.getAuditLogs(limit, offset);
       res.json(logs);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-ownership/:horseId", async (req, res) => {
+    try {
+      const ownership = await storage.getHorseOwnershipByHorseId(req.params.horseId);
+      res.json(ownership || null);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-ownership/customer/:customerId", async (req, res) => {
+    try {
+      const ownership = await storage.getHorseOwnershipByCustomerId(req.params.customerId);
+      res.json(ownership);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/horse-ownership", async (req, res) => {
+    try {
+      const data = validateBody(insertHorseOwnershipSchema, req.body);
+      const ownership = await storage.createHorseOwnership(data);
+      res.json(ownership);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-movements", async (_req, res) => {
+    try {
+      const movements = await storage.getHorseMovements();
+      res.json(movements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-movements/agreement/:agreementId", async (req, res) => {
+    try {
+      const movements = await storage.getHorseMovementsByAgreementId(req.params.agreementId);
+      res.json(movements);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/horse-movements/box/:boxId/active", async (req, res) => {
+    try {
+      const movement = await storage.getActiveMovementByBoxId(req.params.boxId);
+      res.json(movement || null);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/horse-movements", async (req, res) => {
+    try {
+      const data = validateBody(insertHorseMovementSchema, req.body);
+      const movement = await storage.createHorseMovement(data);
+      res.json(movement);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.patch("/api/horse-movements/:id", async (req, res) => {
+    try {
+      const data = validateBody(insertHorseMovementSchema.partial(), req.body);
+      const movement = await storage.updateHorseMovement(req.params.id, data);
+      if (!movement) return res.status(404).json({ message: "Movement not found" });
+      res.json(movement);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
