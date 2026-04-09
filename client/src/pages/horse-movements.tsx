@@ -3,15 +3,15 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRightLeft, MoveRight, X, Search, Filter, Plus } from "lucide-react";
-import { Horseshoe } from "@/components/icons/horseshoe";
+import { ArrowRightLeft, MoveRight, X, Search, Eye, LogOut } from "lucide-react";
 
 interface BoxGridItem {
   id: string;
@@ -28,6 +28,7 @@ interface BoxGridItem {
   customerName: string | null;
   agreementId: string | null;
   itemName: string | null;
+  monthlyAmount: string | null;
   checkIn: string | null;
 }
 
@@ -63,9 +64,14 @@ export default function HorseMovementsPage() {
   const [selectedBox, setSelectedBox] = useState<BoxGridItem | null>(null);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [targetBoxId, setTargetBoxId] = useState("");
   const [swapHorseId, setSwapHorseId] = useState("");
+  const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split("T")[0]);
+  const [checkoutReason, setCheckoutReason] = useState("");
   const [stableFilter, setStableFilter] = useState("all");
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [horseFilter, setHorseFilter] = useState("");
   const [logCustomerFilter, setLogCustomerFilter] = useState("");
   const [logBoxFilter, setLogBoxFilter] = useState("");
 
@@ -107,9 +113,18 @@ export default function HorseMovementsPage() {
   }, [boxGrid]);
 
   const filteredGrid = useMemo(() => {
-    if (stableFilter === "all") return boxGrid;
-    return boxGrid.filter(b => b.stableName === stableFilter);
-  }, [boxGrid, stableFilter]);
+    let result = boxGrid;
+    if (stableFilter !== "all") {
+      result = result.filter(b => b.stableName === stableFilter);
+    }
+    if (customerFilter) {
+      result = result.filter(b => b.customerName?.toLowerCase().includes(customerFilter.toLowerCase()));
+    }
+    if (horseFilter) {
+      result = result.filter(b => b.horseName?.toLowerCase().includes(horseFilter.toLowerCase()));
+    }
+    return result;
+  }, [boxGrid, stableFilter, customerFilter, horseFilter]);
 
   const groupedByStable = useMemo(() => {
     const groups: Record<string, BoxGridItem[]> = {};
@@ -172,9 +187,30 @@ export default function HorseMovementsPage() {
     },
   });
 
+  const checkoutMutation = useMutation({
+    mutationFn: (data: { id: string; endDate: string; reason: string }) =>
+      apiRequest("PATCH", `/api/livery-agreements/${data.id}`, {
+        endDate: data.endDate,
+        checkoutReason: data.reason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/box-grid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements/enriched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
+      setCheckoutDialogOpen(false);
+      setSelectedBox(null);
+      setCheckoutDate(new Date().toISOString().split("T")[0]);
+      setCheckoutReason("");
+      toast({ title: "Horse checked out successfully" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Checkout failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleBoxClick = (box: BoxGridItem) => {
     if (box.isOccupied) {
-      setSelectedBox(box);
+      setSelectedBox(prev => prev?.id === box.id ? null : box);
     } else {
       navigate("/agreements/new");
     }
@@ -190,12 +226,28 @@ export default function HorseMovementsPage() {
     swapMutation.mutate({ movementId: selectedBox.movementId, newHorseId: swapHorseId });
   };
 
-  const occupiedCount = boxGrid.filter(b => b.isOccupied).length;
-  const totalCount = boxGrid.length;
+  const handleCheckout = () => {
+    if (!selectedBox?.agreementId || !checkoutDate) return;
+    checkoutMutation.mutate({ id: selectedBox.agreementId, endDate: checkoutDate, reason: checkoutReason });
+  };
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "—";
-    return dateStr;
+    try {
+      return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const occupiedCount = boxGrid.filter(b => b.isOccupied).length;
+  const totalCount = boxGrid.length;
+
+  const getCustomerShortName = (name: string | null) => {
+    if (!name) return "";
+    const parts = name.trim().split(" ");
+    if (parts.length <= 1) return name;
+    return parts[0];
   };
 
   return (
@@ -209,47 +261,74 @@ export default function HorseMovementsPage() {
         </div>
       </div>
 
-      <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <Select value={stableFilter} onValueChange={setStableFilter}>
-              <SelectTrigger className="w-[200px]" data-testid="select-stable-filter">
-                <SelectValue placeholder="All Stables" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stables</SelectItem>
-                {stables.map(s => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex gap-3 ml-auto text-sm text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500" />
-                <span>Occupied</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-muted border border-border" />
-                <span>Empty</span>
-              </div>
-            </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={stableFilter} onValueChange={setStableFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-stable-filter">
+            <SelectValue placeholder="All Stables" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Stables</SelectItem>
+            {stables.map(s => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter by customer..."
+            className="pl-8 w-[180px]"
+            value={customerFilter}
+            onChange={e => setCustomerFilter(e.target.value)}
+            data-testid="input-filter-grid-customer"
+          />
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter by horse..."
+            className="pl-8 w-[180px]"
+            value={horseFilter}
+            onChange={e => setHorseFilter(e.target.value)}
+            data-testid="input-filter-grid-horse"
+          />
+        </div>
+        <div className="flex gap-3 ml-auto text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500" />
+            <span>Occupied</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-muted border border-border" />
+            <span>Empty</span>
+          </div>
+        </div>
+      </div>
 
-          {gridLoading ? (
-            <div className="flex justify-center py-12">
-              <p className="text-muted-foreground">Loading boxes...</p>
-            </div>
-          ) : (
-            Object.entries(groupedByStable).map(([stableName, stableBoxes]) => (
-              <div key={stableName} className="space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{stableName}</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-                  {stableBoxes.map(box => (
+      <div className="space-y-6">
+        {gridLoading ? (
+          <div className="flex justify-center py-12">
+            <p className="text-muted-foreground">Loading boxes...</p>
+          </div>
+        ) : Object.keys(groupedByStable).length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            No boxes match your filters
+          </div>
+        ) : (
+          Object.entries(groupedByStable).map(([stableName, stableBoxes]) => (
+            <fieldset key={stableName} className="border border-border rounded-lg p-4">
+              <legend className="px-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground" data-testid={`text-stable-group-${stableName}`}>
+                {stableName}
+              </legend>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {stableBoxes.map(box => {
+                  const isSelected = selectedBox?.id === box.id;
+                  return (
                     <button
                       key={box.id}
                       onClick={() => handleBoxClick(box)}
-                      className={`relative p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                        selectedBox?.id === box.id
+                      className={`relative p-3 rounded-lg border text-left transition-all cursor-pointer min-h-[100px] flex flex-col justify-between ${
+                        isSelected
                           ? "ring-2 ring-primary border-primary"
                           : box.isOccupied
                             ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60"
@@ -257,161 +336,214 @@ export default function HorseMovementsPage() {
                       }`}
                       data-testid={`box-cell-${box.id}`}
                     >
-                      <div className="text-xs font-semibold truncate" data-testid={`text-box-name-${box.id}`}>{box.name}</div>
-                      {box.isOccupied ? (
-                        <div className="mt-1">
-                          <div className="flex items-center gap-1">
-                            <Horseshoe className="w-3 h-3 shrink-0" />
-                            <span className="text-xs truncate" data-testid={`text-horse-name-${box.id}`}>{box.horseName}</span>
-                          </div>
-                          <div className="text-[10px] text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>{box.customerName}</div>
+                      <div>
+                        <div className="text-xs font-semibold text-muted-foreground" data-testid={`text-box-name-${box.id}`}>
+                          {box.name}
                         </div>
-                      ) : (
-                        <div className="mt-1 flex items-center gap-1">
-                          <Plus className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-[10px] text-muted-foreground">Empty</span>
-                        </div>
-                      )}
+                        {box.isOccupied ? (
+                          <>
+                            <div className="text-sm font-bold mt-1 truncate" data-testid={`text-horse-name-${box.id}`}>
+                              {box.horseName}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>
+                              {box.customerName}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm italic text-muted-foreground mt-1" data-testid={`text-horse-name-${box.id}`}>
+                              No horse
+                            </div>
+                            {box.customerName && (
+                              <div className="text-xs text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>
+                                {box.customerName}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        {box.isOccupied ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary border-primary/30" data-testid={`badge-status-${box.id}`}>
+                            {getCustomerShortName(box.customerName)}
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5" data-testid={`badge-status-${box.id}`}>
+                            Unassigned
+                          </Badge>
+                        )}
+                      </div>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            ))
-          )}
-
-          {selectedBox && (
-            <Card className="border-primary" data-testid="card-box-detail">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">
-                    {selectedBox.name} — {selectedBox.stableName}
-                  </CardTitle>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedBox(null)} data-testid="button-close-detail">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Horse:</span>
-                    <span className="ml-2 font-medium" data-testid="text-detail-horse">{selectedBox.horseName}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Customer:</span>
-                    <span className="ml-2 font-medium" data-testid="text-detail-customer">{selectedBox.customerName}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Package:</span>
-                    <span className="ml-2" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Checked In:</span>
-                    <span className="ml-2" data-testid="text-detail-checkin">{selectedBox.checkIn || "—"}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setMoveDialogOpen(true)}
-                    disabled={emptyBoxes.length === 0}
-                    data-testid="button-move-horse"
-                  >
-                    <MoveRight className="w-4 h-4 mr-1" />
-                    Move to Empty Box
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSwapDialogOpen(true)}
-                    data-testid="button-swap-horse"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 mr-1" />
-                    Swap Horse
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            </fieldset>
+          ))
+        )}
       </div>
 
-      <div className="space-y-4">
-          <h2 className="text-lg font-semibold" data-testid="text-movement-log-title">Movement Log</h2>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Filter by customer..."
-                className="pl-8 w-[200px]"
-                value={logCustomerFilter}
-                onChange={e => setLogCustomerFilter(e.target.value)}
-                data-testid="input-filter-customer"
-              />
+      {selectedBox && (
+        <div className="rounded-lg border bg-card p-5 space-y-4" data-testid="card-box-detail">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-semibold" data-testid="text-detail-title">
+                {selectedBox.name} · {getCustomerShortName(selectedBox.customerName)}
+              </h3>
+              <p className="text-sm text-muted-foreground" data-testid="text-detail-checkin">
+                Occupied since {formatDate(selectedBox.checkIn)}
+              </p>
             </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Filter by box/stable..."
-                className="pl-8 w-[200px]"
-                value={logBoxFilter}
-                onChange={e => setLogBoxFilter(e.target.value)}
-                data-testid="input-filter-box"
-              />
-            </div>
+            <Button variant="ghost" size="icon" onClick={() => setSelectedBox(null)} data-testid="button-close-detail">
+              <X className="w-4 h-4" />
+            </Button>
           </div>
 
-          {logLoading ? (
-            <div className="flex justify-center py-12">
-              <p className="text-muted-foreground">Loading movements...</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Horse</span>
+              <span className="font-semibold" data-testid="text-detail-horse">{selectedBox.horseName || "—"}</span>
             </div>
-          ) : filteredLog.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground" data-testid="text-no-movements">
-              No movement records found
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Customer</span>
+              <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
             </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Horse</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Box</TableHead>
-                    <TableHead>Check In</TableHead>
-                    <TableHead>Check Out</TableHead>
-                    <TableHead>Status</TableHead>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Package</span>
+              <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
+            </div>
+            {selectedBox.monthlyAmount && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Agreed price</span>
+                <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setMoveDialogOpen(true)}
+                disabled={emptyBoxes.length === 0}
+                data-testid="button-move-horse"
+              >
+                <MoveRight className="w-4 h-4 mr-2" />
+                Move to another box
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSwapDialogOpen(true)}
+                data-testid="button-swap-horse"
+              >
+                <ArrowRightLeft className="w-4 h-4 mr-2" />
+                Swap horse
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (selectedBox.agreementId) {
+                    navigate(`/agreements/current`);
+                  }
+                }}
+                disabled={!selectedBox.agreementId}
+                data-testid="button-view-agreement"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View agreement
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCheckoutDialogOpen(true)}
+                disabled={!selectedBox.agreementId}
+                data-testid="button-checkout-horse"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Check out horse
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold" data-testid="text-movement-log-title">Movement Log</h2>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Filter by customer..."
+              className="pl-8 w-[200px]"
+              value={logCustomerFilter}
+              onChange={e => setLogCustomerFilter(e.target.value)}
+              data-testid="input-filter-customer"
+            />
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Filter by box/stable..."
+              className="pl-8 w-[200px]"
+              value={logBoxFilter}
+              onChange={e => setLogBoxFilter(e.target.value)}
+              data-testid="input-filter-box"
+            />
+          </div>
+        </div>
+
+        {logLoading ? (
+          <div className="flex justify-center py-12">
+            <p className="text-muted-foreground">Loading movements...</p>
+          </div>
+        ) : filteredLog.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground" data-testid="text-no-movements">
+            No movement records found
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Horse</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Box</TableHead>
+                  <TableHead>Check In</TableHead>
+                  <TableHead>Check Out</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredLog.map(m => (
+                  <TableRow key={m.id} data-testid={`row-movement-${m.id}`}>
+                    <TableCell className="text-muted-foreground" data-testid={`text-log-date-${m.id}`}>
+                      {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
+                    </TableCell>
+                    <TableCell className="font-medium" data-testid={`text-log-horse-${m.id}`}>{m.horseName}</TableCell>
+                    <TableCell data-testid={`text-log-customer-${m.id}`}>{m.customerName}</TableCell>
+                    <TableCell data-testid={`text-log-box-${m.id}`}>{m.boxName} ({m.stableName})</TableCell>
+                    <TableCell data-testid={`text-log-checkin-${m.id}`}>{formatDate(m.checkIn)}</TableCell>
+                    <TableCell data-testid={`text-log-checkout-${m.id}`}>{formatDate(m.checkOut)}</TableCell>
+                    <TableCell>
+                      {m.checkOut ? (
+                        <Badge variant="secondary" data-testid={`badge-status-${m.id}`}>Closed</Badge>
+                      ) : (
+                        <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30" data-testid={`badge-status-${m.id}`}>Active</Badge>
+                      )}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLog.map(m => (
-                    <TableRow key={m.id} data-testid={`row-movement-${m.id}`}>
-                      <TableCell className="text-muted-foreground" data-testid={`text-log-date-${m.id}`}>
-                        {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
-                      </TableCell>
-                      <TableCell className="font-medium" data-testid={`text-log-horse-${m.id}`}>{m.horseName}</TableCell>
-                      <TableCell data-testid={`text-log-customer-${m.id}`}>{m.customerName}</TableCell>
-                      <TableCell data-testid={`text-log-box-${m.id}`}>{m.boxName} ({m.stableName})</TableCell>
-                      <TableCell>{formatDate(m.checkIn)}</TableCell>
-                      <TableCell>{formatDate(m.checkOut)}</TableCell>
-                      <TableCell>
-                        {m.checkOut ? (
-                          <Badge variant="secondary" data-testid={`badge-status-${m.id}`}>Closed</Badge>
-                        ) : (
-                          <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30" data-testid={`badge-status-${m.id}`}>Active</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
       <Dialog open={moveDialogOpen} onOpenChange={(open) => { setMoveDialogOpen(open); if (!open) setTargetBoxId(""); }}>
         <DialogContent data-testid="dialog-move-horse">
           <DialogHeader>
-            <DialogTitle>Move {selectedBox?.horseName} to Empty Box</DialogTitle>
+            <DialogTitle>Move {selectedBox?.horseName} to another box</DialogTitle>
+            <DialogDescription>Select an empty box to move this horse to.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -441,6 +573,7 @@ export default function HorseMovementsPage() {
         <DialogContent data-testid="dialog-swap-horse">
           <DialogHeader>
             <DialogTitle>Swap Horse in {selectedBox?.name}</DialogTitle>
+            <DialogDescription>Replace the current horse with another from the same customer.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -467,6 +600,41 @@ export default function HorseMovementsPage() {
             <Button variant="outline" onClick={() => setSwapDialogOpen(false)} data-testid="button-cancel-swap">Cancel</Button>
             <Button onClick={handleSwap} disabled={!swapHorseId || swapMutation.isPending || eligibleSwapHorses.length === 0} data-testid="button-confirm-swap">
               {swapMutation.isPending ? "Swapping..." : "Confirm Swap"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={checkoutDialogOpen} onOpenChange={(open) => { setCheckoutDialogOpen(open); if (!open) { setCheckoutDate(new Date().toISOString().split("T")[0]); setCheckoutReason(""); } }}>
+        <DialogContent data-testid="dialog-checkout-horse">
+          <DialogHeader>
+            <DialogTitle>Check out {selectedBox?.horseName}</DialogTitle>
+            <DialogDescription>Set an end date for the agreement and check out the horse from {selectedBox?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Checkout Date</Label>
+              <Input
+                type="date"
+                value={checkoutDate}
+                onChange={e => setCheckoutDate(e.target.value)}
+                data-testid="input-checkout-date"
+              />
+            </div>
+            <div>
+              <Label>Reason (optional)</Label>
+              <Textarea
+                placeholder="Reason for checkout..."
+                value={checkoutReason}
+                onChange={e => setCheckoutReason(e.target.value)}
+                data-testid="input-checkout-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)} data-testid="button-cancel-checkout">Cancel</Button>
+            <Button onClick={handleCheckout} disabled={!checkoutDate || checkoutMutation.isPending} data-testid="button-confirm-checkout">
+              {checkoutMutation.isPending ? "Processing..." : "Confirm Checkout"}
             </Button>
           </DialogFooter>
         </DialogContent>

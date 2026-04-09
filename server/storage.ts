@@ -1120,6 +1120,7 @@ export class DatabaseStorage implements IStorage {
         customerName: customer?.fullname || null,
         agreementId: agreement?.id || null,
         itemName: item?.name || null,
+        monthlyAmount: agreement?.monthlyAmount || null,
         checkIn: activeMovement?.checkIn || null,
       };
     });
