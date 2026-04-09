@@ -402,16 +402,24 @@ export class DatabaseStorage implements IStorage {
     const allBoxes = await db.select().from(boxes);
     const allStables = await db.select().from(stables);
     const activeAgreements = await db.select().from(liveryAgreements).where(eq(liveryAgreements.status, "active"));
+    const allMovements = await db.select().from(horseMovements);
+    const allHorses = await db.select().from(horses);
+    const allCustomers = await db.select().from(customers);
     const today = new Date().toISOString().split("T")[0];
 
     return allBoxes.map(box => {
       const stable = allStables.find(s => s.id === box.stableId);
       const agreement = activeAgreements.find(a => a.boxId === box.id && (!a.endDate || a.endDate >= today));
+      const activeMovement = allMovements.find(m => m.stableboxId === box.id && !m.checkOut);
+      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
+      const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
       return {
         ...box,
         stableName: stable?.name || "Unknown",
         isAvailable: !agreement,
         agreementId: agreement?.id || null,
+        horseName: horse?.horseName || null,
+        customerName: customer?.fullname || null,
       };
     });
   }
@@ -1043,6 +1051,12 @@ export class DatabaseStorage implements IStorage {
         throw { status: 400, message: "Target box does not exist" };
       }
       const today = new Date().toISOString().split("T")[0];
+      const existingAgreement = await tx.select().from(liveryAgreements)
+        .where(and(eq(liveryAgreements.boxId, newBoxId), eq(liveryAgreements.status, "active")));
+      const activeAgreementOnTarget = existingAgreement.find(a => !a.endDate || a.endDate >= today);
+      if (activeAgreementOnTarget) {
+        throw { status: 400, message: "Target box has an active agreement" };
+      }
       await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementId));
       const [newMovement] = await tx.insert(horseMovements).values({
         agreementId: currentMovement.agreementId,
@@ -1102,17 +1116,22 @@ export class DatabaseStorage implements IStorage {
     const allAgreements = await db.select().from(liveryAgreements);
     const allItems = await db.select().from(items);
 
+    const today = new Date().toISOString().split("T")[0];
     return allBoxes.map(box => {
       const stable = allStables.find(s => s.id === box.stableId);
       const activeMovement = allMovements.find(m => m.stableboxId === box.id && !m.checkOut);
       const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
-      const agreement = activeMovement?.agreementId ? allAgreements.find(a => a.id === activeMovement.agreementId) : null;
+      let agreement = activeMovement?.agreementId ? allAgreements.find(a => a.id === activeMovement.agreementId) : null;
+      if (!agreement) {
+        agreement = allAgreements.find(a => a.boxId === box.id && a.status === "active" && (!a.endDate || a.endDate >= today)) || null;
+      }
       const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
       const item = agreement ? allItems.find(i => i.id === agreement.itemId) : null;
       return {
         ...box,
         stableName: stable?.name || "Unknown",
         isOccupied: !!activeMovement,
+        hasAgreement: !!agreement,
         movementId: activeMovement?.id || null,
         horseId: horse?.id || null,
         horseName: horse?.horseName || null,

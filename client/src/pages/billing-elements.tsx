@@ -125,7 +125,7 @@ export default function BillingElementsPage() {
   }, [nonLiveryItems, itemSearch]);
 
   const filteredHorses = useMemo(() => {
-    let result = horsesWithAgreements;
+    let result = horsesWithAgreements.filter((h: any) => h.horseId !== null);
     if (horseSearch) {
       result = result.filter((h: any) => (h.horseName || "").toLowerCase().includes(horseSearch.toLowerCase()));
     }
@@ -169,12 +169,24 @@ export default function BillingElementsPage() {
     );
   }, [allCustomers, nlCustomerSearch]);
 
+  const { data: nlCustomerHorseOwnership = [] } = useQuery<any[]>({
+    queryKey: ["/api/horse-ownership/customer", nlCustomerId],
+    queryFn: async () => {
+      if (!nlCustomerId) return [];
+      const res = await fetch(`/api/horse-ownership/customer/${nlCustomerId}`);
+      return res.json();
+    },
+    enabled: !!nlCustomerId,
+  });
+
   const filteredNlHorses = useMemo(() => {
-    const active = allHorses.filter((h: any) => h.status === "active");
+    if (!nlCustomerId) return [];
+    const ownedHorseIds = new Set(nlCustomerHorseOwnership.map((o: any) => o.horseId));
+    const active = allHorses.filter((h: any) => h.status === "active" && ownedHorseIds.has(h.id));
     if (!nlHorseSearch.trim()) return active;
     const s = nlHorseSearch.toLowerCase();
     return active.filter((h: any) => h.horseName.toLowerCase().includes(s));
-  }, [allHorses, nlHorseSearch]);
+  }, [allHorses, nlHorseSearch, nlCustomerId, nlCustomerHorseOwnership]);
 
   const columns = [
     { key: "horseName", label: "Horse" },
@@ -388,11 +400,12 @@ export default function BillingElementsPage() {
         <SearchBar placeholder="Stable / Box..." value={stableSearch} onChange={setStableSearch} className="w-52" />
         <Button
           variant="outline"
+          className="bg-gray-200 hover:bg-gray-300 text-gray-700 border-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:border-gray-600"
           onClick={openNonLiveryDialog}
           data-testid="button-bill-non-livery"
         >
           <UserPlus className="w-4 h-4 mr-1" />
-          Bill Non-Livery Customer
+          Bill on Horse
         </Button>
       </div>
 
@@ -514,8 +527,8 @@ export default function BillingElementsPage() {
       <Dialog open={showNonLiveryDialog} onOpenChange={setShowNonLiveryDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bill Non-Livery Customer</DialogTitle>
-            <DialogDescription>Create a billing element for a customer without a livery agreement</DialogDescription>
+            <DialogTitle>Bill on Horse</DialogTitle>
+            <DialogDescription>Create a billing element for a specific horse owned by the selected customer</DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(e) => { e.preventDefault(); }}
@@ -556,7 +569,7 @@ export default function BillingElementsPage() {
                           key={c.id}
                           data-testid={`nl-customer-option-${c.id}`}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                          onClick={() => { setNlCustomerId(c.id); setNlCustomerSearch(""); setNlCustomerDropdownOpen(false); }}
+                          onClick={() => { setNlCustomerId(c.id); setNlCustomerSearch(""); setNlCustomerDropdownOpen(false); setNlHorseId(""); setNlHorseSearch(""); }}
                         >
                           <div className="font-medium">{c.fullname}</div>
                           {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}

@@ -137,7 +137,7 @@ export default function HorseMovementsPage() {
   }, [filteredGrid]);
 
   const emptyBoxes = useMemo(() => {
-    return boxGrid.filter(b => !b.isOccupied);
+    return boxGrid.filter(b => !b.isOccupied && !b.hasAgreement);
   }, [boxGrid]);
 
   const filteredLog = useMemo(() => {
@@ -328,7 +328,9 @@ export default function HorseMovementsPage() {
                           ? "ring-2 ring-primary border-primary"
                           : box.isOccupied
                             ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/60"
-                            : "bg-muted/30 border-border hover:border-primary/40 hover:bg-muted/50"
+                            : box.hasAgreement
+                              ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60"
+                              : "bg-muted/30 border-border hover:border-primary/40 hover:bg-muted/50"
                       }`}
                       data-testid={`box-cell-${box.id}`}
                     >
@@ -345,16 +347,20 @@ export default function HorseMovementsPage() {
                               {box.customerName}
                             </div>
                           </>
+                        ) : box.hasAgreement ? (
+                          <>
+                            <div className="text-sm italic text-amber-600 dark:text-amber-400 mt-1" data-testid={`text-horse-name-${box.id}`}>
+                              No horse checked in
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>
+                              {box.customerName}
+                            </div>
+                          </>
                         ) : (
                           <>
                             <div className="text-sm italic text-muted-foreground mt-1" data-testid={`text-horse-name-${box.id}`}>
                               No horse
                             </div>
-                            {box.customerName && (
-                              <div className="text-xs text-muted-foreground truncate" data-testid={`text-customer-name-${box.id}`}>
-                                {box.customerName}
-                              </div>
-                            )}
                           </>
                         )}
                       </div>
@@ -362,6 +368,10 @@ export default function HorseMovementsPage() {
                         {box.isOccupied ? (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary border-primary/30" data-testid={`badge-status-${box.id}`}>
                             {getCustomerShortName(box.customerName)}
+                          </Badge>
+                        ) : box.hasAgreement ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500/50 text-amber-600 dark:text-amber-400" data-testid={`badge-status-${box.id}`}>
+                            Agreement active
                           </Badge>
                         ) : (
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5" data-testid={`badge-status-${box.id}`}>
@@ -382,12 +392,14 @@ export default function HorseMovementsPage() {
         <DialogContent className="max-w-md" data-testid="card-box-detail">
           <DialogHeader>
             <DialogTitle data-testid="text-detail-title">
-              Box {selectedBox?.name} {selectedBox?.isOccupied ? `· ${getCustomerShortName(selectedBox.customerName)}` : ""}
+              Box {selectedBox?.name} {(selectedBox?.isOccupied || selectedBox?.hasAgreement) ? `· ${getCustomerShortName(selectedBox.customerName)}` : ""}
             </DialogTitle>
             <DialogDescription data-testid="text-detail-checkin">
               {selectedBox?.isOccupied
                 ? `Occupied since ${formatDate(selectedBox.checkIn)}`
-                : "Empty box — no horse currently assigned"}
+                : selectedBox?.hasAgreement
+                  ? "Agreement active — no horse checked in"
+                  : "Empty box — no horse currently assigned"}
             </DialogDescription>
           </DialogHeader>
 
@@ -457,6 +469,40 @@ export default function HorseMovementsPage() {
                     Check out horse
                   </Button>
                 </div>
+              </div>
+            </div>
+          ) : selectedBox?.hasAgreement ? (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer</span>
+                  <span className="font-semibold" data-testid="text-detail-customer">{selectedBox.customerName || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Package</span>
+                  <span className="font-semibold" data-testid="text-detail-package">{selectedBox.itemName || "—"}</span>
+                </div>
+                {selectedBox.monthlyAmount && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Agreed price</span>
+                    <span className="font-semibold" data-testid="text-detail-price">AED {parseFloat(selectedBox.monthlyAmount).toLocaleString()} / month</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">This box has an active agreement but no horse is currently checked in.</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedBox.agreementId) {
+                      navigate(`/agreements/current`);
+                    }
+                  }}
+                  data-testid="button-view-agreement"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View agreement
+                </Button>
               </div>
             </div>
           ) : (

@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/page-header";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,34 +183,63 @@ export default function NewAgreementPage() {
       ) : (
         <div className="space-y-6">
           {Object.entries(groupedByStable).map(([stableName, stableBoxes]) => (
-            <div key={stableName}>
-              <h3 className="text-lg font-semibold mb-3">{stableName}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <fieldset key={stableName} className="border border-border rounded-lg p-4">
+              <legend className="px-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground" data-testid={`text-stable-group-${stableName}`}>
+                {stableName}
+              </legend>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {stableBoxes.map((box) => (
-                  <Card key={box.id} className={`${box.isAvailable ? "" : "opacity-60"}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-medium">{box.name}</span>
-                        {!box.isAvailable && (
-                          <Badge variant="secondary">Occupied</Badge>
-                        )}
+                  <div
+                    key={box.id}
+                    className={`relative p-3 rounded-lg border text-left min-h-[100px] flex flex-col justify-between ${
+                      box.isAvailable
+                        ? "bg-muted/30 border-border"
+                        : "bg-emerald-500/10 border-emerald-500/30 opacity-60"
+                    }`}
+                    data-testid={`box-cell-${box.id}`}
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-muted-foreground">
+                        {box.name}
                       </div>
-                      {box.isAvailable && (
+                      {box.isAvailable ? (
+                        <div className="text-sm italic text-muted-foreground mt-1">
+                          Available
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-bold mt-1 truncate">
+                            {box.horseName || "Occupied"}
+                          </div>
+                          {box.customerName && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {box.customerName}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      {box.isAvailable ? (
                         <Button
                           size="sm"
-                          className="w-full mt-2"
+                          className="w-full"
                           onClick={() => openCreateDialog(box)}
                           data-testid={`button-new-agreement-${box.id}`}
                         >
                           <Plus className="w-4 h-4 mr-1" />
                           New Agreement
                         </Button>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                          Occupied
+                        </Badge>
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
+            </fieldset>
           ))}
         </div>
       )}

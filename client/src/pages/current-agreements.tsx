@@ -238,15 +238,6 @@ export default function CurrentAgreementsPage() {
   const columns = [
     { key: "referenceNumber", label: "Reference #" },
     {
-      key: "agreementCategory",
-      label: "Category",
-      render: (item: any) => (
-        <Badge variant={item.agreementCategory === "without_horse" ? "secondary" : "default"}>
-          {item.agreementCategory === "without_horse" ? "Without Horse" : "With Horse"}
-        </Badge>
-      ),
-    },
-    {
       key: "type",
       label: "Type",
       render: (item: any) => (
@@ -366,18 +357,6 @@ export default function CurrentAgreementsPage() {
                   </Select>
                 </div>
 
-                <div>
-                  <Label>Agreement Type</Label>
-                  <Select value={editAgreementCategory} onValueChange={setEditAgreementCategory}>
-                    <SelectTrigger data-testid="select-edit-agreement-category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="with_horse">With Horse</SelectItem>
-                      <SelectItem value="without_horse">Without Horse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 <div className="relative">
                   <Label>Customer</Label>

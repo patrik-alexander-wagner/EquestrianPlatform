@@ -95,11 +95,6 @@ export default function HorsesPage() {
       label: "Stable / Box",
       render: (item: any) => item.stable && item.box ? `${item.stable} / ${item.box}` : "-",
     },
-    {
-      key: "customer",
-      label: "Customer",
-      render: (item: any) => item.customer || "-",
-    },
   ];
 
   const importFields = [

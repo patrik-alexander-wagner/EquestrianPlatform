@@ -89,7 +89,7 @@ shared/
 - Search/filter on all list pages
 - Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
 - Livery agreement creation via box-first grid view (no horse field on agreement; horse check-in via post-save modal using horse_movements)
-- Billing element management for horses with active agreements (unit price + total display) + "Bill Non-Livery Customer" for customers without agreements
+- Billing element management for horses with active agreements (unit price + total display) + "Bill on Horse" button (light grey) for billing specific horses owned by selected customer (horses filtered by ownership)
 - Billing month auto-derived from transaction date (YYYY-MM format)
 - To-invoice page filters billing elements by selected billing month
 - Agreement document management: PDF upload/download/delete on current agreements page (base64 storage)
@@ -125,7 +125,7 @@ shared/
   - Credentials stored in env vars: NETSUITE_ACCOUNT_ID, NETSUITE_RESTLET_URL, NETSUITE_CONSUMER_KEY, NETSUITE_CONSUMER_SECRET, NETSUITE_TOKEN_ID, NETSUITE_TOKEN_SECRET
   - Uses oauth-1.0a package with HMAC-SHA256 signing
 - Stable Management — Horse Movements page (/stable-management/horse-movements):
-  - Box grid grouped by stable showing occupied (green) and empty boxes; click occupied box for detail panel
+  - Box grid grouped by stable (fieldset/legend) showing 3 states: occupied (green), agreement active but no horse (amber), empty (grey); click any box for centered dialog popup
   - Move horse: closes current movement, creates new in target empty box, updates agreement boxId (transactional)
   - Swap horse: replaces current horse in box with another horse from the same customer (via horse_ownership, transactional)
   - Movement log table: chronological (newest first), filterable by customer or box/stable
