@@ -1089,20 +1089,26 @@ export class DatabaseStorage implements IStorage {
         throw { status: 400, message: "Target box does not exist" };
       }
       const today = new Date().toISOString().split("T")[0];
-      const existingAgreement = await tx.select().from(liveryAgreements)
+      const existingAgreements = await tx.select().from(liveryAgreements)
         .where(and(eq(liveryAgreements.boxId, newBoxId), eq(liveryAgreements.status, "active")));
-      const activeAgreementOnTarget = existingAgreement.find(a => !a.endDate || a.endDate >= today);
+      const activeAgreementOnTarget = existingAgreements.find(a => !a.endDate || a.endDate >= today);
       if (activeAgreementOnTarget) {
-        throw { status: 400, message: "Target box has an active agreement" };
+        const sourceAgreement = currentMovement.agreementId
+          ? (await tx.select().from(liveryAgreements).where(eq(liveryAgreements.id, currentMovement.agreementId)))[0]
+          : null;
+        if (!sourceAgreement || sourceAgreement.customerId !== activeAgreementOnTarget.customerId) {
+          throw { status: 400, message: "Target box has an active agreement for a different customer" };
+        }
       }
       await tx.update(horseMovements).set({ checkOut: today }).where(eq(horseMovements.id, movementId));
+      const targetAgreementId = activeAgreementOnTarget ? activeAgreementOnTarget.id : currentMovement.agreementId;
       const [newMovement] = await tx.insert(horseMovements).values({
-        agreementId: currentMovement.agreementId,
+        agreementId: targetAgreementId,
         horseId: currentMovement.horseId,
         stableboxId: newBoxId,
         checkIn: today,
       }).returning();
-      if (currentMovement.agreementId) {
+      if (currentMovement.agreementId && !activeAgreementOnTarget) {
         await tx.update(liveryAgreements).set({ boxId: newBoxId }).where(eq(liveryAgreements.id, currentMovement.agreementId));
       }
       return newMovement;
