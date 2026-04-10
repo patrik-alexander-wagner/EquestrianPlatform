@@ -760,22 +760,46 @@ export class DatabaseStorage implements IStorage {
 
     const allCustomers = await db.select().from(customers);
     const allHorses = await db.select().from(horses);
-    const allItems = await db.select().from(items);
     const allMovements = await db.select().from(horseMovements);
 
-    const result: any[] = [];
+    const grouped: Record<string, any> = {};
     for (const agreement of current) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
-      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
-      const item = allItems.find(i => i.id === agreement.itemId);
-      result.push({
-        customerName: customer ? customer.fullname : "Unknown",
-        horseName: horse?.horseName || "N/A",
+      const customerName = customer ? customer.fullname : "Unknown";
+      const activeMovements = allMovements.filter(m => m.agreementId === agreement.id && !m.checkOut);
+      const horseNames = activeMovements.map(m => {
+        const horse = allHorses.find(h => h.id === m.horseId);
+        return horse?.horseName || "Unknown";
+      });
+      const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
+
+      if (!grouped[agreement.customerId]) {
+        grouped[agreement.customerId] = {
+          customerName,
+          agreements: [],
+        };
+      }
+      grouped[agreement.customerId].agreements.push({
+        horseNames: horseNames.length > 0 ? horseNames : ["-"],
+        horsesCheckedIn: activeMovements.length,
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate || "",
-        liveryPackage: item?.name || "N/A",
+        monthlyAmount,
       });
+    }
+
+    const result: any[] = [];
+    for (const g of Object.values(grouped) as any[]) {
+      for (const a of g.agreements) {
+        result.push({
+          customerName: g.customerName,
+          horseNames: a.horseNames,
+          horsesCheckedIn: a.horsesCheckedIn,
+          arrivalDate: a.arrivalDate,
+          departureDate: a.departureDate,
+          monthlyAmount: a.monthlyAmount,
+        });
+      }
     }
     return result;
   }
@@ -853,7 +877,6 @@ export class DatabaseStorage implements IStorage {
     const allAgreements = await db.select().from(liveryAgreements);
     const allCustomers = await db.select().from(customers);
     const allHorses = await db.select().from(horses);
-    const allItems = await db.select().from(items);
     const allMovements = await db.select().from(horseMovements);
 
     const filtered = allAgreements.filter(a => a.startDate?.substring(0, 7) === month);
@@ -861,26 +884,27 @@ export class DatabaseStorage implements IStorage {
     const grouped: Record<string, any> = {};
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const movement = allMovements.find(m => m.agreementId === agreement.id);
-      const horse = movement ? allHorses.find(h => h.id === movement.horseId) : null;
-      const item = allItems.find(i => i.id === agreement.itemId);
       const customerName = customer ? customer.fullname : "Unknown";
+      const activeMovements = allMovements.filter(m => m.agreementId === agreement.id && !m.checkOut);
+      const horseNames = activeMovements.map(m => {
+        const horse = allHorses.find(h => h.id === m.horseId);
+        return horse?.horseName || "Unknown";
+      });
+      const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
 
       if (!grouped[agreement.customerId]) {
         grouped[agreement.customerId] = {
           customerName,
-          horses: [],
-          horseCount: 0,
+          agreements: [],
         };
       }
-      grouped[agreement.customerId].horses.push({
-        horseName: horse?.horseName || "Unknown",
+      grouped[agreement.customerId].agreements.push({
+        horseNames: horseNames.length > 0 ? horseNames : ["-"],
+        horsesCheckedIn: activeMovements.length,
         arrivalDate: agreement.startDate,
         departureDate: agreement.endDate || "",
-        liveryPackage: item?.name || "N/A",
-        liveryPrice: agreement.monthlyAmount || (item?.price || "0"),
+        monthlyAmount,
       });
-      grouped[agreement.customerId].horseCount++;
     }
 
     return Object.values(grouped);
@@ -897,23 +921,28 @@ export class DatabaseStorage implements IStorage {
     const grouped: Record<string, any> = {};
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const movement = allMovements.find(m => m.agreementId === agreement.id);
-      const horse = movement ? allHorses.find(h => h.id === movement.horseId) : null;
       const customerName = customer ? customer.fullname : "Unknown";
+      const movements = allMovements.filter(m => m.agreementId === agreement.id);
+      const uniqueHorseIds = [...new Set(movements.map(m => m.horseId))];
+      const horseNames = uniqueHorseIds.map(hId => {
+        const horse = allHorses.find(h => h.id === hId);
+        return horse?.horseName || "Unknown";
+      });
+      const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
 
       if (!grouped[agreement.customerId]) {
         grouped[agreement.customerId] = {
           customerName,
-          horses: [],
-          horseCount: 0,
+          agreements: [],
         };
       }
-      grouped[agreement.customerId].horses.push({
-        horseName: horse?.horseName || "Unknown",
+      grouped[agreement.customerId].agreements.push({
+        horseNames: horseNames.length > 0 ? horseNames : ["-"],
+        horsesCheckedIn: horseNames.length,
+        arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate,
-        checkoutReason: agreement.checkoutReason || "",
+        monthlyAmount,
       });
-      grouped[agreement.customerId].horseCount++;
     }
 
     return Object.values(grouped);

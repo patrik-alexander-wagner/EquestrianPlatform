@@ -180,57 +180,46 @@ export default function ReportsPage() {
     }));
   }, [chartDataMonth]);
 
-  const arrivalGroups = useMemo(() => {
-    return newLiveryData.map((group: any) => ({
-      customerName: group.customerName,
-      horseNames: group.horses.map((h: any) => h.horseName),
-      horseCount: String(group.horseCount),
-      arrivalDates: group.horses.map((h: any) => formatDate(h.arrivalDate)),
-      departureDates: group.horses.map((h: any) => h.departureDate ? formatDate(h.departureDate) : "-"),
-      liveryPackages: group.horses.map((h: any) => h.liveryPackage || "N/A"),
-    }));
-  }, [newLiveryData]);
+  const flattenAgreementGroups = (data: any[]) => {
+    const rows: any[] = [];
+    for (const group of data) {
+      if (!Array.isArray(group.agreements)) continue;
+      for (const a of group.agreements) {
+        rows.push({
+          customerName: group.customerName,
+          horseNames: a.horseNames,
+          horsesCheckedIn: String(a.horsesCheckedIn),
+          arrivalDate: formatDate(a.arrivalDate),
+          departureDate: a.departureDate ? formatDate(a.departureDate) : "-",
+          monthlyAmount: a.monthlyAmount,
+        });
+      }
+    }
+    return rows;
+  };
 
-  const departureGroups = useMemo(() => {
-    return departedData.map((group: any) => ({
-      customerName: group.customerName,
-      horseNames: group.horses.map((h: any) => h.horseName),
-      horseCount: String(group.horseCount),
-      arrivalDates: group.horses.map(() => "-"),
-      departureDates: group.horses.map((h: any) => formatDate(h.departureDate)),
-      liveryPackages: group.horses.map(() => "-"),
-    }));
-  }, [departedData]);
+  const arrivalGroups = useMemo(() => flattenAgreementGroups(newLiveryData), [newLiveryData]);
+
+  const departureGroups = useMemo(() => flattenAgreementGroups(departedData), [departedData]);
 
   const allCustomerGroups = useMemo(() => {
-    const grouped: Record<string, any> = {};
-    for (const row of allCustomersData) {
-      if (!grouped[row.customerName]) {
-        grouped[row.customerName] = {
-          customerName: row.customerName,
-          horseNames: [],
-          horseCount: 0,
-          arrivalDates: [],
-          departureDates: [],
-          liveryPackages: [],
-        };
-      }
-      grouped[row.customerName].horseNames.push(row.horseName);
-      grouped[row.customerName].horseCount++;
-      grouped[row.customerName].arrivalDates.push(formatDate(row.arrivalDate));
-      grouped[row.customerName].departureDates.push(row.departureDate ? formatDate(row.departureDate) : "-");
-      grouped[row.customerName].liveryPackages.push(row.liveryPackage);
-    }
-    return Object.values(grouped).map((g: any) => ({ ...g, horseCount: String(g.horseCount) }));
+    return allCustomersData.map((row: any) => ({
+      customerName: row.customerName,
+      horseNames: row.horseNames,
+      horsesCheckedIn: String(row.horsesCheckedIn),
+      arrivalDate: formatDate(row.arrivalDate),
+      departureDate: row.departureDate ? formatDate(row.departureDate) : "-",
+      monthlyAmount: row.monthlyAmount,
+    }));
   }, [allCustomersData]);
 
   const tableColumns = [
     { key: "customerName", label: "Livery Customer" },
     { key: "horseNames", label: "Horse Name", align: "center" },
-    { key: "horseCount", label: "No. of Horses", align: "center" },
-    { key: "arrivalDates", label: "Arrival Date" },
-    { key: "departureDates", label: "Departure Date" },
-    { key: "liveryPackages", label: "Livery Package" },
+    { key: "horsesCheckedIn", label: "No. of Horses Checked In", align: "center" },
+    { key: "arrivalDate", label: "Arrival Date" },
+    { key: "departureDate", label: "Departure Date" },
+    { key: "monthlyAmount", label: "Livery Package (Monthly)", align: "right" },
   ];
 
   const kpiCards = [
@@ -324,21 +313,22 @@ export default function ReportsPage() {
       const headStyle = { fillColor: [76, 175, 80] as [number, number, number], textColor: 255 as number, fontStyle: "bold" as const, fontSize: 9 };
       const altRow = { fillColor: [232, 245, 232] as [number, number, number] };
       const tblMargin = { left: 15, right: 15 };
-      const tblHead = [["#", "Livery Customer", "Horse Name", "No. of Horses", "Arrival Date", "Departure Date", "Livery Package"]];
+      const tblHead = [["#", "Livery Customer", "Horse Name", "No. of Horses Checked In", "Arrival Date", "Departure Date", "Livery Package (Monthly)"]];
 
       const buildTableRows = (groups: any[]) => {
         const rows: any[][] = [];
         groups.forEach((g, idx) => {
-          const count = g.horseNames.length;
+          const horseNames = Array.isArray(g.horseNames) ? g.horseNames : [g.horseNames || "-"];
+          const count = horseNames.length;
           for (let i = 0; i < count; i++) {
             rows.push([
               i === 0 ? String(idx + 1) : "",
               i === 0 ? g.customerName : "",
-              g.horseNames[i],
-              i === 0 ? g.horseCount : "",
-              g.arrivalDates[i],
-              g.departureDates[i],
-              g.liveryPackages[i],
+              horseNames[i],
+              i === 0 ? g.horsesCheckedIn : "",
+              i === 0 ? g.arrivalDate : "",
+              i === 0 ? g.departureDate : "",
+              i === 0 ? g.monthlyAmount : "",
             ]);
           }
         });
