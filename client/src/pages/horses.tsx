@@ -31,6 +31,9 @@ export default function HorsesPage() {
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
   const [ownerComboOpen, setOwnerComboOpen] = useState(false);
   const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
+  const [editOwnerId, setEditOwnerId] = useState<string>("");
+  const [editOwnerComboOpen, setEditOwnerComboOpen] = useState(false);
+  const [editOwnerSearchTerm, setEditOwnerSearchTerm] = useState("");
   const { toast } = useToast();
 
   const { data: allCustomers = [] } = useQuery<any[]>({
@@ -43,6 +46,13 @@ export default function HorsesPage() {
       c.fullname.toLowerCase().includes(ownerSearchTerm.toLowerCase())
     );
   }, [allCustomers, ownerSearchTerm]);
+
+  const filteredEditCustomers = useMemo(() => {
+    if (!editOwnerSearchTerm) return allCustomers;
+    return allCustomers.filter((c: any) =>
+      c.fullname.toLowerCase().includes(editOwnerSearchTerm.toLowerCase())
+    );
+  }, [allCustomers, editOwnerSearchTerm]);
 
   const queryParams = new URLSearchParams();
   if (search) queryParams.set("search", search);
@@ -163,7 +173,7 @@ export default function HorsesPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem
-                onClick={() => { setEditingHorse(item); setShowEditDialog(true); }}
+                onClick={() => { setEditingHorse(item); setEditOwnerId(item.ownerId || ""); setShowEditDialog(true); }}
                 data-testid={`button-edit-${item.id}`}
               >
                 Edit
@@ -283,7 +293,10 @@ export default function HorsesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open);
+        if (!open) { setEditOwnerId(""); setEditOwnerSearchTerm(""); }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Horse</DialogTitle>
@@ -302,10 +315,60 @@ export default function HorsesPage() {
                   color: fd.get("color") || null,
                   size: fd.get("size") || null,
                   status: fd.get("status") || "active",
+                  ownerId: editOwnerId || undefined,
                 });
               }}
             >
               <div className="space-y-4">
+                <div>
+                  <Label>Owner</Label>
+                  <Popover open={editOwnerComboOpen} onOpenChange={setEditOwnerComboOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={editOwnerComboOpen}
+                        className="w-full justify-between font-normal"
+                        data-testid="select-edit-owner"
+                      >
+                        {editOwnerId
+                          ? allCustomers.find((c: any) => c.id === editOwnerId)?.fullname || "Select owner..."
+                          : "Select owner..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search customers..."
+                          value={editOwnerSearchTerm}
+                          onValueChange={setEditOwnerSearchTerm}
+                          data-testid="input-edit-owner-search"
+                        />
+                        <CommandList>
+                          <CommandEmpty>No customer found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredEditCustomers.map((c: any) => (
+                              <CommandItem
+                                key={c.id}
+                                value={c.id}
+                                onSelect={() => {
+                                  setEditOwnerId(c.id);
+                                  setEditOwnerComboOpen(false);
+                                  setEditOwnerSearchTerm("");
+                                }}
+                                data-testid={`option-edit-owner-${c.id}`}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", editOwnerId === c.id ? "opacity-100" : "opacity-0")} />
+                                {c.fullname}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <div>
                   <Label>Horse Name</Label>
                   <Input name="horseName" defaultValue={editingHorse.horseName} required data-testid="input-edit-horse-name" />

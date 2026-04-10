@@ -304,9 +304,21 @@ export async function registerRoutes(
 
   app.patch("/api/horses/:id", async (req, res) => {
     try {
-      const data = validateBody(insertHorseSchema.partial(), req.body);
+      const { ownerId, ...rest } = req.body;
+      const data = validateBody(insertHorseSchema.partial(), rest);
       const horse = await storage.updateHorse(req.params.id, data);
       if (!horse) return res.status(404).json({ message: "Horse not found" });
+      if (ownerId) {
+        const existingOwnership = await storage.getHorseOwnership(req.params.id);
+        if (existingOwnership.length > 0) {
+          const latest = existingOwnership.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))[0];
+          if (latest.customerId !== ownerId) {
+            await storage.createHorseOwnership({ horseId: req.params.id, customerId: ownerId });
+          }
+        } else {
+          await storage.createHorseOwnership({ horseId: req.params.id, customerId: ownerId });
+        }
+      }
       res.json(horse);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });

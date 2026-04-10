@@ -113,6 +113,7 @@ export interface IStorage {
 
   createHorseOwnership(ownership: InsertHorseOwnership): Promise<HorseOwnership>;
   getHorseOwnershipByHorseId(horseId: string): Promise<HorseOwnership | undefined>;
+  getHorseOwnership(horseId: string): Promise<HorseOwnership[]>;
   getHorseOwnershipByCustomerId(customerId: string): Promise<HorseOwnership[]>;
 
   createHorseMovement(movement: InsertHorseMovement): Promise<HorseMovement>;
@@ -195,7 +196,10 @@ export class DatabaseStorage implements IStorage {
       const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
       const box = agreement ? allBoxes.find(b => b.id === agreement.boxId) : null;
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
-      const ownership = allOwnership.find(o => o.horseId === horse.id);
+      const ownershipRecords = allOwnership.filter(o => o.horseId === horse.id);
+      const ownership = ownershipRecords.length > 0
+        ? ownershipRecords.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))[0]
+        : null;
       const owner = ownership ? allCustomers.find(c => c.id === ownership.customerId) : null;
       return {
         ...horse,
@@ -1011,6 +1015,10 @@ export class DatabaseStorage implements IStorage {
   async getHorseOwnershipByHorseId(horseId: string): Promise<HorseOwnership | undefined> {
     const [ownership] = await db.select().from(horseOwnership).where(eq(horseOwnership.horseId, horseId));
     return ownership;
+  }
+
+  async getHorseOwnership(horseId: string): Promise<HorseOwnership[]> {
+    return await db.select().from(horseOwnership).where(eq(horseOwnership.horseId, horseId));
   }
 
   async getHorseOwnershipByCustomerId(customerId: string): Promise<HorseOwnership[]> {
