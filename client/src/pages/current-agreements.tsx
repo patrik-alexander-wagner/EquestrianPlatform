@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, FileText, Upload, Download, Trash2, Pencil, MoveRight } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { LogOut, FileText, Upload, Download, Trash2, Pencil, MoveRight, MoreVertical } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
 
 export default function CurrentAgreementsPage() {
@@ -272,41 +273,45 @@ export default function CurrentAgreementsPage() {
         data={visibleAgreements}
         isLoading={isLoading}
         actions={(item) => (
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openEditDialog(item)}
-              data-testid={`button-edit-${item.id}`}
-            >
-              <Pencil className="w-4 h-4 mr-1" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
-              data-testid={`button-documents-${item.id}`}
-            >
-              <FileText className="w-4 h-4 mr-1" />
-              Docs
-            </Button>
-            {!item.endDate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
-                data-testid={`button-checkout-${item.id}`}
-              >
-                <LogOut className="w-4 h-4 mr-1" />
-                Checkout
-              </Button>
-            )}
+          <div className="flex items-center gap-1">
             {item.endDate && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs mr-1">
                 Ends {item.endDate}
               </Badge>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" data-testid={`button-actions-${item.id}`}>
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => openEditDialog(item)}
+                  data-testid={`button-edit-${item.id}`}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
+                  data-testid={`button-documents-${item.id}`}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Documents
+                </DropdownMenuItem>
+                {!item.endDate && (
+                  <DropdownMenuItem
+                    onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
+                    data-testid={`button-terminate-${item.id}`}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Agreement Termination
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       />
@@ -492,8 +497,8 @@ export default function CurrentAgreementsPage() {
       <Dialog open={showCheckoutDialog} onOpenChange={setShowCheckoutDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Checkout Agreement</DialogTitle>
-            <DialogDescription>End the livery agreement for this horse</DialogDescription>
+            <DialogTitle>Agreement Termination</DialogTitle>
+            <DialogDescription>Terminate the livery agreement and check out any horse currently in the box.</DialogDescription>
           </DialogHeader>
           {checkoutAgreement && (
             <form
@@ -509,20 +514,20 @@ export default function CurrentAgreementsPage() {
             >
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Checking out: <strong>{checkoutAgreement.horseName || "No Horse"}</strong> ({checkoutAgreement.customerName})
+                  Terminating agreement: <strong>{checkoutAgreement.referenceNumber}</strong> — {checkoutAgreement.customerName}
                 </p>
                 <div>
-                  <Label>End Date</Label>
-                  <Input name="endDate" type="date" required data-testid="input-checkout-date" />
+                  <Label>Termination Date</Label>
+                  <Input name="endDate" type="date" required max={todayStr} data-testid="input-termination-date" />
                 </div>
                 <div>
-                  <Label>Reason</Label>
-                  <Textarea name="reason" placeholder="Reason for checkout..." data-testid="input-checkout-reason" />
+                  <Label>Reason (optional)</Label>
+                  <Textarea name="reason" placeholder="Reason for termination..." data-testid="input-termination-reason" />
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={checkoutMutation.isPending} data-testid="button-submit-checkout">
-                  Confirm Checkout
+                <Button type="submit" disabled={checkoutMutation.isPending} variant="destructive" data-testid="button-submit-termination">
+                  Confirm Termination
                 </Button>
               </DialogFooter>
             </form>

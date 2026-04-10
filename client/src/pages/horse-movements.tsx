@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -66,7 +65,6 @@ export default function HorseMovementsPage() {
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [targetBoxId, setTargetBoxId] = useState("");
   const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split("T")[0]);
-  const [checkoutReason, setCheckoutReason] = useState("");
   const [checkinDialogOpen, setCheckinDialogOpen] = useState(false);
   const [checkinHorseId, setCheckinHorseId] = useState("");
   const [checkinDate, setCheckinDate] = useState(new Date().toISOString().split("T")[0]);
@@ -181,20 +179,17 @@ export default function HorseMovementsPage() {
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: (data: { id: string; endDate: string; reason: string }) =>
-      apiRequest("PATCH", `/api/livery-agreements/${data.id}`, {
-        endDate: data.endDate,
-        checkoutReason: data.reason,
+    mutationFn: (data: { movementId: string; checkOutDate: string }) =>
+      apiRequest("PATCH", `/api/horse-movements/${data.movementId}`, {
+        checkOut: data.checkOutDate,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/box-grid"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horse-movements/enriched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
       setCheckoutDialogOpen(false);
       setSelectedBox(null);
       setCheckoutDate(new Date().toISOString().split("T")[0]);
-      setCheckoutReason("");
-      toast({ title: "Horse checked out successfully" });
+      toast({ title: "Horse checked out of box successfully" });
     },
     onError: (err: Error) => {
       toast({ title: "Checkout failed", description: err.message, variant: "destructive" });
@@ -240,8 +235,8 @@ export default function HorseMovementsPage() {
   };
 
   const handleCheckout = () => {
-    if (!selectedBox?.agreementId || !checkoutDate) return;
-    checkoutMutation.mutate({ id: selectedBox.agreementId, endDate: checkoutDate, reason: checkoutReason });
+    if (!selectedBox?.movementId || !checkoutDate) return;
+    checkoutMutation.mutate({ movementId: selectedBox.movementId, checkOutDate: checkoutDate });
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -458,7 +453,7 @@ export default function HorseMovementsPage() {
                   <Button
                     variant="outline"
                     onClick={() => setCheckoutDialogOpen(true)}
-                    disabled={!selectedBox.agreementId}
+                    disabled={!selectedBox.movementId}
                     data-testid="button-checkout-horse"
                   >
                     <LogOut className="w-4 h-4 mr-2" />
@@ -619,11 +614,11 @@ export default function HorseMovementsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={checkoutDialogOpen} onOpenChange={(open) => { setCheckoutDialogOpen(open); if (!open) { setCheckoutDate(new Date().toISOString().split("T")[0]); setCheckoutReason(""); } }}>
+      <Dialog open={checkoutDialogOpen} onOpenChange={(open) => { setCheckoutDialogOpen(open); if (!open) { setCheckoutDate(new Date().toISOString().split("T")[0]); } }}>
         <DialogContent data-testid="dialog-checkout-horse">
           <DialogHeader>
             <DialogTitle>Check out {selectedBox?.horseName}</DialogTitle>
-            <DialogDescription>Set an end date for the agreement and check out the horse from {selectedBox?.name}.</DialogDescription>
+            <DialogDescription>Remove the horse from {selectedBox?.name}. The livery agreement will remain active.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -634,15 +629,6 @@ export default function HorseMovementsPage() {
                 max={today}
                 onChange={e => setCheckoutDate(e.target.value)}
                 data-testid="input-checkout-date"
-              />
-            </div>
-            <div>
-              <Label>Reason (optional)</Label>
-              <Textarea
-                placeholder="Reason for checkout..."
-                value={checkoutReason}
-                onChange={e => setCheckoutReason(e.target.value)}
-                data-testid="input-checkout-reason"
               />
             </div>
           </div>
