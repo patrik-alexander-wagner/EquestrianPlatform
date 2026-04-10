@@ -146,6 +146,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { runMigration } = await import("./migrate");
+  await runMigration();
+
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
