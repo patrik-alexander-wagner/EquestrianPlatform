@@ -217,6 +217,8 @@ export default function CurrentAgreementsPage() {
     setEditMonthlyAmount(item?.price || "0");
   };
 
+  const [editEndDate, setEditEndDate] = useState("");
+
   const openEditDialog = (agreement: any) => {
     setEditAgreement(agreement);
     setEditAgreementCategory(agreement.agreementCategory || "with_horse");
@@ -224,7 +226,9 @@ export default function CurrentAgreementsPage() {
     setEditCustomerSearch("");
     setEditSelectedItemId(agreement.itemId);
     setEditMonthlyAmount(agreement.monthlyAmount || "");
-    setEditAgreementType(agreement.type || "permanent");
+    const effectiveType = agreement.endDate ? "temporary" : (agreement.type || "permanent");
+    setEditAgreementType(effectiveType);
+    setEditEndDate(agreement.endDate || "");
     setEditSelectedBoxId(agreement.boxId);
     setShowEditDialog(true);
   };
@@ -338,7 +342,7 @@ export default function CurrentAgreementsPage() {
                     boxId,
                     itemId: editSelectedItemId,
                     startDate: fd.get("startDate") as string,
-                    endDate: editAgreementType === "temporary" ? (fd.get("endDate") as string) : null,
+                    endDate: editAgreementType === "temporary" ? editEndDate : null,
                     type: editAgreementType,
                     notes: (fd.get("notes") as string) || null,
                     monthlyAmount: editMonthlyAmount || editSelectedItem?.price || "0",
@@ -475,7 +479,7 @@ export default function CurrentAgreementsPage() {
                 {editAgreementType === "temporary" && (
                   <div>
                     <Label>End Date</Label>
-                    <Input name="endDate" type="date" required defaultValue={editAgreement.endDate || ""} data-testid="input-edit-end" />
+                    <Input name="endDate" type="date" required value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} data-testid="input-edit-end" />
                   </div>
                 )}
 
