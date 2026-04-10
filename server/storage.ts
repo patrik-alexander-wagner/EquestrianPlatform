@@ -760,46 +760,28 @@ export class DatabaseStorage implements IStorage {
 
     const allCustomers = await db.select().from(customers);
     const allHorses = await db.select().from(horses);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
     const allMovements = await db.select().from(horseMovements);
 
-    const grouped: Record<string, any> = {};
+    const result: any[] = [];
     for (const agreement of current) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const customerName = customer ? customer.fullname : "Unknown";
-      const activeMovements = allMovements.filter(m => m.agreementId === agreement.id && !m.checkOut);
-      const horseNames = activeMovements.map(m => {
-        const horse = allHorses.find(h => h.id === m.horseId);
-        return horse?.horseName || "Unknown";
-      });
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
+      const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
+      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
       const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
 
-      if (!grouped[agreement.customerId]) {
-        grouped[agreement.customerId] = {
-          customerName,
-          agreements: [],
-        };
-      }
-      grouped[agreement.customerId].agreements.push({
-        horseNames: horseNames.length > 0 ? horseNames : ["-"],
-        horsesCheckedIn: activeMovements.length,
+      result.push({
+        customerName: customer ? customer.fullname : "Unknown",
+        boxName,
+        horseName: horse?.horseName || "-",
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate || "",
         monthlyAmount,
       });
-    }
-
-    const result: any[] = [];
-    for (const g of Object.values(grouped) as any[]) {
-      for (const a of g.agreements) {
-        result.push({
-          customerName: g.customerName,
-          horseNames: a.horseNames,
-          horsesCheckedIn: a.horsesCheckedIn,
-          arrivalDate: a.arrivalDate,
-          departureDate: a.departureDate,
-          monthlyAmount: a.monthlyAmount,
-        });
-      }
     }
     return result;
   }
@@ -877,75 +859,67 @@ export class DatabaseStorage implements IStorage {
     const allAgreements = await db.select().from(liveryAgreements);
     const allCustomers = await db.select().from(customers);
     const allHorses = await db.select().from(horses);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
     const allMovements = await db.select().from(horseMovements);
 
     const filtered = allAgreements.filter(a => a.startDate?.substring(0, 7) === month);
 
-    const grouped: Record<string, any> = {};
+    const result: any[] = [];
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const customerName = customer ? customer.fullname : "Unknown";
-      const activeMovements = allMovements.filter(m => m.agreementId === agreement.id && !m.checkOut);
-      const horseNames = activeMovements.map(m => {
-        const horse = allHorses.find(h => h.id === m.horseId);
-        return horse?.horseName || "Unknown";
-      });
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
+      const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
+      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
       const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
 
-      if (!grouped[agreement.customerId]) {
-        grouped[agreement.customerId] = {
-          customerName,
-          agreements: [],
-        };
-      }
-      grouped[agreement.customerId].agreements.push({
-        horseNames: horseNames.length > 0 ? horseNames : ["-"],
-        horsesCheckedIn: activeMovements.length,
-        arrivalDate: agreement.startDate,
+      result.push({
+        customerName: customer ? customer.fullname : "Unknown",
+        boxName,
+        horseName: horse?.horseName || "-",
+        arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate || "",
         monthlyAmount,
       });
     }
 
-    return Object.values(grouped);
+    return result;
   }
 
   async getDepartedLiveryHorses(month: string): Promise<any[]> {
     const allAgreements = await db.select().from(liveryAgreements);
     const allCustomers = await db.select().from(customers);
     const allHorses = await db.select().from(horses);
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
     const allMovements = await db.select().from(horseMovements);
 
     const filtered = allAgreements.filter(a => a.endDate && a.endDate.substring(0, 7) === month);
 
-    const grouped: Record<string, any> = {};
+    const result: any[] = [];
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
-      const customerName = customer ? customer.fullname : "Unknown";
+      const box = allBoxes.find(b => b.id === agreement.boxId);
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
       const movements = allMovements.filter(m => m.agreementId === agreement.id);
-      const uniqueHorseIds = [...new Set(movements.map(m => m.horseId))];
-      const horseNames = uniqueHorseIds.map(hId => {
-        const horse = allHorses.find(h => h.id === hId);
-        return horse?.horseName || "Unknown";
-      });
+      const lastMovement = movements.sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""))[0];
+      const horse = lastMovement ? allHorses.find(h => h.id === lastMovement.horseId) : null;
       const monthlyAmount = agreement.monthlyAmount ? `AED ${parseFloat(agreement.monthlyAmount).toLocaleString()}` : "-";
 
-      if (!grouped[agreement.customerId]) {
-        grouped[agreement.customerId] = {
-          customerName,
-          agreements: [],
-        };
-      }
-      grouped[agreement.customerId].agreements.push({
-        horseNames: horseNames.length > 0 ? horseNames : ["-"],
-        horsesCheckedIn: horseNames.length,
+      result.push({
+        customerName: customer ? customer.fullname : "Unknown",
+        boxName,
+        horseName: horse?.horseName || "-",
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate,
         monthlyAmount,
       });
     }
 
-    return Object.values(grouped);
+    return result;
   }
 
   async getLiveryCustomersInfo(): Promise<any[]> {

@@ -180,43 +180,25 @@ export default function ReportsPage() {
     }));
   }, [chartDataMonth]);
 
-  const flattenAgreementGroups = (data: any[]) => {
-    const rows: any[] = [];
-    for (const group of data) {
-      if (!Array.isArray(group.agreements)) continue;
-      for (const a of group.agreements) {
-        rows.push({
-          customerName: group.customerName,
-          horseNames: a.horseNames,
-          horsesCheckedIn: String(a.horsesCheckedIn),
-          arrivalDate: formatDate(a.arrivalDate),
-          departureDate: a.departureDate ? formatDate(a.departureDate) : "-",
-          monthlyAmount: a.monthlyAmount,
-        });
-      }
-    }
-    return rows;
-  };
+  const formatRows = (data: any[]) => data.map((row: any) => ({
+    customerName: row.customerName,
+    boxName: row.boxName || "-",
+    horseName: row.horseName || "-",
+    arrivalDate: formatDate(row.arrivalDate),
+    departureDate: row.departureDate ? formatDate(row.departureDate) : "-",
+    monthlyAmount: row.monthlyAmount || "-",
+  }));
 
-  const arrivalGroups = useMemo(() => flattenAgreementGroups(newLiveryData), [newLiveryData]);
+  const arrivalGroups = useMemo(() => formatRows(newLiveryData), [newLiveryData]);
 
-  const departureGroups = useMemo(() => flattenAgreementGroups(departedData), [departedData]);
+  const departureGroups = useMemo(() => formatRows(departedData), [departedData]);
 
-  const allCustomerGroups = useMemo(() => {
-    return allCustomersData.map((row: any) => ({
-      customerName: row.customerName,
-      horseNames: row.horseNames,
-      horsesCheckedIn: String(row.horsesCheckedIn),
-      arrivalDate: formatDate(row.arrivalDate),
-      departureDate: row.departureDate ? formatDate(row.departureDate) : "-",
-      monthlyAmount: row.monthlyAmount,
-    }));
-  }, [allCustomersData]);
+  const allCustomerGroups = useMemo(() => formatRows(allCustomersData), [allCustomersData]);
 
   const tableColumns = [
     { key: "customerName", label: "Livery Customer" },
-    { key: "horseNames", label: "Horse Name", align: "center" },
-    { key: "horsesCheckedIn", label: "No. of Horses Checked In", align: "center" },
+    { key: "boxName", label: "Box Name" },
+    { key: "horseName", label: "Horse Name" },
     { key: "arrivalDate", label: "Arrival Date" },
     { key: "departureDate", label: "Departure Date" },
     { key: "monthlyAmount", label: "Livery Package (Monthly)", align: "right" },
@@ -313,26 +295,18 @@ export default function ReportsPage() {
       const headStyle = { fillColor: [76, 175, 80] as [number, number, number], textColor: 255 as number, fontStyle: "bold" as const, fontSize: 9 };
       const altRow = { fillColor: [232, 245, 232] as [number, number, number] };
       const tblMargin = { left: 15, right: 15 };
-      const tblHead = [["#", "Livery Customer", "Horse Name", "No. of Horses Checked In", "Arrival Date", "Departure Date", "Livery Package (Monthly)"]];
+      const tblHead = [["#", "Livery Customer", "Box Name", "Horse Name", "Arrival Date", "Departure Date", "Livery Package (Monthly)"]];
 
       const buildTableRows = (groups: any[]) => {
-        const rows: any[][] = [];
-        groups.forEach((g, idx) => {
-          const horseNames = Array.isArray(g.horseNames) ? g.horseNames : [g.horseNames || "-"];
-          const count = horseNames.length;
-          for (let i = 0; i < count; i++) {
-            rows.push([
-              i === 0 ? String(idx + 1) : "",
-              i === 0 ? g.customerName : "",
-              horseNames[i],
-              i === 0 ? g.horsesCheckedIn : "",
-              i === 0 ? g.arrivalDate : "",
-              i === 0 ? g.departureDate : "",
-              i === 0 ? g.monthlyAmount : "",
-            ]);
-          }
-        });
-        return rows;
+        return groups.map((g, idx) => [
+          String(idx + 1),
+          g.customerName,
+          g.boxName,
+          g.horseName,
+          g.arrivalDate,
+          g.departureDate,
+          g.monthlyAmount,
+        ]);
       };
 
       if (arrivalGroups.length > 0) {
@@ -340,7 +314,7 @@ export default function ReportsPage() {
         pdf.setFontSize(14);
         pdf.setFont("helvetica", "bold");
         pdf.text(`Livery Customers Arrival — ${monthLabel}`, pw / 2, 18, { align: "center" });
-        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(arrivalGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(arrivalGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 6: { halign: "right" } } });
         addFooter();
       }
 
@@ -349,7 +323,7 @@ export default function ReportsPage() {
         pdf.setFontSize(14);
         pdf.setFont("helvetica", "bold");
         pdf.text(`Livery Customers Departure — ${monthLabel}`, pw / 2, 18, { align: "center" });
-        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(departureGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(departureGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 6: { halign: "right" } } });
         addFooter();
       }
 
@@ -358,7 +332,7 @@ export default function ReportsPage() {
         pdf.setFontSize(14);
         pdf.setFont("helvetica", "bold");
         pdf.text("List of All Customers", pw / 2, 18, { align: "center" });
-        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(allCustomerGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 3: { halign: "center" } } });
+        autoTable(pdf, { startY: 24, head: tblHead, body: buildTableRows(allCustomerGroups), headStyles: headStyle, alternateRowStyles: altRow, margin: tblMargin, columnStyles: { 0: { cellWidth: 12, halign: "center" }, 6: { halign: "right" } } });
         addFooter();
       }
 
