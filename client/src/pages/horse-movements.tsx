@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRightLeft, MoveRight, X, Search, Eye, LogOut } from "lucide-react";
+import { ArrowRightLeft, MoveRight, X, Search, LogOut } from "lucide-react";
 
 interface BoxGridItem {
   id: string;
@@ -69,6 +69,9 @@ export default function HorseMovementsPage() {
   const [swapHorseId, setSwapHorseId] = useState("");
   const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split("T")[0]);
   const [checkoutReason, setCheckoutReason] = useState("");
+  const [checkinDialogOpen, setCheckinDialogOpen] = useState(false);
+  const [checkinHorseId, setCheckinHorseId] = useState("");
+  const [checkinDate, setCheckinDate] = useState(new Date().toISOString().split("T")[0]);
   const [stableFilter, setStableFilter] = useState("all");
   const [customerFilter, setCustomerFilter] = useState("");
   const [horseFilter, setHorseFilter] = useState("");
@@ -85,12 +88,12 @@ export default function HorseMovementsPage() {
 
   const { data: customerHorses = [] } = useQuery<HorseOwnershipEntry[]>({
     queryKey: ["/api/horse-ownership/customer", selectedBox?.customerId],
-    enabled: !!selectedBox?.customerId && swapDialogOpen,
+    enabled: !!selectedBox?.customerId && (swapDialogOpen || checkinDialogOpen),
   });
 
   const { data: allHorses = [] } = useQuery<HorseEntry[]>({
     queryKey: ["/api/horses"],
-    enabled: swapDialogOpen,
+    enabled: swapDialogOpen || checkinDialogOpen,
   });
 
   const activeHorseIds = useMemo(() => {
@@ -106,6 +109,15 @@ export default function HorseMovementsPage() {
       h.status === "active"
     );
   }, [customerHorses, allHorses, selectedBox, activeHorseIds]);
+
+  const eligibleCheckinHorses = useMemo(() => {
+    const customerHorseIds = new Set(customerHorses.map(ch => ch.horseId));
+    return allHorses.filter(h =>
+      customerHorseIds.has(h.id) &&
+      !activeHorseIds.has(h.id) &&
+      h.status === "active"
+    );
+  }, [customerHorses, allHorses, activeHorseIds]);
 
   const stables = useMemo(() => {
     const set = new Set(boxGrid.map(b => b.stableName));
@@ -208,6 +220,25 @@ export default function HorseMovementsPage() {
     },
   });
 
+  const checkinMutation = useMutation({
+    mutationFn: async (data: { agreementId: string; horseId: string; stableboxId: string; checkIn: string }) => {
+      const res = await apiRequest("POST", "/api/horse-movements", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/box-grid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements/enriched"] });
+      setCheckinDialogOpen(false);
+      setSelectedBox(null);
+      setCheckinHorseId("");
+      setCheckinDate(new Date().toISOString().split("T")[0]);
+      toast({ title: "Horse checked in successfully" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Check-in failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleBoxClick = (box: BoxGridItem) => {
     setSelectedBox(prev => prev?.id === box.id ? null : box);
   };
@@ -220,6 +251,16 @@ export default function HorseMovementsPage() {
   const handleSwap = () => {
     if (!selectedBox?.movementId || !swapHorseId) return;
     swapMutation.mutate({ movementId: selectedBox.movementId, newHorseId: swapHorseId });
+  };
+
+  const handleCheckin = () => {
+    if (!selectedBox?.agreementId || !checkinHorseId || !selectedBox?.id) return;
+    checkinMutation.mutate({
+      agreementId: selectedBox.agreementId,
+      horseId: checkinHorseId,
+      stableboxId: selectedBox.id,
+      checkIn: checkinDate,
+    });
   };
 
   const handleCheckout = () => {
@@ -448,19 +489,6 @@ export default function HorseMovementsPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      if (selectedBox.agreementId) {
-                        navigate(`/agreements/current`);
-                      }
-                    }}
-                    disabled={!selectedBox.agreementId}
-                    data-testid="button-view-agreement"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View agreement
-                  </Button>
-                  <Button
-                    variant="outline"
                     onClick={() => setCheckoutDialogOpen(true)}
                     disabled={!selectedBox.agreementId}
                     data-testid="button-checkout-horse"
@@ -493,15 +521,11 @@ export default function HorseMovementsPage() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (selectedBox.agreementId) {
-                      navigate(`/agreements/current`);
-                    }
-                  }}
-                  data-testid="button-view-agreement"
+                  onClick={() => setCheckinDialogOpen(true)}
+                  data-testid="button-checkin-horse"
                 >
-                  <Eye className="w-4 h-4 mr-2" />
-                  View agreement
+                  <MoveRight className="w-4 h-4 mr-2" />
+                  Check in a horse
                 </Button>
               </div>
             </div>
@@ -689,6 +713,48 @@ export default function HorseMovementsPage() {
             <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)} data-testid="button-cancel-checkout">Cancel</Button>
             <Button onClick={handleCheckout} disabled={!checkoutDate || checkoutMutation.isPending} data-testid="button-confirm-checkout">
               {checkoutMutation.isPending ? "Processing..." : "Confirm Checkout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={checkinDialogOpen} onOpenChange={(open) => { setCheckinDialogOpen(open); if (!open) { setCheckinHorseId(""); setCheckinDate(new Date().toISOString().split("T")[0]); } }}>
+        <DialogContent data-testid="dialog-checkin-horse">
+          <DialogHeader>
+            <DialogTitle>Check in a horse</DialogTitle>
+            <DialogDescription>Select a horse owned by {selectedBox?.customerName || "the customer"} to check into {selectedBox?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Horse</Label>
+              <Select value={checkinHorseId} onValueChange={setCheckinHorseId}>
+                <SelectTrigger data-testid="select-checkin-horse">
+                  <SelectValue placeholder="Select a horse..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligibleCheckinHorses.map(h => (
+                    <SelectItem key={h.id} value={h.id}>{h.horseName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {eligibleCheckinHorses.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-1">No available horses for this customer.</p>
+              )}
+            </div>
+            <div>
+              <Label>Check-in Date</Label>
+              <Input
+                type="date"
+                value={checkinDate}
+                onChange={e => setCheckinDate(e.target.value)}
+                data-testid="input-checkin-date"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckinDialogOpen(false)} data-testid="button-cancel-checkin">Cancel</Button>
+            <Button onClick={handleCheckin} disabled={!checkinHorseId || !checkinDate || checkinMutation.isPending} data-testid="button-confirm-checkin">
+              {checkinMutation.isPending ? "Processing..." : "Confirm Check-in"}
             </Button>
           </DialogFooter>
         </DialogContent>
