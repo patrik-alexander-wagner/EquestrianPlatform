@@ -5,6 +5,8 @@ export async function runMigration() {
   const client = await pool.connect();
 
   try {
+    await client.query("SELECT pg_advisory_lock(20260410)");
+
     const colCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'livery_agreements' AND column_name = 'horse_id'
@@ -12,6 +14,7 @@ export async function runMigration() {
 
     if (colCheck.rows.length === 0) {
       console.log("Migration: horse_id column already removed — skipping migration");
+      await client.query("SELECT pg_advisory_unlock(20260410)");
       return;
     }
 
@@ -66,13 +69,16 @@ export async function runMigration() {
     `);
     console.log(`Migration: Created ${movementResult.rowCount} horse_movements records`);
 
-    await client.query(`ALTER TABLE livery_agreements DROP COLUMN horse_id`);
+    await client.query(`ALTER TABLE livery_agreements DROP COLUMN IF EXISTS horse_id`);
     console.log("Migration: Dropped horse_id column from livery_agreements");
 
     await client.query("COMMIT");
     console.log("Migration: Completed successfully");
+
+    await client.query("SELECT pg_advisory_unlock(20260410)");
   } catch (error) {
     await client.query("ROLLBACK");
+    await client.query("SELECT pg_advisory_unlock(20260410)").catch(() => {});
     console.error("Migration: FAILED — rolled back all changes", error);
     throw error;
   } finally {
