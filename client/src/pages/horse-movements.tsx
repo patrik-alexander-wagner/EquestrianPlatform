@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRightLeft, MoveRight, X, Search, LogOut } from "lucide-react";
+import { MoveRight, X, Search, LogOut } from "lucide-react";
 
 interface BoxGridItem {
   id: string;
@@ -63,10 +63,8 @@ export default function HorseMovementsPage() {
   const [, navigate] = useLocation();
   const [selectedBox, setSelectedBox] = useState<BoxGridItem | null>(null);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-  const [swapDialogOpen, setSwapDialogOpen] = useState(false);
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [targetBoxId, setTargetBoxId] = useState("");
-  const [swapHorseId, setSwapHorseId] = useState("");
   const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split("T")[0]);
   const [checkoutReason, setCheckoutReason] = useState("");
   const [checkinDialogOpen, setCheckinDialogOpen] = useState(false);
@@ -88,27 +86,17 @@ export default function HorseMovementsPage() {
 
   const { data: customerHorses = [] } = useQuery<HorseOwnershipEntry[]>({
     queryKey: ["/api/horse-ownership/customer", selectedBox?.customerId],
-    enabled: !!selectedBox?.customerId && (swapDialogOpen || checkinDialogOpen),
+    enabled: !!selectedBox?.customerId && checkinDialogOpen,
   });
 
   const { data: allHorses = [] } = useQuery<HorseEntry[]>({
     queryKey: ["/api/horses"],
-    enabled: swapDialogOpen || checkinDialogOpen,
+    enabled: checkinDialogOpen,
   });
 
   const activeHorseIds = useMemo(() => {
     return new Set(boxGrid.filter(b => b.isOccupied && b.horseId).map(b => b.horseId!));
   }, [boxGrid]);
-
-  const eligibleSwapHorses = useMemo(() => {
-    const customerHorseIds = new Set(customerHorses.map(ch => ch.horseId));
-    return allHorses.filter(h =>
-      customerHorseIds.has(h.id) &&
-      h.id !== selectedBox?.horseId &&
-      !activeHorseIds.has(h.id) &&
-      h.status === "active"
-    );
-  }, [customerHorses, allHorses, selectedBox, activeHorseIds]);
 
   const eligibleCheckinHorses = useMemo(() => {
     const customerHorseIds = new Set(customerHorses.map(ch => ch.horseId));
@@ -192,24 +180,6 @@ export default function HorseMovementsPage() {
     },
   });
 
-  const swapMutation = useMutation({
-    mutationFn: async (data: { movementId: string; newHorseId: string }) => {
-      const res = await apiRequest("POST", "/api/horse-movements/swap", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/box-grid"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/horse-movements/enriched"] });
-      setSwapDialogOpen(false);
-      setSelectedBox(null);
-      setSwapHorseId("");
-      toast({ title: "Horse swapped successfully" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Swap failed", description: err.message, variant: "destructive" });
-    },
-  });
-
   const checkoutMutation = useMutation({
     mutationFn: (data: { id: string; endDate: string; reason: string }) =>
       apiRequest("PATCH", `/api/livery-agreements/${data.id}`, {
@@ -257,11 +227,6 @@ export default function HorseMovementsPage() {
   const handleMove = () => {
     if (!selectedBox?.movementId || !targetBoxId) return;
     moveMutation.mutate({ movementId: selectedBox.movementId, newBoxId: targetBoxId });
-  };
-
-  const handleSwap = () => {
-    if (!selectedBox?.movementId || !swapHorseId) return;
-    swapMutation.mutate({ movementId: selectedBox.movementId, newHorseId: swapHorseId });
   };
 
   const handleCheckin = () => {
@@ -492,14 +457,6 @@ export default function HorseMovementsPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setSwapDialogOpen(true)}
-                    data-testid="button-swap-horse"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 mr-2" />
-                    Swap horse
-                  </Button>
-                  <Button
-                    variant="outline"
                     onClick={() => setCheckoutDialogOpen(true)}
                     disabled={!selectedBox.agreementId}
                     data-testid="button-checkout-horse"
@@ -657,42 +614,6 @@ export default function HorseMovementsPage() {
             <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">Cancel</Button>
             <Button onClick={handleMove} disabled={!targetBoxId || moveMutation.isPending} data-testid="button-confirm-move">
               {moveMutation.isPending ? "Moving..." : "Confirm Move"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={swapDialogOpen} onOpenChange={(open) => { setSwapDialogOpen(open); if (!open) setSwapHorseId(""); }}>
-        <DialogContent data-testid="dialog-swap-horse">
-          <DialogHeader>
-            <DialogTitle>Swap Horse in {selectedBox?.name}</DialogTitle>
-            <DialogDescription>Replace the current horse with another from the same customer.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Replace <strong>{selectedBox?.horseName}</strong> with another horse from {selectedBox?.customerName}
-            </p>
-            {eligibleSwapHorses.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic" data-testid="text-no-eligible-horses">
-                No other eligible horses available for this customer.
-              </p>
-            ) : (
-              <Select value={swapHorseId} onValueChange={setSwapHorseId}>
-                <SelectTrigger data-testid="select-swap-horse">
-                  <SelectValue placeholder="Select horse..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {eligibleSwapHorses.map(h => (
-                    <SelectItem key={h.id} value={h.id}>{h.horseName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSwapDialogOpen(false)} data-testid="button-cancel-swap">Cancel</Button>
-            <Button onClick={handleSwap} disabled={!swapHorseId || swapMutation.isPending || eligibleSwapHorses.length === 0} data-testid="button-confirm-swap">
-              {swapMutation.isPending ? "Swapping..." : "Confirm Swap"}
             </Button>
           </DialogFooter>
         </DialogContent>
