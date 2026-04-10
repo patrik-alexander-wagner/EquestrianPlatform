@@ -152,6 +152,17 @@ export default function HorseMovementsPage() {
     return boxGrid.filter(b => !b.isOccupied && !b.hasAgreement);
   }, [boxGrid]);
 
+  const customerMoveTargets = useMemo(() => {
+    if (!selectedBox?.customerId) return [];
+    return boxGrid.filter(b =>
+      b.id !== selectedBox.id &&
+      !b.isOccupied &&
+      b.customerId === selectedBox.customerId
+    );
+  }, [boxGrid, selectedBox]);
+
+  const today = new Date().toISOString().split("T")[0];
+
   const filteredLog = useMemo(() => {
     let result = movementLog;
     if (logCustomerFilter) {
@@ -473,7 +484,7 @@ export default function HorseMovementsPage() {
                   <Button
                     variant="outline"
                     onClick={() => setMoveDialogOpen(true)}
-                    disabled={emptyBoxes.length === 0}
+                    disabled={customerMoveTargets.length === 0}
                     data-testid="button-move-horse"
                   >
                     <MoveRight className="w-4 h-4 mr-2" />
@@ -621,22 +632,26 @@ export default function HorseMovementsPage() {
         <DialogContent data-testid="dialog-move-horse">
           <DialogHeader>
             <DialogTitle>Move {selectedBox?.horseName} to another box</DialogTitle>
-            <DialogDescription>Select an empty box to move this horse to.</DialogDescription>
+            <DialogDescription>Select a box under {selectedBox?.customerName}'s agreements to move this horse to.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Currently in: <strong>{selectedBox?.name}</strong> ({selectedBox?.stableName})
             </p>
-            <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-              <SelectTrigger data-testid="select-target-box">
-                <SelectValue placeholder="Select target box..." />
-              </SelectTrigger>
-              <SelectContent>
-                {emptyBoxes.map(b => (
-                  <SelectItem key={b.id} value={b.id}>{b.name} — {b.stableName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {customerMoveTargets.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No other available boxes under this customer's agreements.</p>
+            ) : (
+              <Select value={targetBoxId} onValueChange={setTargetBoxId}>
+                <SelectTrigger data-testid="select-target-box">
+                  <SelectValue placeholder="Select target box..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {customerMoveTargets.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name} — {b.stableName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">Cancel</Button>
@@ -695,6 +710,7 @@ export default function HorseMovementsPage() {
               <Input
                 type="date"
                 value={checkoutDate}
+                max={today}
                 onChange={e => setCheckoutDate(e.target.value)}
                 data-testid="input-checkout-date"
               />
@@ -746,6 +762,7 @@ export default function HorseMovementsPage() {
               <Input
                 type="date"
                 value={checkinDate}
+                max={today}
                 onChange={e => setCheckinDate(e.target.value)}
                 data-testid="input-checkin-date"
               />
