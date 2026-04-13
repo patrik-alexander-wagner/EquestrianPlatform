@@ -31,7 +31,7 @@ export default function BillingElementsPage() {
   const [selectedItemId, setSelectedItemId] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [itemDropdownOpen, setItemDropdownOpen] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState<number | "">(1);
   const [finalSellingPrice, setFinalSellingPrice] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayString());
 
@@ -161,18 +161,27 @@ export default function BillingElementsPage() {
   const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
   const itemPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
   const itemUnitFactor = selectedItem?.unitFactor ? parseFloat(selectedItem.unitFactor) : 1;
-  const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * quantity : 0;
+  const numericQuantity = quantity === "" ? 0 : quantity;
+  const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * numericQuantity : 0;
 
   const handleItemChange = (val: string) => {
     setSelectedItemId(val);
     const item = nonLiveryItems.find(i => i.id === val);
     const price = item?.price ? parseFloat(item.price) : 0;
     const uf = item?.unitFactor ? parseFloat(item.unitFactor) : 1;
-    const computed = uf > 0 ? (price / uf) * quantity : 0;
+    const qty = quantity === "" ? 0 : quantity;
+    const computed = uf > 0 ? (price / uf) * qty : 0;
     setFinalSellingPrice(computed.toFixed(2));
   };
 
-  const handleQuantityChange = (newQty: number) => {
+  const handleQuantityChange = (val: string) => {
+    if (val === "") {
+      setQuantity("");
+      setFinalSellingPrice("");
+      return;
+    }
+    const newQty = parseFloat(val);
+    if (isNaN(newQty)) return;
     setQuantity(newQty);
     if (selectedItem) {
       const computed = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * newQty : 0;
@@ -364,9 +373,10 @@ export default function BillingElementsPage() {
                   <Label>Quantity</Label>
                   <Input
                     type="number"
-                    min="1"
+                    step="any"
+                    min="0"
                     value={quantity}
-                    onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                    onChange={(e) => handleQuantityChange(e.target.value)}
                     data-testid="input-billing-quantity"
                   />
                 </div>
@@ -411,7 +421,7 @@ export default function BillingElementsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId}
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId || quantity === "" || quantity <= 0}
                   data-testid="button-save-and-new-billing"
                   onClick={() => {
                     saveAndCreateNewRef.current = true;
@@ -420,7 +430,7 @@ export default function BillingElementsPage() {
                       customerId: selectedHorse.ownerId,
                       boxId: selectedHorse.boxId || null,
                       itemId: selectedItemId,
-                      quantity,
+                      quantity: numericQuantity,
                       price: finalSellingPrice,
                       transactionDate,
                       billingMonth: deriveBillingMonth(transactionDate),
@@ -432,7 +442,7 @@ export default function BillingElementsPage() {
                 </Button>
                 <Button
                   type="button"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId}
+                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId || quantity === "" || quantity <= 0}
                   data-testid="button-submit-billing"
                   onClick={() => {
                     saveAndCreateNewRef.current = false;
@@ -441,7 +451,7 @@ export default function BillingElementsPage() {
                       customerId: selectedHorse.ownerId,
                       boxId: selectedHorse.boxId || null,
                       itemId: selectedItemId,
-                      quantity,
+                      quantity: numericQuantity,
                       price: finalSellingPrice,
                       transactionDate,
                       billingMonth: deriveBillingMonth(transactionDate),

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
+import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -16,6 +17,10 @@ import { LogOut, FileText, Upload, Download, Trash2, Pencil, MoveRight, MoreVert
 import type { Customer, Item } from "@shared/schema";
 
 export default function CurrentAgreementsPage() {
+  const [filterHorse, setFilterHorse] = useState("");
+  const [filterCustomer, setFilterCustomer] = useState("");
+  const [filterBox, setFilterBox] = useState("");
+
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [checkoutAgreement, setCheckoutAgreement] = useState<any>(null);
   const [showDocumentsDialog, setShowDocumentsDialog] = useState(false);
@@ -193,10 +198,16 @@ export default function CurrentAgreementsPage() {
 
   const visibleAgreements = useMemo(() => {
     return agreements.filter((a: any) => {
-      if (!a.endDate) return true;
-      return a.endDate >= todayStr;
+      if (a.endDate && a.endDate < todayStr) return false;
+      if (filterHorse && !(a.horseName || "").toLowerCase().includes(filterHorse.toLowerCase())) return false;
+      if (filterCustomer && !(a.customerName || "").toLowerCase().includes(filterCustomer.toLowerCase())) return false;
+      if (filterBox) {
+        const search = filterBox.toLowerCase();
+        if (!(a.boxName || "").toLowerCase().includes(search) && !(a.stableName || "").toLowerCase().includes(search)) return false;
+      }
+      return true;
     });
-  }, [agreements, todayStr]);
+  }, [agreements, todayStr, filterHorse, filterCustomer, filterBox]);
 
   const editActiveCustomers = useMemo(() => {
     const active = customers.filter(c => c.status === "active");
@@ -271,6 +282,12 @@ export default function CurrentAgreementsPage() {
         title="Current Agreements"
         description="Active livery agreements"
       />
+
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
+        <SearchBar placeholder="Horse..." value={filterHorse} onChange={setFilterHorse} className="w-52" data-testid="filter-horse" />
+        <SearchBar placeholder="Customer..." value={filterCustomer} onChange={setFilterCustomer} className="w-52" data-testid="filter-customer" />
+        <SearchBar placeholder="Stable / Box..." value={filterBox} onChange={setFilterBox} className="w-52" data-testid="filter-box" />
+      </div>
 
       <DataTable
         columns={columns}
