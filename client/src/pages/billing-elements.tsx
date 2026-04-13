@@ -39,6 +39,8 @@ export default function BillingElementsPage() {
   const [changePriceItem, setChangePriceItem] = useState<Item | null>(null);
   const [newPrice, setNewPrice] = useState("");
 
+  const [sessionItems, setSessionItems] = useState<Array<{ itemName: string; quantity: number | ""; price: string; date: string }>>([]);
+
   const { toast } = useToast();
   const saveAndCreateNewRef = useRef(false);
 
@@ -56,9 +58,16 @@ export default function BillingElementsPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/billing-elements", data),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horses-with-owners"] });
+      const itemName = nonLiveryItems.find(i => i.id === variables.itemId)?.name || "Unknown";
+      setSessionItems(prev => [...prev, {
+        itemName,
+        quantity: variables.quantity,
+        price: variables.price,
+        date: variables.transactionDate,
+      }]);
       toast({ title: "Billing element added successfully" });
       if (saveAndCreateNewRef.current) {
         saveAndCreateNewRef.current = false;
@@ -201,6 +210,7 @@ export default function BillingElementsPage() {
   const openDialog = (horse: any) => {
     setSelectedHorse(horse);
     resetDialogState();
+    setSessionItems([]);
     setShowAddDialog(true);
   };
 
@@ -261,7 +271,7 @@ export default function BillingElementsPage() {
         </div>
       )}
 
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) setSessionItems([]); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Billing Element</DialogTitle>
@@ -280,6 +290,22 @@ export default function BillingElementsPage() {
                     <div>Location: <strong>{selectedHorse.stableName} / {selectedHorse.boxName}</strong></div>
                   )}
                 </div>
+
+                {sessionItems.length > 0 && (
+                  <div className="border rounded-md overflow-hidden" data-testid="session-items-list">
+                    <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                      Added in this session ({sessionItems.length})
+                    </div>
+                    <div className="divide-y max-h-32 overflow-y-auto">
+                      {sessionItems.map((si, idx) => (
+                        <div key={idx} className="flex justify-between items-center px-3 py-1.5 text-sm" data-testid={`session-item-${idx}`}>
+                          <span className="truncate mr-2">{si.itemName} x{si.quantity}</span>
+                          <span className="text-muted-foreground whitespace-nowrap">AED {parseFloat(si.price).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="relative">
                   <Label>Item</Label>
@@ -438,7 +464,7 @@ export default function BillingElementsPage() {
                     });
                   }}
                 >
-                  Save & Create New
+                  Add Additional
                 </Button>
                 <Button
                   type="button"
