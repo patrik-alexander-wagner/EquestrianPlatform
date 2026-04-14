@@ -170,7 +170,7 @@ export default function BillingElementsPage() {
   const selectedItem = nonLiveryItems.find(i => i.id === selectedItemId);
   const itemPrice = selectedItem?.price ? parseFloat(selectedItem.price) : 0;
   const itemUnitFactor = selectedItem?.unitFactor ? parseFloat(selectedItem.unitFactor) : 1;
-  const numericQuantity = quantity === "" ? 0 : quantity;
+  const numericQuantity = quantity === "" ? 0 : Number(quantity);
   const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * numericQuantity : 0;
 
   const handleItemChange = (val: string) => {

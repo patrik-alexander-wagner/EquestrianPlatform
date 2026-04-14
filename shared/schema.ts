@@ -141,7 +141,7 @@ export const billingElements = pgTable("billing_elements", {
   boxId: uuid("box_id").references(() => boxes.id),
   itemId: uuid("item_id").notNull().references(() => items.id),
   agreementId: uuid("agreement_id").references(() => liveryAgreements.id),
-  quantity: integer("quantity").notNull().default(1),
+  quantity: numeric("quantity").notNull().default("1"),
   base: numeric("base"),
   price: numeric("price").notNull(),
   transactionDate: text("transaction_date").notNull(),
