@@ -114,7 +114,6 @@ export default function HorsesPage() {
     { targetField: "dateOfBirth", label: "Date of Birth" },
     { targetField: "sex", label: "Sex" },
     { targetField: "color", label: "Color" },
-    { targetField: "size", label: "Size" },
     { targetField: "passportName", label: "Passport Name" },
     { targetField: "passportNumber", label: "Passport Number" },
   ];
@@ -127,7 +126,6 @@ export default function HorsesPage() {
       dateOfBirth: row.dateOfBirth || null,
       sex: row.sex || null,
       color: row.color || null,
-      size: row.size || null,
       passportName: row.passportName || null,
       passportNumber: row.passportNumber || null,
       status: "active",
@@ -205,7 +203,7 @@ export default function HorsesPage() {
                 dateOfBirth: fd.get("dateOfBirth") || null,
                 sex: fd.get("sex") || null,
                 color: fd.get("color") || null,
-                size: fd.get("size") || null,
+                passportNumber: fd.get("passportNumber") || null,
                 status: "active",
                 ownerId: selectedOwnerId,
               });
@@ -282,8 +280,8 @@ export default function HorsesPage() {
                 <Input name="color" data-testid="input-color" />
               </div>
               <div>
-                <Label>Size</Label>
-                <Input name="size" data-testid="input-size" />
+                <Label>Passport Number</Label>
+                <Input name="passportNumber" maxLength={40} data-testid="input-passport-number" />
               </div>
             </div>
             <DialogFooter className="mt-4">
@@ -313,7 +311,7 @@ export default function HorsesPage() {
                   dateOfBirth: fd.get("dateOfBirth") || null,
                   sex: fd.get("sex") || null,
                   color: fd.get("color") || null,
-                  size: fd.get("size") || null,
+                  passportNumber: fd.get("passportNumber") || null,
                   status: fd.get("status") || "active",
                   ownerId: editOwnerId || undefined,
                 });
@@ -390,8 +388,8 @@ export default function HorsesPage() {
                   <Input name="color" defaultValue={editingHorse.color || ""} data-testid="input-edit-color" />
                 </div>
                 <div>
-                  <Label>Size</Label>
-                  <Input name="size" defaultValue={editingHorse.size || ""} data-testid="input-edit-size" />
+                  <Label>Passport Number</Label>
+                  <Input name="passportNumber" maxLength={40} defaultValue={editingHorse.passportNumber || ""} data-testid="input-edit-passport-number" />
                 </div>
                 <div>
                   <Label>Status</Label>
