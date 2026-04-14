@@ -22,6 +22,13 @@ import {
   type HorseMovement, type InsertHorseMovement,
 } from "@shared/schema";
 
+function formatHorseName(horse: { horseName: string; passportName?: string | null }): string {
+  if (horse.passportName) {
+    return `${horse.horseName} (${horse.passportName})`;
+  }
+  return horse.horseName;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -203,6 +210,7 @@ export class DatabaseStorage implements IStorage {
       const owner = ownership ? allCustomers.find(c => c.id === ownership.customerId) : null;
       return {
         ...horse,
+        horseName: formatHorseName(horse),
         customer: customer ? customer.fullname : null,
         customerId: customer?.id || null,
         box: box?.name || null,
@@ -378,7 +386,7 @@ export class DatabaseStorage implements IStorage {
       const item = allItems.find(i => i.id === agreement.itemId);
       return {
         ...agreement,
-        horseName: horse?.horseName || null,
+        horseName: horse ? formatHorseName(horse) : null,
         horseId: horse?.id || null,
         customerName: customer ? customer.fullname : "Unknown",
         boxName: box?.name || "Unknown",
@@ -423,7 +431,7 @@ export class DatabaseStorage implements IStorage {
         stableName: stable?.name || "Unknown",
         isAvailable: !agreement,
         agreementId: agreement?.id || null,
-        horseName: horse?.horseName || null,
+        horseName: horse ? formatHorseName(horse) : null,
         customerName: customer?.fullname || null,
       };
     });
@@ -455,7 +463,7 @@ export class DatabaseStorage implements IStorage {
       const item = allItems.find(i => i.id === element.itemId);
       return {
         ...element,
-        horseName: horse?.horseName || null,
+        horseName: horse ? formatHorseName(horse) : null,
         customerName: customer ? customer.fullname : "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
@@ -502,7 +510,7 @@ export class DatabaseStorage implements IStorage {
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       return {
         horseId: horse?.id || null,
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse ? formatHorseName(horse) : "Unknown",
         customerId: customer?.id,
         customerName: customer ? customer.fullname : "Unknown",
         boxId: box?.id,
@@ -533,7 +541,7 @@ export class DatabaseStorage implements IStorage {
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       return {
         horseId: horse.id,
-        horseName: horse.horseName,
+        horseName: formatHorseName(horse),
         ownerId: owner?.id || null,
         ownerName: owner?.fullname || "—",
         boxId: box?.id || null,
@@ -575,7 +583,7 @@ export class DatabaseStorage implements IStorage {
       const item = allItems.find(i => i.id === el.itemId);
       return {
         description: item?.name || "Unknown",
-        horseName: horse?.horseName || "—",
+        horseName: horse ? formatHorseName(horse) : "—",
         billDate: el.transactionDate,
         quantity: el.quantity,
         unit: item?.unitFactor ? `${item.unitFactor}` : "Each",
@@ -777,7 +785,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         customerName: customer ? customer.fullname : "Unknown",
         boxName,
-        horseName: horse?.horseName || "-",
+        horseName: horse ? formatHorseName(horse) : "-",
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate || "",
         monthlyAmount,
@@ -878,7 +886,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         customerName: customer ? customer.fullname : "Unknown",
         boxName,
-        horseName: horse?.horseName || "-",
+        horseName: horse ? formatHorseName(horse) : "-",
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate || "",
         monthlyAmount,
@@ -912,7 +920,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         customerName: customer ? customer.fullname : "Unknown",
         boxName,
-        horseName: horse?.horseName || "-",
+        horseName: horse ? formatHorseName(horse) : "-",
         arrivalDate: agreement.startDate || "",
         departureDate: agreement.endDate,
         monthlyAmount,
@@ -948,7 +956,7 @@ export class DatabaseStorage implements IStorage {
       }
       const price = parseFloat(agreement.monthlyAmount || "0");
       grouped[agreement.customerId].horses.push({
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse ? formatHorseName(horse) : "Unknown",
         monthlyPrice: price,
       });
       grouped[agreement.customerId].horseCount++;
@@ -1068,7 +1076,7 @@ export class DatabaseStorage implements IStorage {
       const customer = agreement ? allCustomers.find(c => c.id === agreement.customerId) : null;
       return {
         ...m,
-        horseName: horse?.horseName || "Unknown",
+        horseName: horse ? formatHorseName(horse) : "Unknown",
         customerName: customer?.fullname || "Unknown",
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
@@ -1181,7 +1189,7 @@ export class DatabaseStorage implements IStorage {
         hasAgreement: !!agreement,
         movementId: activeMovement?.id || null,
         horseId: horse?.id || null,
-        horseName: horse?.horseName || null,
+        horseName: horse ? formatHorseName(horse) : null,
         customerId: customer?.id || null,
         customerName: customer?.fullname || null,
         agreementId: agreement?.id || null,
