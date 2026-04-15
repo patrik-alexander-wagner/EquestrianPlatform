@@ -378,7 +378,7 @@ export default function ToInvoicePage() {
     }).map(c => {
       if (!createdByFilter) return c;
       const filteredLineItems = c.lineItems.filter(li => {
-        if (li.type === "livery") return true;
+        if (li.type === "livery") return false;
         return li.createdByUsername === createdByFilter;
       });
       const total = filteredLineItems.reduce((sum, li) => sum + li.amount, 0);
