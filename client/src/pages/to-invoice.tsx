@@ -565,7 +565,7 @@ export default function ToInvoicePage() {
                       data-testid={`button-vet-approval-${c.customerId}`}
                     >
                       <ShieldCheck className="w-4 h-4 mr-1" />
-                      Vet Approved
+                      {vetApproved ? "Vet Approved" : "Vet Validation Pending"}
                     </Button>
                     {vetApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-vet-approver-${c.customerId}`}>
@@ -584,7 +584,7 @@ export default function ToInvoicePage() {
                       data-testid={`button-stores-approval-${c.customerId}`}
                     >
                       <Package className="w-4 h-4 mr-1" />
-                      Store Approved
+                      {storesApproved ? "Store Approved" : "Store Validation Pending"}
                     </Button>
                     {storesApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-stores-approver-${c.customerId}`}>
