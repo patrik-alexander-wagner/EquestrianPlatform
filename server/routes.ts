@@ -705,7 +705,9 @@ export async function registerRoutes(
     try {
       const billingMonth = req.query.billingMonth as string;
       const customerId = req.query.customerId as string | undefined;
-      if (!billingMonth) return res.status(400).json({ message: "billingMonth is required" });
+      if (!billingMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+        return res.status(400).json({ message: "billingMonth is required in YYYY-MM format" });
+      }
       const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
       res.json(approvals);
     } catch (e: any) {
@@ -719,6 +721,9 @@ export async function registerRoutes(
       const { customerId, billingMonth, step, approved } = req.body;
       if (!customerId || !billingMonth || !step) {
         return res.status(400).json({ message: "customerId, billingMonth, and step are required" });
+      }
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+        return res.status(400).json({ message: "billingMonth must be in YYYY-MM format" });
       }
       if (!["VET", "STORES"].includes(step)) {
         return res.status(400).json({ message: "step must be VET or STORES" });

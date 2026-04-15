@@ -200,7 +200,7 @@ export default function InvoicesPage() {
     <div className="p-6">
       <PageHeader
         title="Invoices"
-        description="View and manage invoices through the validation workflow"
+        description="View and manage generated invoices"
       />
 
       {userRole === "ADMIN" && (
