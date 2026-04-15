@@ -741,14 +741,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cannot modify approvals — an invoice already exists for this customer and billing month" });
       }
 
+      const isApproved = approved === true;
       const result = await storage.upsertMonthlyBillingApproval({
         customerId,
         billingMonth,
         step,
         userId: user.id,
-        approved: approved !== false,
+        approved: isApproved,
       });
-      auditLog(req, approved !== false ? "approve_billing_month" : "revoke_billing_month_approval", "monthly_billing_approval", result.id, `${step} ${approved !== false ? "approved" : "revoked"} for ${billingMonth}`);
+      auditLog(req, isApproved ? "approve_billing_month" : "revoke_billing_month_approval", "monthly_billing_approval", result.id, `${step} ${isApproved ? "approved" : "revoked"} for ${billingMonth}`);
       res.json(result);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
