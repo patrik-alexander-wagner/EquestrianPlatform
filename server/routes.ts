@@ -784,8 +784,11 @@ export async function registerRoutes(
     try {
       const { customerId, invoiceDate, billingMonth, totalAmount, billingElementIds, liveryItems } = req.body;
       if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
+      if (!billingMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+        throw { status: 400, message: "billingMonth is required and must be in YYYY-MM format" };
+      }
 
-      if (billingMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
+      {
         const unassigned = await storage.checkAgreementsHorseAssignment(billingMonth, customerId);
         if (unassigned.length > 0) {
           return res.status(400).json({
@@ -795,13 +798,11 @@ export async function registerRoutes(
         }
       }
 
-      if (billingMonth) {
-        const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
-        const vetApproved = approvals.some((a: any) => a.step === "VET" && a.approved);
-        const storesApproved = approvals.some((a: any) => a.step === "STORES" && a.approved);
-        if (!vetApproved || !storesApproved) {
-          return res.status(400).json({ message: "Invoice generation requires both Vet and Stores sign-off for this billing month" });
-        }
+      const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
+      const vetApproved = approvals.some((a: any) => a.step === "VET" && a.approved);
+      const storesApproved = approvals.some((a: any) => a.step === "STORES" && a.approved);
+      if (!vetApproved || !storesApproved) {
+        return res.status(400).json({ message: "Invoice generation requires both Vet and Stores sign-off for this billing month" });
       }
 
       const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "APPROVED" });
