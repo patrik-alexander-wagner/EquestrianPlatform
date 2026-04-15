@@ -369,7 +369,7 @@ export default function HorsesPage() {
                 </div>
                 <div>
                   <Label>Horse Name</Label>
-                  <Input name="horseName" defaultValue={editingHorse.horseName} required data-testid="input-edit-horse-name" />
+                  <Input name="horseName" defaultValue={editingHorse.rawHorseName || editingHorse.horseName} required data-testid="input-edit-horse-name" />
                 </div>
                 <div>
                   <Label>Breed</Label>

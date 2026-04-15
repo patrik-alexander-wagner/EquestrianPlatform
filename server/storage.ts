@@ -215,6 +215,7 @@ export class DatabaseStorage implements IStorage {
       const owner = ownership ? allCustomers.find(c => c.id === ownership.customerId) : null;
       return {
         ...horse,
+        rawHorseName: horse.horseName,
         horseName: formatHorseName(horse),
         customer: customer ? customer.fullname : null,
         customerId: customer?.id || null,
