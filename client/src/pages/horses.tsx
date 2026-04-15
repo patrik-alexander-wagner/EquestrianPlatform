@@ -140,10 +140,12 @@ export default function HorsesPage() {
         description="Manage horses used in livery agreements"
         actions={isAdmin ? (
           <>
-            <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-horses">
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Button>
+            {userRole === "ADMIN" && (
+              <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-horses">
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+            )}
             <Button onClick={() => setShowCreateDialog(true)} data-testid="button-new-horse">
               <Plus className="w-4 h-4 mr-2" />
               New Horse
