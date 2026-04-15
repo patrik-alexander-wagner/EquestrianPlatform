@@ -30,6 +30,13 @@ function formatHorseName(horse: { horseName: string; passportName?: string | nul
   return horse.horseName;
 }
 
+const EXCLUDED_REPORT_CUSTOMERS = ["ADEC"];
+
+function isExcludedReportCustomer(name: string | undefined | null): boolean {
+  if (!name) return false;
+  return EXCLUDED_REPORT_CUSTOMERS.some(exc => name.toUpperCase() === exc.toUpperCase());
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -728,7 +735,11 @@ export class DatabaseStorage implements IStorage {
     const monthEndStr = monthEnd.toISOString().split("T")[0];
     const monthStartStr = `${month}-01`;
 
+    const allCustomers = await db.select().from(customers);
+    const excludedCustomerIds = new Set(allCustomers.filter(c => isExcludedReportCustomer(c.fullname)).map(c => c.id));
+
     const activeAtEnd = allAgreements.filter(a => {
+      if (excludedCustomerIds.has(a.customerId)) return false;
       if (a.status !== "active") return false;
       if (!a.startDate || a.startDate > monthEndStr) return false;
       if (a.endDate && a.endDate < monthStartStr) return false;
@@ -744,7 +755,10 @@ export class DatabaseStorage implements IStorage {
     );
     const uniqueCustomerIds = new Set(activeAtEnd.map(a => a.customerId));
 
-    const monthBillingElements = allBillingElements.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
+    const monthBillingElements = allBillingElements.filter(el => {
+      if (excludedCustomerIds.has(el.customerId)) return false;
+      return el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+    });
 
     let liveryRevenue = 0;
     let adhocRevenue = 0;
@@ -784,6 +798,7 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = [];
     for (const agreement of current) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
+      if (isExcludedReportCustomer(customer?.fullname)) continue;
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
@@ -823,6 +838,7 @@ export class DatabaseStorage implements IStorage {
       let key: string;
       if (groupBy === "customer") {
         const customer = allCustomers.find(c => c.id === el.customerId);
+        if (isExcludedReportCustomer(customer?.fullname)) continue;
         key = customer ? customer.fullname : "Unknown";
       } else {
         key = el.billingMonth || el.transactionDate?.substring(0, 7) || "Unknown";
@@ -885,6 +901,7 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = [];
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
+      if (isExcludedReportCustomer(customer?.fullname)) continue;
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
@@ -918,6 +935,7 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = [];
     for (const agreement of filtered) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
+      if (isExcludedReportCustomer(customer?.fullname)) continue;
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const boxName = stable && box ? `${stable.name} - ${box.name}` : box?.name || "-";
@@ -951,6 +969,7 @@ export class DatabaseStorage implements IStorage {
     const grouped: Record<string, any> = {};
     for (const agreement of current) {
       const customer = allCustomers.find(c => c.id === agreement.customerId);
+      if (isExcludedReportCustomer(customer?.fullname)) continue;
       const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
       const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
       const customerName = customer ? customer.fullname : "Unknown";
