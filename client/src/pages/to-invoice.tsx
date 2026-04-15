@@ -16,6 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { FileText, Trash2, Pencil, AlertTriangle } from "lucide-react";
@@ -37,6 +44,7 @@ type LineItem = {
   boxId?: string;
   itemId?: string;
   billingMonth?: string;
+  createdByUsername?: string | null;
 };
 
 function getProRateFraction(agreement: any, billingMonth: string): { fraction: number; label: string } {
@@ -84,6 +92,7 @@ function isMonthInAgreementRange(agreement: any, billingMonth: string): boolean 
 
 export default function ToInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState("");
+  const [createdByFilter, setCreatedByFilter] = useState("");
   const [billingMonth, setBillingMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -354,6 +363,7 @@ export default function ToInvoicePage() {
           unitPrice: qty > 0 ? totalPrice / qty : totalPrice,
           amount: totalPrice,
           billingElementId: b.id,
+          createdByUsername: b.createdByUsername || null,
         });
       }
 
@@ -365,12 +375,28 @@ export default function ToInvoicePage() {
         lineItems,
         total,
       };
+    }).map(c => {
+      if (!createdByFilter) return c;
+      const filteredLineItems = c.lineItems.filter(li => {
+        if (li.type === "livery") return true;
+        return li.createdByUsername === createdByFilter;
+      });
+      const total = filteredLineItems.reduce((sum, li) => sum + li.amount, 0);
+      return { ...c, lineItems: filteredLineItems, total };
     }).filter(c => {
       if (c.lineItems.length === 0) return false;
       if (!customerSearch) return true;
       return c.customerName.toLowerCase().includes(customerSearch.toLowerCase());
     });
-  }, [customers, activeAgreements, billingElements, customerSearch, billingMonth, billingMonthLabel, billedMonths]);
+  }, [customers, activeAgreements, billingElements, customerSearch, createdByFilter, billingMonth, billingMonthLabel, billedMonths]);
+
+  const distinctCreators = useMemo(() => {
+    const creators = new Set<string>();
+    billingElements.forEach((b: any) => {
+      if (b.createdByUsername) creators.add(b.createdByUsername);
+    });
+    return Array.from(creators).sort();
+  }, [billingElements]);
 
   const toggleItem = useCallback((key: string) => {
     setSelectedItems(prev => {
@@ -412,6 +438,20 @@ export default function ToInvoicePage() {
           onChange={setCustomerSearch}
           className="max-w-sm"
         />
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">Created By</Label>
+          <Select value={createdByFilter} onValueChange={(v) => setCreatedByFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-56" data-testid="select-created-by">
+              <SelectValue placeholder="All users" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All users</SelectItem>
+              {distinctCreators.map((username) => (
+                <SelectItem key={username} value={username}>{username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div>
           <Label className="text-xs text-muted-foreground mb-1 block">Billing Month</Label>
           <Input

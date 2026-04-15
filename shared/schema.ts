@@ -148,6 +148,7 @@ export const billingElements = pgTable("billing_elements", {
   billingMonth: text("billing_month"),
   billed: boolean("billed").notNull().default(false),
   invoiceId: uuid("invoice_id"),
+  userId: uuid("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

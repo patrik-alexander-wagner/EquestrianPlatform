@@ -7,6 +7,25 @@ export async function runMigration() {
   try {
     await client.query("SELECT pg_advisory_lock(20260410)");
 
+    const userIdColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'billing_elements' AND column_name = 'user_id'
+    `);
+    if (userIdColCheck.rows.length === 0) {
+      console.log("Migration: Adding user_id column to billing_elements...");
+      await client.query(`ALTER TABLE billing_elements ADD COLUMN user_id uuid REFERENCES users(id)`);
+      await client.query(`
+        UPDATE billing_elements be
+        SET user_id = al.user_id::uuid
+        FROM audit_logs al
+        WHERE al.entity_type = 'billing_element'
+        AND al.action = 'create_billing_element'
+        AND al.entity_id = be.id::text
+        AND be.user_id IS NULL
+      `);
+      console.log("Migration: user_id column added and backfilled from audit logs");
+    }
+
     const colCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'livery_agreements' AND column_name = 'horse_id'

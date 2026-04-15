@@ -53,7 +53,7 @@ shared/
 
 ## Database Tables
 - users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes, items
-- livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId), invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
+- livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId, userId tracks who created it), invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
 - horse_ownership (horseId → customerId: tracks which customer owns which horse)
 - horse_movements (agreementId, horseId, stableboxId, checkIn, checkOut: tracks horse occupancy per agreement; active movement = no checkOut)
 - invoice_validations (audit trail: invoice_id, step, action, user_id, comment, created_at)

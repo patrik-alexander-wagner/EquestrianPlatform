@@ -454,6 +454,7 @@ export class DatabaseStorage implements IStorage {
     const allBoxes = await db.select().from(boxes);
     const allStables = await db.select().from(stables);
     const allItems = await db.select().from(items);
+    const allUsers = await db.select().from(users);
 
     return query.map(element => {
       const horse = element.horseId ? allHorses.find(h => h.id === element.horseId) : null;
@@ -461,6 +462,7 @@ export class DatabaseStorage implements IStorage {
       const box = allBoxes.find(b => b.id === element.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
       const item = allItems.find(i => i.id === element.itemId);
+      const creator = element.userId ? allUsers.find(u => u.id === element.userId) : null;
       return {
         ...element,
         horseName: horse ? formatHorseName(horse) : null,
@@ -468,6 +470,7 @@ export class DatabaseStorage implements IStorage {
         boxName: box?.name || "Unknown",
         stableName: stable?.name || "Unknown",
         itemName: item?.name || "Unknown",
+        createdByUsername: creator?.username || null,
       };
     });
   }

@@ -622,6 +622,10 @@ export async function registerRoutes(
       if (req.body.transactionDate && !req.body.billingMonth) {
         req.body.billingMonth = req.body.transactionDate.substring(0, 7);
       }
+      const user = req.user as any;
+      if (user?.id) {
+        req.body.userId = user.id;
+      }
       const data = validateBody(insertBillingElementSchema, req.body);
       const element = await storage.createBillingElement(data);
       auditLog(req, "create_billing_element", "billing_element", element.id);
@@ -744,6 +748,7 @@ export async function registerRoutes(
 
       const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "DRAFT" });
 
+      const invoiceUser = req.user as any;
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
         for (const item of liveryItems) {
           const validatedItem = validateBody(insertBillingElementSchema, {
@@ -758,6 +763,7 @@ export async function registerRoutes(
             billingMonth: item.billingMonth,
             billed: true,
             invoiceId: invoice.id,
+            userId: invoiceUser?.id || null,
           });
           await storage.createBillingElement(validatedItem);
         }
