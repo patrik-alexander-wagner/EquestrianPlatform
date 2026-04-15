@@ -543,7 +543,7 @@ export default function ToInvoicePage() {
                     </div>
                     <Button
                       onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
-                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
+                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved || locked}
                       data-testid={`button-generate-invoice-${c.customerId}`}
                     >
                       <FileText className="w-4 h-4 mr-2" />

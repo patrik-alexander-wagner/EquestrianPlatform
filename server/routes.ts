@@ -798,6 +798,12 @@ export async function registerRoutes(
         }
       }
 
+      const existingInvoices = await storage.getInvoices();
+      const duplicateInvoice = existingInvoices.find((inv: any) => inv.customerId === customerId && inv.billingMonth === billingMonth);
+      if (duplicateInvoice) {
+        return res.status(400).json({ message: "An invoice already exists for this customer and billing month" });
+      }
+
       const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
       const vetApproved = approvals.some((a: any) => a.step === "VET" && a.approved);
       const storesApproved = approvals.some((a: any) => a.step === "STORES" && a.approved);
