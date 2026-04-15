@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 export default function HorsesPage() {
   const userRole = useUserRole();
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = userRole === "ADMIN" || userRole === "LIVERY_ADMIN";
   const [search, setSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableBoxSearch, setStableBoxSearch] = useState("");
