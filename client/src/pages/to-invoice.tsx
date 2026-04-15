@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { FileText, Trash2, Pencil, AlertTriangle } from "lucide-react";
+import { FileText, Trash2, Pencil, AlertTriangle, ShieldCheck, Package } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { Customer, Item } from "@shared/schema";
 
 type LineItem = {
@@ -134,6 +135,32 @@ export default function ToInvoicePage() {
 
   const { data: allHorses = [] } = useQuery<any[]>({
     queryKey: ["/api/horses"],
+  });
+
+  const { data: me } = useQuery<{ id: string; username: string; role: string }>({
+    queryKey: ["/api/me"],
+  });
+  const userRole = me?.role || "LIVERY_ADMIN";
+
+  const { data: approvals = [] } = useQuery<any[]>({
+    queryKey: ["/api/monthly-billing-approvals", billingMonth],
+    queryFn: async () => {
+      const res = await fetch(`/api/monthly-billing-approvals?billingMonth=${billingMonth}`);
+      return res.json();
+    },
+    enabled: !!billingMonth,
+  });
+
+  const approvalMutation = useMutation({
+    mutationFn: (data: { customerId: string; billingMonth: string; step: string; approved: boolean }) =>
+      apiRequest("POST", "/api/monthly-billing-approvals", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/monthly-billing-approvals"] });
+      toast({ title: "Approval updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to update approval", variant: "destructive" });
+    },
   });
 
   const agreementIds = useMemo(() => agreements.map((a: any) => a.id), [agreements]);
@@ -398,6 +425,20 @@ export default function ToInvoicePage() {
     return Array.from(creators).sort();
   }, [billingElements]);
 
+  const getCustomerApprovals = useCallback((customerId: string) => {
+    const customerApprovals = approvals.filter((a: any) => a.customerId === customerId);
+    const vetApproval = customerApprovals.find((a: any) => a.step === "VET" && a.approved);
+    const storesApproval = customerApprovals.find((a: any) => a.step === "STORES" && a.approved);
+    return { vetApproved: !!vetApproval, storesApproved: !!storesApproval, vetApproval, storesApproval };
+  }, [approvals]);
+
+  const canToggleApproval = useCallback((step: string) => {
+    if (userRole === "ADMIN") return true;
+    if (step === "VET" && userRole === "VETERINARY") return true;
+    if (step === "STORES" && userRole === "STORES") return true;
+    return false;
+  }, [userRole]);
+
   const toggleItem = useCallback((key: string) => {
     setSelectedItems(prev => {
       const next = new Set(prev);
@@ -475,26 +516,81 @@ export default function ToInvoicePage() {
             const someSelected = c.lineItems.some(li => selectedItems.has(li.key));
             const selectedTotal = getSelectedTotal(c.lineItems);
 
+            const { vetApproved, storesApproved, vetApproval, storesApproval } = getCustomerApprovals(c.customerId);
+            const bothApproved = vetApproved && storesApproved;
+
             return (
               <Card key={c.customerId}>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-                  <div className="flex items-center gap-3">
-                    <Checkbox
-                      checked={allSelected}
-                      className={!allSelected && someSelected ? "opacity-70" : ""}
-                      onCheckedChange={() => toggleAll(c.lineItems)}
-                      data-testid={`checkbox-select-all-${c.customerId}`}
-                    />
-                    <CardTitle className="text-lg">{c.customerName}</CardTitle>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-row items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={allSelected}
+                        className={!allSelected && someSelected ? "opacity-70" : ""}
+                        onCheckedChange={() => toggleAll(c.lineItems)}
+                        data-testid={`checkbox-select-all-${c.customerId}`}
+                      />
+                      <CardTitle className="text-lg">{c.customerName}</CardTitle>
+                    </div>
+                    <Button
+                      onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
+                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
+                      data-testid={`button-generate-invoice-${c.customerId}`}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      {preCheckLoading ? "Checking..." : "Generate Invoice"}
+                    </Button>
                   </div>
-                  <Button
-                    onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
-                    disabled={generateMutation.isPending || preCheckLoading || !someSelected}
-                    data-testid={`button-generate-invoice-${c.customerId}`}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    {preCheckLoading ? "Checking..." : "Generate Invoice"}
-                  </Button>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant={vetApproved ? "default" : "outline"}
+                      className={vetApproved
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950"
+                      }
+                      disabled={approvalMutation.isPending || !canToggleApproval("VET")}
+                      onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "VET", approved: !vetApproved })}
+                      data-testid={`button-vet-approval-${c.customerId}`}
+                    >
+                      <ShieldCheck className="w-4 h-4 mr-1" />
+                      {vetApproved ? "Vet Approved" : "Vet Sign-off"}
+                    </Button>
+                    {vetApproval && (
+                      <span className="text-xs text-muted-foreground" data-testid={`text-vet-approver-${c.customerId}`}>
+                        by {vetApproval.username}
+                      </span>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={storesApproved ? "default" : "outline"}
+                      className={storesApproved
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                      }
+                      disabled={approvalMutation.isPending || !canToggleApproval("STORES")}
+                      onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "STORES", approved: !storesApproved })}
+                      data-testid={`button-stores-approval-${c.customerId}`}
+                    >
+                      <Package className="w-4 h-4 mr-1" />
+                      {storesApproved ? "Stores Approved" : "Stores Sign-off"}
+                    </Button>
+                    {storesApproval && (
+                      <span className="text-xs text-muted-foreground" data-testid={`text-stores-approver-${c.customerId}`}>
+                        by {storesApproval.username}
+                      </span>
+                    )}
+                    {!bothApproved && (
+                      <Badge variant="outline" className="text-orange-600 border-orange-300 dark:text-orange-400 dark:border-orange-700 ml-auto">
+                        Awaiting sign-off
+                      </Badge>
+                    )}
+                    {bothApproved && (
+                      <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400 dark:border-green-700 ml-auto">
+                        Ready to invoice
+                      </Badge>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <Table>

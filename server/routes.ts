@@ -701,6 +701,46 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/monthly-billing-approvals", async (req, res) => {
+    try {
+      const billingMonth = req.query.billingMonth as string;
+      const customerId = req.query.customerId as string | undefined;
+      if (!billingMonth) return res.status(400).json({ message: "billingMonth is required" });
+      const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
+      res.json(approvals);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/monthly-billing-approvals", async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { customerId, billingMonth, step, approved } = req.body;
+      if (!customerId || !billingMonth || !step) {
+        return res.status(400).json({ message: "customerId, billingMonth, and step are required" });
+      }
+      if (!["VET", "STORES"].includes(step)) {
+        return res.status(400).json({ message: "step must be VET or STORES" });
+      }
+      const roleMap: Record<string, string> = { VET: "VETERINARY", STORES: "STORES" };
+      if (user.role !== "ADMIN" && user.role !== roleMap[step]) {
+        return res.status(403).json({ message: `Only ${roleMap[step]} or ADMIN can manage ${step} approvals` });
+      }
+      const result = await storage.upsertMonthlyBillingApproval({
+        customerId,
+        billingMonth,
+        step,
+        userId: user.id,
+        approved: approved !== false,
+      });
+      auditLog(req, approved !== false ? "approve_billing_month" : "revoke_billing_month_approval", "monthly_billing_approval", result.id, `${step} ${approved !== false ? "approved" : "revoked"} for ${billingMonth}`);
+      res.json(result);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Invoices
   app.get("/api/invoices", async (_req, res) => {
     try {
@@ -746,7 +786,16 @@ export async function registerRoutes(
         }
       }
 
-      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "DRAFT" });
+      if (billingMonth) {
+        const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
+        const vetApproved = approvals.some((a: any) => a.step === "VET" && a.approved);
+        const storesApproved = approvals.some((a: any) => a.step === "STORES" && a.approved);
+        if (!vetApproved || !storesApproved) {
+          return res.status(400).json({ message: "Invoice generation requires both Vet and Stores sign-off for this billing month" });
+        }
+      }
+
+      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "APPROVED" });
 
       const invoiceUser = req.user as any;
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
@@ -807,140 +856,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices/:id/send-for-validation", requireRoles("LIVERY_ADMIN"), async (req, res) => {
-    try {
-      const invoice = await storage.getInvoice(req.params.id);
-      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-      const user = req.user as any;
-      if (invoice.status !== "DRAFT" && user.role !== "ADMIN") {
-        return res.status(400).json({ message: "Invoice must be in DRAFT status to send for validation" });
-      }
-      await storage.updateInvoice(req.params.id, { status: "VET_VALIDATION" });
-      await storage.createInvoiceValidation({
-        invoiceId: req.params.id,
-        step: user.role === "ADMIN" ? "ADMIN_OVERRIDE" : "VET",
-        action: "APPROVED",
-        userId: user.id,
-        comment: "Sent for validation",
-      });
-      auditLog(req, "send_for_validation", "invoice", req.params.id, "Invoice sent for VET validation");
-      res.json({ success: true, status: "VET_VALIDATION" });
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
+  app.post("/api/invoices/:id/send-for-validation", async (_req, res) => {
+    res.status(410).json({ message: "This endpoint is deprecated. Approvals now happen on the To Invoice page before invoice generation." });
   });
 
-  app.post("/api/invoices/:id/validate", async (req, res) => {
-    try {
-      const invoice = await storage.getInvoice(req.params.id);
-      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-      const user = req.user as any;
-      const { action, comment } = req.body;
-      if (!action || !["APPROVED", "REJECTED"].includes(action)) {
-        return res.status(400).json({ message: "Action must be APPROVED or REJECTED" });
-      }
-
-      const statusRoleMap: Record<string, { role: string; step: string; nextStatus: string }> = {
-        "VET_VALIDATION": { role: "VETERINARY", step: "VET", nextStatus: "STORES_VALIDATION" },
-        "STORES_VALIDATION": { role: "STORES", step: "STORES", nextStatus: "FINANCE_VALIDATION" },
-        "FINANCE_VALIDATION": { role: "FINANCE", step: "FINANCE", nextStatus: "APPROVED" },
-      };
-
-      const currentStep = statusRoleMap[invoice.status];
-      if (!currentStep && user.role !== "ADMIN") {
-        return res.status(400).json({ message: "Invoice is not in a validation state" });
-      }
-      if (currentStep && user.role !== "ADMIN" && user.role !== currentStep.role) {
-        return res.status(403).json({ message: `Only ${currentStep.role} or ADMIN can validate at this step` });
-      }
-
-      const step = user.role === "ADMIN" ? "ADMIN_OVERRIDE" : currentStep?.step || "ADMIN_OVERRIDE";
-
-      if (action === "REJECTED") {
-        await storage.updateInvoice(req.params.id, { status: "DRAFT" });
-        await storage.createInvoiceValidation({
-          invoiceId: req.params.id, step, action: "REJECTED", userId: user.id, comment: comment || null,
-        });
-        auditLog(req, "reject_invoice", "invoice", req.params.id, `Rejected at ${step}: ${comment || ""}`);
-        return res.json({ success: true, status: "DRAFT" });
-      }
-
-      let newStatus: InvoiceStatus;
-      if (user.role === "ADMIN") {
-        if (invoice.status === "FINANCE_VALIDATION" || !currentStep) {
-          newStatus = "APPROVED";
-        } else {
-          newStatus = currentStep.nextStatus as InvoiceStatus;
-        }
-      } else {
-        newStatus = currentStep!.nextStatus as InvoiceStatus;
-      }
-
-      await storage.updateInvoice(req.params.id, { status: newStatus });
-      await storage.createInvoiceValidation({
-        invoiceId: req.params.id, step, action: "APPROVED", userId: user.id, comment: comment || null,
-      });
-      auditLog(req, "approve_invoice", "invoice", req.params.id, `Approved at ${step}, new status: ${newStatus}`);
-
-      if (newStatus === "APPROVED" && currentStep?.step === "FINANCE") {
-        try {
-          const details = await storage.getInvoiceDetailsForSO(req.params.id);
-          if (details?.customer?.netsuiteId) {
-            const poNumber = invoice.poNumber || await storage.getNextPoNumber();
-            const billingMonth = invoice.billingMonth || "";
-            let memoMonth = "";
-            if (billingMonth) {
-              const [y, m] = billingMonth.split("-").map(Number);
-              const date = new Date(y, m - 1);
-              memoMonth = date.toLocaleString("en-US", { month: "short", year: "numeric" });
-            }
-            const customerName = details.customer
-              ? details.customer.fullname : "Unknown";
-            const today = new Date();
-            const tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
-            const soJson = {
-              customerId: details.customer?.netsuiteId || "",
-              po: poNumber,
-              department: "32",
-              memo: `Monthly Livery Invoice - ${customerName} (${memoMonth})`,
-              tranDate,
-              items: details.items,
-            };
-            const jsonString = JSON.stringify(soJson, null, 2);
-            await storage.updateInvoice(req.params.id, {
-              soGenerated: true, poNumber, netsuiteJson: jsonString,
-            });
-
-            const webhookUrl = await storage.getSetting("n8n_webhook_url");
-            if (webhookUrl) {
-              const webhookResponse = await fetch(webhookUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: jsonString,
-              });
-              if (webhookResponse.ok) {
-                let netsuiteId: string | null = null;
-                try {
-                  const responseData = await webhookResponse.json();
-                  if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
-                  else if (responseData?.id) netsuiteId = String(responseData.id);
-                } catch {}
-                const erpUpdate: any = { sentToNetsuite: true, status: "PUSHED_TO_ERP" };
-                if (netsuiteId) erpUpdate.netsuiteId = netsuiteId;
-                await storage.updateInvoice(req.params.id, erpUpdate);
-                return res.json({ success: true, status: "PUSHED_TO_ERP", erpPushed: true });
-              }
-            }
-          }
-        } catch (erpErr) {
-          console.error("ERP push after finance approval failed:", erpErr);
-        }
-      }
-
-      res.json({ success: true, status: newStatus });
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
+  app.post("/api/invoices/:id/validate", async (_req, res) => {
+    res.status(410).json({ message: "This endpoint is deprecated. Approvals now happen on the To Invoice page before invoice generation." });
   });
 
   app.get("/api/invoices/:id/validations", async (req, res) => {

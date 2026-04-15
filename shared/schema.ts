@@ -231,6 +231,21 @@ export const insertHorseOwnershipSchema = createInsertSchema(horseOwnership).omi
 export type InsertHorseOwnership = z.infer<typeof insertHorseOwnershipSchema>;
 export type HorseOwnership = typeof horseOwnership.$inferSelect;
 
+export const monthlyBillingApprovals = pgTable("monthly_billing_approvals", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  billingMonth: text("billing_month").notNull(),
+  step: text("step").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  approved: boolean("approved").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMonthlyBillingApprovalSchema = createInsertSchema(monthlyBillingApprovals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertMonthlyBillingApproval = z.infer<typeof insertMonthlyBillingApprovalSchema>;
+export type MonthlyBillingApproval = typeof monthlyBillingApprovals.$inferSelect;
+
 export const horseMovements = pgTable("horse_movements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   agreementId: uuid("agreement_id").references(() => liveryAgreements.id),

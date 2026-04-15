@@ -53,10 +53,11 @@ shared/
 
 ## Database Tables
 - users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes, items
-- livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId, userId tracks who created it), invoices (status: DRAFT | VET_VALIDATION | STORES_VALIDATION | FINANCE_VALIDATION | APPROVED | PUSHED_TO_ERP | REJECTED)
+- livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId, userId tracks who created it), invoices (status: APPROVED | PUSHED_TO_ERP; created directly as APPROVED after pre-generation sign-off)
+- monthly_billing_approvals (customerId, billingMonth, step[VET|STORES], userId, approved: pre-generation sign-off; unique constraint on customer+month+step)
 - horse_ownership (horseId → customerId: tracks which customer owns which horse)
 - horse_movements (agreementId, horseId, stableboxId, checkIn, checkOut: tracks horse occupancy per agreement; active movement = no checkOut)
-- invoice_validations (audit trail: invoice_id, step, action, user_id, comment, created_at)
+- invoice_validations (legacy audit trail: invoice_id, step, action, user_id, comment, created_at)
 - app_settings, agreement_documents, audit_logs
 
 ## Authentication & Authorization
@@ -67,11 +68,11 @@ shared/
 - Default credentials: admin / admin123 (set via SEED_ADMIN_PASSWORD env var)
 - GET /api/users never returns password field (returns id, username, role)
 - RBAC with 5 roles: ADMIN, LIVERY_ADMIN, VETERINARY, STORES, FINANCE
-  - ADMIN: full access, can perform any action at any step
-  - LIVERY_ADMIN: create/edit invoices, send for validation
-  - VETERINARY: approve/reject at VET_VALIDATION step
-  - STORES: approve/reject at STORES_VALIDATION step
-  - FINANCE: approve/reject at FINANCE_VALIDATION step, ERP operations (generate SO, send to NetSuite)
+  - ADMIN: full access, can perform any action including all sign-offs
+  - LIVERY_ADMIN: create/edit billing elements, generate invoices (after sign-off)
+  - VETERINARY: toggle VET sign-off on To Invoice page (pre-generation approval)
+  - STORES: toggle STORES sign-off on To Invoice page (pre-generation approval)
+  - FINANCE: ERP operations (generate SO, send to NetSuite)
 - Admin-only routes: GET/POST/PATCH /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
 - ERP routes (generate-so, send-to-netsuite) restricted to FINANCE + ADMIN via requireRoles middleware
 - Frontend: Administration sidebar section hidden for non-ADMIN users; admin routes redirect non-admins to dashboard
@@ -101,15 +102,14 @@ shared/
 - Billing month tracking to prevent duplicate livery billing
 - PDF invoice generation (jspdf + jspdf-autotable) matching Abu Dhabi Equestrian Club template
 - Invoice deletion (temporary feature, ADMIN only) with billing element unbilling
-- Invoice validation workflow: DRAFT → VET_VALIDATION → STORES_VALIDATION → FINANCE_VALIDATION → APPROVED → PUSHED_TO_ERP
-  - LIVERY_ADMIN creates invoice (DRAFT), sends for validation
-  - VETERINARY approves/rejects at VET step
-  - STORES approves/rejects at STORES step
-  - FINANCE approves/rejects at FINANCE step; on approval triggers automatic ERP push
-  - ADMIN can approve/reject at any step
-  - Rejection at any step returns invoice to DRAFT
-  - All validation actions recorded in invoice_validations table with user, step, action, comment, timestamp
-  - Validation history viewable per invoice via clock icon button
+- Invoice validation workflow (V2 — Pre-Generation Approvals):
+  - On the To Invoice page, each customer card has Vet Sign-off and Stores Sign-off toggle buttons
+  - VETERINARY role can toggle VET approval; STORES role can toggle STORES approval; ADMIN can toggle both
+  - Generate Invoice button is disabled until both VET and STORES are approved for that customer+month
+  - Invoices are created directly with APPROVED status (no DRAFT or validation steps)
+  - Approvals stored in monthly_billing_approvals table (unique per customer+month+step)
+  - Old validation endpoints (send-for-validation, validate) return 410 Gone
+  - Legacy validation history still viewable per invoice via clock icon button
 - NetSuite SO generation: generates JSON body per invoice with PO number (starting 2026003000, auto-incrementing), saves to invoice record, allows JSON download (FINANCE/ADMIN only)
 - NetSuite ID fields on customers, horses, stables, boxes, items — mappable during import
 - Reports page with 3 sections:

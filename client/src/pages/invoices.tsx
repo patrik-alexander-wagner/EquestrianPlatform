@@ -9,8 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
 import {
   Trash2, Eye, Download, FileJson, Send, CheckCircle,
-  ShieldCheck, XCircle, ArrowRight, Clock, MessageSquare,
-  MoreVertical, RotateCcw,
+  ShieldCheck, XCircle, Clock, MessageSquare, MoreVertical, RotateCcw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,7 +21,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
 function formatBillingMonth(billingMonth: string | null | undefined): string {
@@ -51,25 +49,12 @@ function InvoiceStatusBadge({ status }: { status: string }) {
   );
 }
 
-function canSendForValidation(userRole: string, invoiceStatus: string) {
-  return (userRole === "ADMIN" || userRole === "LIVERY_ADMIN") && invoiceStatus === "DRAFT";
-}
-
-function canApproveReject(userRole: string, invoiceStatus: string) {
-  if (userRole === "ADMIN" && ["VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION"].includes(invoiceStatus)) return true;
-  if (userRole === "VETERINARY" && invoiceStatus === "VET_VALIDATION") return true;
-  if (userRole === "STORES" && invoiceStatus === "STORES_VALIDATION") return true;
-  if (userRole === "FINANCE" && invoiceStatus === "FINANCE_VALIDATION") return true;
-  return false;
-}
 
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
   const [generatingSo, setGeneratingSo] = useState<string | null>(null);
   const [sendingToNetsuite, setSendingToNetsuite] = useState<string | null>(null);
-  const [validationDialog, setValidationDialog] = useState<{ invoice: any; action: "APPROVED" | "REJECTED" } | null>(null);
-  const [validationComment, setValidationComment] = useState("");
   const [historyDialog, setHistoryDialog] = useState<any | null>(null);
 
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
@@ -101,33 +86,6 @@ export default function InvoicesPage() {
     },
     onError: () => {
       toast({ title: "Failed to delete invoice", variant: "destructive" });
-    },
-  });
-
-  const sendForValidationMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/invoices/${id}/send-for-validation`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      toast({ title: "Invoice sent for validation" });
-    },
-    onError: (error: any) => {
-      toast({ title: error.message || "Failed to send for validation", variant: "destructive" });
-    },
-  });
-
-  const validateMutation = useMutation({
-    mutationFn: ({ id, action, comment }: { id: string; action: string; comment: string }) =>
-      apiRequest("POST", `/api/invoices/${id}/validate`, { action, comment }),
-    onSuccess: async (res) => {
-      const data = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      setValidationDialog(null);
-      setValidationComment("");
-      const label = data.erpPushed ? "Approved and pushed to ERP" : data.status === "DRAFT" ? "Invoice rejected" : "Invoice approved";
-      toast({ title: label });
-    },
-    onError: (error: any) => {
-      toast({ title: error.message || "Validation failed", variant: "destructive" });
     },
   });
 
@@ -258,31 +216,6 @@ export default function InvoicesPage() {
         emptyMessage="No invoices yet"
         actions={(item) => (
           <div className="flex items-center gap-1">
-            {canApproveReject(userRole, item.status) && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-green-600 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
-                  onClick={() => setValidationDialog({ invoice: item, action: "APPROVED" })}
-                  data-testid={`button-approve-${item.id}`}
-                >
-                  <ShieldCheck className="w-4 h-4 mr-1" />
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950"
-                  onClick={() => setValidationDialog({ invoice: item, action: "REJECTED" })}
-                  data-testid={`button-reject-${item.id}`}
-                >
-                  <XCircle className="w-4 h-4 mr-1" />
-                  Reject
-                </Button>
-              </>
-            )}
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -333,17 +266,6 @@ export default function InvoicesPage() {
                 )}
 
                 <DropdownMenuSeparator />
-
-                {canSendForValidation(userRole, item.status) && (
-                  <DropdownMenuItem
-                    onClick={() => sendForValidationMutation.mutate(item.id)}
-                    disabled={sendForValidationMutation.isPending}
-                    data-testid={`button-send-validation-${item.id}`}
-                  >
-                    <ArrowRight className="w-4 h-4 mr-2" />
-                    Send for Validation
-                  </DropdownMenuItem>
-                )}
 
                 {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (userRole === "ADMIN" || userRole === "FINANCE") && (
                   <>
@@ -411,53 +333,6 @@ export default function InvoicesPage() {
           </div>
         )}
       />
-
-      <Dialog open={!!validationDialog} onOpenChange={() => { setValidationDialog(null); setValidationComment(""); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {validationDialog?.action === "APPROVED" ? "Approve Invoice" : "Reject Invoice"}
-            </DialogTitle>
-            <DialogDescription>
-              Invoice: {validationDialog?.invoice?.poNumber || validationDialog?.invoice?.id?.substring(0, 8)}
-              {" - "}
-              {validationDialog?.invoice?.customerName}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Comment (optional)</Label>
-              <Textarea
-                value={validationComment}
-                onChange={(e) => setValidationComment(e.target.value)}
-                placeholder="Add a comment..."
-                data-testid="input-validation-comment"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setValidationDialog(null); setValidationComment(""); }}>
-              Cancel
-            </Button>
-            <Button
-              variant={validationDialog?.action === "APPROVED" ? "default" : "destructive"}
-              onClick={() => {
-                if (validationDialog) {
-                  validateMutation.mutate({
-                    id: validationDialog.invoice.id,
-                    action: validationDialog.action,
-                    comment: validationComment,
-                  });
-                }
-              }}
-              disabled={validateMutation.isPending}
-              data-testid="button-confirm-validation"
-            >
-              {validateMutation.isPending ? "Processing..." : validationDialog?.action === "APPROVED" ? "Approve" : "Reject"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!historyDialog} onOpenChange={() => setHistoryDialog(null)}>
         <DialogContent className="max-w-lg">

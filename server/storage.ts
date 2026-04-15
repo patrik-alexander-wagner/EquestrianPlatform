@@ -4,7 +4,7 @@ import { hashPassword } from "./auth";
 import {
   users, customers, horses, stables, boxes, items, itemPrices,
   liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs, invoiceValidations,
-  horseOwnership, horseMovements,
+  horseOwnership, horseMovements, monthlyBillingApprovals,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -20,6 +20,7 @@ import {
   type InvoiceValidation, type InsertInvoiceValidation,
   type HorseOwnership, type InsertHorseOwnership,
   type HorseMovement, type InsertHorseMovement,
+  type MonthlyBillingApproval, type InsertMonthlyBillingApproval,
 } from "@shared/schema";
 
 function formatHorseName(horse: { horseName: string; passportName?: string | null }): string {
@@ -133,6 +134,9 @@ export interface IStorage {
   moveHorseToBox(movementId: string, newBoxId: string): Promise<any>;
   swapHorseInBox(movementId: string, newHorseId: string): Promise<any>;
   checkAgreementsHorseAssignment(billingMonth: string, customerId?: string): Promise<any[]>;
+
+  getMonthlyBillingApprovals(billingMonth: string, customerId?: string): Promise<any[]>;
+  upsertMonthlyBillingApproval(data: { customerId: string; billingMonth: string; step: string; userId: string; approved: boolean }): Promise<MonthlyBillingApproval>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1246,6 +1250,31 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return unassigned;
+  }
+
+  async getMonthlyBillingApprovals(billingMonth: string, customerId?: string): Promise<any[]> {
+    const conditions = [eq(monthlyBillingApprovals.billingMonth, billingMonth)];
+    if (customerId) {
+      conditions.push(eq(monthlyBillingApprovals.customerId, customerId));
+    }
+    const approvals = await db.select().from(monthlyBillingApprovals).where(and(...conditions));
+    const allUsers = await db.select().from(users);
+    return approvals.map(a => {
+      const user = allUsers.find(u => u.id === a.userId);
+      return { ...a, username: user?.username || "Unknown" };
+    });
+  }
+
+  async upsertMonthlyBillingApproval(data: { customerId: string; billingMonth: string; step: string; userId: string; approved: boolean }): Promise<MonthlyBillingApproval> {
+    const result = await db.execute(sql`
+      INSERT INTO monthly_billing_approvals (customer_id, billing_month, step, user_id, approved)
+      VALUES (${data.customerId}, ${data.billingMonth}, ${data.step}, ${data.userId}, ${data.approved})
+      ON CONFLICT (customer_id, billing_month, step)
+      DO UPDATE SET approved = ${data.approved}, user_id = ${data.userId}, updated_at = NOW()
+      RETURNING *
+    `);
+    const rows = (result as any).rows || result;
+    return Array.isArray(rows) ? rows[0] : rows;
   }
 }
 

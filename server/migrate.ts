@@ -7,6 +7,31 @@ export async function runMigration() {
   try {
     await client.query("SELECT pg_advisory_lock(20260410)");
 
+    const approvalTableCheck = await client.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_name = 'monthly_billing_approvals'
+    `);
+    if (approvalTableCheck.rows.length === 0) {
+      console.log("Migration: Creating monthly_billing_approvals table...");
+      await client.query(`
+        CREATE TABLE monthly_billing_approvals (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          customer_id UUID NOT NULL REFERENCES customers(id),
+          billing_month TEXT NOT NULL,
+          step TEXT NOT NULL,
+          user_id UUID NOT NULL REFERENCES users(id),
+          approved BOOLEAN NOT NULL DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_billing_approvals_unique
+        ON monthly_billing_approvals(customer_id, billing_month, step)
+      `);
+      console.log("Migration: monthly_billing_approvals table created");
+    }
+
     const userIdColCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'billing_elements' AND column_name = 'user_id'
