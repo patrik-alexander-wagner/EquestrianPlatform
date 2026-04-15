@@ -727,6 +727,15 @@ export async function registerRoutes(
       if (user.role !== "ADMIN" && user.role !== roleMap[step]) {
         return res.status(403).json({ message: `Only ${roleMap[step]} or ADMIN can manage ${step} approvals` });
       }
+
+      const existingInvoices = await storage.getInvoices();
+      const hasInvoice = existingInvoices.some((inv: any) =>
+        inv.customerId === customerId && inv.billingMonth === billingMonth
+      );
+      if (hasInvoice) {
+        return res.status(400).json({ message: "Cannot modify approvals — an invoice already exists for this customer and billing month" });
+      }
+
       const result = await storage.upsertMonthlyBillingApproval({
         customerId,
         billingMonth,

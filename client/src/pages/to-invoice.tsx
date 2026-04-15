@@ -151,6 +151,10 @@ export default function ToInvoicePage() {
     enabled: !!billingMonth,
   });
 
+  const { data: allInvoices = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoices"],
+  });
+
   const approvalMutation = useMutation({
     mutationFn: (data: { customerId: string; billingMonth: string; step: string; approved: boolean }) =>
       apiRequest("POST", "/api/monthly-billing-approvals", data),
@@ -425,6 +429,10 @@ export default function ToInvoicePage() {
     return Array.from(creators).sort();
   }, [billingElements]);
 
+  const isCustomerMonthLocked = useCallback((customerId: string) => {
+    return allInvoices.some((inv: any) => inv.customerId === customerId && inv.billingMonth === billingMonth);
+  }, [allInvoices, billingMonth]);
+
   const getCustomerApprovals = useCallback((customerId: string) => {
     const customerApprovals = approvals.filter((a: any) => a.customerId === customerId);
     const vetApproval = customerApprovals.find((a: any) => a.step === "VET" && a.approved);
@@ -518,6 +526,7 @@ export default function ToInvoicePage() {
 
             const { vetApproved, storesApproved, vetApproval, storesApproval } = getCustomerApprovals(c.customerId);
             const bothApproved = vetApproved && storesApproved;
+            const locked = isCustomerMonthLocked(c.customerId);
 
             return (
               <Card key={c.customerId}>
@@ -549,7 +558,7 @@ export default function ToInvoicePage() {
                         ? "bg-green-600 hover:bg-green-700 text-white"
                         : "border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950"
                       }
-                      disabled={approvalMutation.isPending || !canToggleApproval("VET")}
+                      disabled={approvalMutation.isPending || !canToggleApproval("VET") || locked}
                       onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "VET", approved: !vetApproved })}
                       data-testid={`button-vet-approval-${c.customerId}`}
                     >
@@ -568,7 +577,7 @@ export default function ToInvoicePage() {
                         ? "bg-blue-600 hover:bg-blue-700 text-white"
                         : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
                       }
-                      disabled={approvalMutation.isPending || !canToggleApproval("STORES")}
+                      disabled={approvalMutation.isPending || !canToggleApproval("STORES") || locked}
                       onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "STORES", approved: !storesApproved })}
                       data-testid={`button-stores-approval-${c.customerId}`}
                     >
@@ -580,12 +589,17 @@ export default function ToInvoicePage() {
                         by {storesApproval.username}
                       </span>
                     )}
-                    {!bothApproved && (
+                    {locked && (
+                      <Badge variant="outline" className="text-gray-500 border-gray-300 dark:text-gray-400 dark:border-gray-700 ml-auto">
+                        Invoice exists — locked
+                      </Badge>
+                    )}
+                    {!locked && !bothApproved && (
                       <Badge variant="outline" className="text-orange-600 border-orange-300 dark:text-orange-400 dark:border-orange-700 ml-auto">
                         Awaiting sign-off
                       </Badge>
                     )}
-                    {bothApproved && (
+                    {!locked && bothApproved && (
                       <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400 dark:border-green-700 ml-auto">
                         Ready to invoice
                       </Badge>
