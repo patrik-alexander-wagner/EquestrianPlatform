@@ -217,6 +217,8 @@ export default function ToInvoicePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billed-months"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/monthly-billing-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/livery-agreements"] });
       setSelectedItems(new Set());
       toast({ title: "Invoice generated successfully" });
     },
@@ -563,7 +565,7 @@ export default function ToInvoicePage() {
                       data-testid={`button-vet-approval-${c.customerId}`}
                     >
                       <ShieldCheck className="w-4 h-4 mr-1" />
-                      {vetApproved ? "Vet Approved" : "Vet Sign-off"}
+                      Vet Approved
                     </Button>
                     {vetApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-vet-approver-${c.customerId}`}>
@@ -582,7 +584,7 @@ export default function ToInvoicePage() {
                       data-testid={`button-stores-approval-${c.customerId}`}
                     >
                       <Package className="w-4 h-4 mr-1" />
-                      {storesApproved ? "Stores Approved" : "Stores Sign-off"}
+                      Store Approved
                     </Button>
                     {storesApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-stores-approver-${c.customerId}`}>
