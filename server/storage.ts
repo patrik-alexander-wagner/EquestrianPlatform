@@ -137,6 +137,7 @@ export interface IStorage {
 
   getMonthlyBillingApprovals(billingMonth: string, customerId?: string): Promise<any[]>;
   upsertMonthlyBillingApproval(data: { customerId: string; billingMonth: string; step: string; userId: string; approved: boolean }): Promise<MonthlyBillingApproval>;
+  hasInvoiceForCustomerMonth(customerId: string, billingMonth: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1275,6 +1276,13 @@ export class DatabaseStorage implements IStorage {
     `);
     const rows = (result as any).rows || result;
     return Array.isArray(rows) ? rows[0] : rows;
+  }
+
+  async hasInvoiceForCustomerMonth(customerId: string, billingMonth: string): Promise<boolean> {
+    const result = await db.select({ id: invoices.id }).from(invoices).where(
+      and(eq(invoices.customerId, customerId), eq(invoices.billingMonth, billingMonth))
+    );
+    return result.length > 0;
   }
 }
 

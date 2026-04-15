@@ -32,6 +32,11 @@ export async function runMigration() {
       console.log("Migration: monthly_billing_approvals table created");
     }
 
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_customer_billing_month
+      ON invoices(customer_id, billing_month)
+    `);
+
     const userIdColCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'billing_elements' AND column_name = 'user_id'

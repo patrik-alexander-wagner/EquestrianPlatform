@@ -733,10 +733,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: `Only ${roleMap[step]} or ADMIN can manage ${step} approvals` });
       }
 
-      const existingInvoices = await storage.getInvoices();
-      const hasInvoice = existingInvoices.some((inv: any) =>
-        inv.customerId === customerId && inv.billingMonth === billingMonth
-      );
+      const hasInvoice = await storage.hasInvoiceForCustomerMonth(customerId, billingMonth);
       if (hasInvoice) {
         return res.status(400).json({ message: "Cannot modify approvals — an invoice already exists for this customer and billing month" });
       }
@@ -804,9 +801,8 @@ export async function registerRoutes(
         }
       }
 
-      const existingInvoices = await storage.getInvoices();
-      const duplicateInvoice = existingInvoices.find((inv: any) => inv.customerId === customerId && inv.billingMonth === billingMonth);
-      if (duplicateInvoice) {
+      const hasDuplicate = await storage.hasInvoiceForCustomerMonth(customerId, billingMonth);
+      if (hasDuplicate) {
         return res.status(400).json({ message: "An invoice already exists for this customer and billing month" });
       }
 
