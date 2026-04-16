@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, DollarSign } from "lucide-react";
+import { Plus, DollarSign, Trash2 } from "lucide-react";
 import { AlertTriangle } from "lucide-react";
 import type { Item } from "@shared/schema";
 
@@ -20,6 +20,18 @@ function getTodayString() {
 
 function deriveBillingMonth(dateStr: string) {
   return dateStr ? dateStr.substring(0, 7) : "";
+}
+
+interface PendingItem {
+  horseId: string;
+  customerId: string;
+  boxId: string | null;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  price: string;
+  transactionDate: string;
+  billingMonth: string;
 }
 
 export default function BillingElementsPage() {
@@ -39,10 +51,9 @@ export default function BillingElementsPage() {
   const [changePriceItem, setChangePriceItem] = useState<Item | null>(null);
   const [newPrice, setNewPrice] = useState("");
 
-  const [sessionItems, setSessionItems] = useState<Array<{ itemName: string; quantity: number | ""; price: string; date: string }>>([]);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
   const { toast } = useToast();
-  const saveAndCreateNewRef = useRef(false);
 
   const { data: horsesWithOwners = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/horses-with-owners"],
@@ -56,30 +67,31 @@ export default function BillingElementsPage() {
     queryKey: ["/api/billing-elements"],
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/billing-elements", data),
-    onSuccess: (_res, variables) => {
+  const saveBatchMutation = useMutation({
+    mutationFn: async (items: PendingItem[]) => {
+      for (const item of items) {
+        await apiRequest("POST", "/api/billing-elements", {
+          horseId: item.horseId,
+          customerId: item.customerId,
+          boxId: item.boxId,
+          itemId: item.itemId,
+          quantity: String(item.quantity),
+          price: item.price,
+          transactionDate: item.transactionDate,
+          billingMonth: item.billingMonth,
+          billed: false,
+        });
+      }
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/billing-elements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/horses-with-owners"] });
-      const itemName = nonLiveryItems.find(i => i.id === variables.itemId)?.name || "Unknown";
-      setSessionItems(prev => [...prev, {
-        itemName,
-        quantity: variables.quantity,
-        price: variables.price,
-        date: variables.transactionDate,
-      }]);
-      toast({ title: "Billing element added successfully" });
-      if (saveAndCreateNewRef.current) {
-        saveAndCreateNewRef.current = false;
-        setSelectedItemId("");
-        setItemSearch("");
-        setItemDropdownOpen(false);
-        setQuantity(1);
-        setFinalSellingPrice("");
-        setTransactionDate(getTodayString());
-      } else {
-        setShowAddDialog(false);
-      }
+      toast({ title: `${pendingItems.length} billing element${pendingItems.length > 1 ? "s" : ""} saved successfully` });
+      setPendingItems([]);
+      setShowAddDialog(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to save billing elements", description: error.message, variant: "destructive" });
     },
   });
 
@@ -198,20 +210,69 @@ export default function BillingElementsPage() {
     }
   };
 
-  const resetDialogState = () => {
+  const resetFormFields = () => {
     setSelectedItemId("");
     setItemSearch("");
     setItemDropdownOpen(false);
     setQuantity(1);
     setFinalSellingPrice("");
-    setTransactionDate(getTodayString());
   };
 
   const openDialog = (horse: any) => {
     setSelectedHorse(horse);
-    resetDialogState();
-    setSessionItems([]);
+    resetFormFields();
+    setTransactionDate(getTodayString());
+    setPendingItems([]);
     setShowAddDialog(true);
+  };
+
+  const addToPending = () => {
+    if (!selectedHorse || !selectedItemId || !finalSellingPrice || quantity === "" || Number(quantity) <= 0) return;
+    const item = nonLiveryItems.find(i => i.id === selectedItemId);
+    setPendingItems(prev => [...prev, {
+      horseId: selectedHorse.horseId,
+      customerId: selectedHorse.ownerId,
+      boxId: selectedHorse.boxId || null,
+      itemId: selectedItemId,
+      itemName: item?.name || "Unknown",
+      quantity: numericQuantity,
+      price: finalSellingPrice,
+      transactionDate,
+      billingMonth: deriveBillingMonth(transactionDate),
+    }]);
+    resetFormFields();
+  };
+
+  const removePendingItem = (index: number) => {
+    setPendingItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    let allItems = [...pendingItems];
+    if (selectedItemId && finalSellingPrice && quantity !== "" && Number(quantity) > 0) {
+      const item = nonLiveryItems.find(i => i.id === selectedItemId);
+      allItems.push({
+        horseId: selectedHorse.horseId,
+        customerId: selectedHorse.ownerId,
+        boxId: selectedHorse.boxId || null,
+        itemId: selectedItemId,
+        itemName: item?.name || "Unknown",
+        quantity: numericQuantity,
+        price: finalSellingPrice,
+        transactionDate,
+        billingMonth: deriveBillingMonth(transactionDate),
+      });
+    }
+    if (allItems.length === 0) return;
+    saveBatchMutation.mutate(allItems);
+  };
+
+  const canAddMore = selectedItemId && finalSellingPrice && selectedHorse?.ownerId && quantity !== "" && Number(quantity) > 0;
+  const hasAnythingToSave = pendingItems.length > 0 || (selectedItemId && finalSellingPrice && quantity !== "" && Number(quantity) > 0);
+
+  const handleCancel = () => {
+    setPendingItems([]);
+    setShowAddDialog(false);
   };
 
   return (
@@ -271,11 +332,11 @@ export default function BillingElementsPage() {
         </div>
       )}
 
-      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) setSessionItems([]); }}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) handleCancel(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Billing Element</DialogTitle>
-            <DialogDescription>Add a billable item for the selected horse</DialogDescription>
+            <DialogDescription>Add billable items for the selected horse. Nothing is saved until you click Save.</DialogDescription>
           </DialogHeader>
           {selectedHorse && (
             <form
@@ -291,16 +352,28 @@ export default function BillingElementsPage() {
                   )}
                 </div>
 
-                {sessionItems.length > 0 && (
+                {pendingItems.length > 0 && (
                   <div className="border rounded-md overflow-hidden" data-testid="session-items-list">
                     <div className="bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                      Added in this session ({sessionItems.length})
+                      Pending items ({pendingItems.length}) — not yet saved
                     </div>
                     <div className="divide-y max-h-32 overflow-y-auto">
-                      {sessionItems.map((si, idx) => (
+                      {pendingItems.map((pi, idx) => (
                         <div key={idx} className="flex justify-between items-center px-3 py-1.5 text-sm" data-testid={`session-item-${idx}`}>
-                          <span className="truncate mr-2">{si.itemName} x{si.quantity}</span>
-                          <span className="text-muted-foreground whitespace-nowrap">AED {parseFloat(si.price).toFixed(2)}</span>
+                          <span className="truncate mr-2">{pi.itemName} x{pi.quantity}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground whitespace-nowrap">AED {parseFloat(pi.price).toFixed(2)}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-destructive hover:text-destructive"
+                              onClick={() => removePendingItem(idx)}
+                              data-testid={`button-remove-pending-${idx}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -447,45 +520,27 @@ export default function BillingElementsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId || quantity === "" || quantity <= 0}
+                  onClick={handleCancel}
+                  data-testid="button-cancel-billing"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!canAddMore}
                   data-testid="button-save-and-new-billing"
-                  onClick={() => {
-                    saveAndCreateNewRef.current = true;
-                    createMutation.mutate({
-                      horseId: selectedHorse.horseId,
-                      customerId: selectedHorse.ownerId,
-                      boxId: selectedHorse.boxId || null,
-                      itemId: selectedItemId,
-                      quantity: String(numericQuantity),
-                      price: finalSellingPrice,
-                      transactionDate,
-                      billingMonth: deriveBillingMonth(transactionDate),
-                      billed: false,
-                    });
-                  }}
+                  onClick={addToPending}
                 >
                   Add Additional
                 </Button>
                 <Button
                   type="button"
-                  disabled={createMutation.isPending || !selectedItemId || !finalSellingPrice || !selectedHorse.ownerId || quantity === "" || quantity <= 0}
+                  disabled={saveBatchMutation.isPending || !hasAnythingToSave || !selectedHorse.ownerId}
                   data-testid="button-submit-billing"
-                  onClick={() => {
-                    saveAndCreateNewRef.current = false;
-                    createMutation.mutate({
-                      horseId: selectedHorse.horseId,
-                      customerId: selectedHorse.ownerId,
-                      boxId: selectedHorse.boxId || null,
-                      itemId: selectedItemId,
-                      quantity: String(numericQuantity),
-                      price: finalSellingPrice,
-                      transactionDate,
-                      billingMonth: deriveBillingMonth(transactionDate),
-                      billed: false,
-                    });
-                  }}
+                  onClick={handleSave}
                 >
-                  Save
+                  {saveBatchMutation.isPending ? "Saving..." : "Save"}
                 </Button>
               </DialogFooter>
             </form>
