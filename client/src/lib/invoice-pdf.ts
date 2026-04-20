@@ -93,16 +93,16 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   let totalAmountNum = parseFloat(invoice.totalAmount);
   if (!Number.isFinite(totalAmountNum)) totalAmountNum = 0;
 
-  doc.setFillColor(...RED);
+  doc.setFillColor(...GREY_BAND);
   doc.rect(pageWidth - margin - 70, 36, 70, 16, "F");
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(60, 60, 60);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.text("Total Amount", pageWidth - margin - 67, 42);
+  doc.setTextColor(0, 0, 0);
   doc.setFontSize(15);
   doc.setFont("helvetica", "bold");
   doc.text(`AED ${totalAmountNum.toFixed(2)}`, pageWidth - margin - 67, 49);
-  doc.setTextColor(0, 0, 0);
 
   let y = 60;
   const halfW = (pageWidth - margin * 2 - 6) / 2;
@@ -156,58 +156,48 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   const vatAmount = subtotal * (VAT_PERCENT / 100);
   const grandTotal = subtotal + vatAmount;
 
-  if (safeItems.length === 0) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...RED);
-    doc.text("⚠ This invoice has no line items.", margin, y + 10);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text("This invoice was created without any billing data linked to it.", margin, y + 16);
-    doc.text("Please delete this invoice and re-create it from the To Invoice tab.", margin, y + 21);
-  } else {
-    const tableBody = safeItems.map((li, idx) => {
-      const lineVat = li.amount * (VAT_PERCENT / 100);
-      return [
-        (idx + 1).toString(),
-        li.description,
-        li.horseName,
-        li.billDate,
-        li.quantity.toString(),
-        li.amount.toFixed(2),
-        lineVat.toFixed(2),
-        (li.amount + lineVat).toFixed(2),
-      ];
-    });
+  const tableBody = safeItems.length === 0
+    ? [["", "No items linked to this invoice", "", "", "", "", "", ""]]
+    : safeItems.map((li, idx) => {
+        const lineVat = li.amount * (VAT_PERCENT / 100);
+        return [
+          (idx + 1).toString(),
+          li.description,
+          li.horseName,
+          li.billDate,
+          li.quantity.toString(),
+          li.amount.toFixed(2),
+          lineVat.toFixed(2),
+          (li.amount + lineVat).toFixed(2),
+        ];
+      });
 
-    autoTable(doc, {
-      startY: y,
-      head: [["#", "Ln. Description", "Horse", "Bill Date", "Qty", "Amount", "Vat Amount", "Net Amount"]],
-      body: tableBody,
-      theme: "grid",
-      headStyles: {
-        fillColor: GREY_BAND,
-        textColor: [40, 40, 40],
-        fontSize: 8,
-        fontStyle: "bold",
-        lineColor: [180, 180, 180],
-      },
-      bodyStyles: { fontSize: 8, lineColor: [220, 220, 220] },
-      alternateRowStyles: { fillColor: [248, 248, 248] },
-      columnStyles: {
-        0: { cellWidth: 8, halign: "center" },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 22 },
-        4: { cellWidth: 12, halign: "right" },
-        5: { cellWidth: 22, halign: "right" },
-        6: { cellWidth: 22, halign: "right" },
-        7: { cellWidth: 24, halign: "right" },
-      },
-      margin: { left: margin, right: margin },
-    });
-  }
+  autoTable(doc, {
+    startY: y,
+    head: [["#", "Ln. Description", "Horse", "Bill Date", "Qty", "Amount", "Vat Amount", "Net Amount"]],
+    body: tableBody,
+    theme: "grid",
+    headStyles: {
+      fillColor: GREY_BAND,
+      textColor: [40, 40, 40],
+      fontSize: 8,
+      fontStyle: "bold",
+      lineColor: [180, 180, 180],
+    },
+    bodyStyles: { fontSize: 8, lineColor: [220, 220, 220] },
+    alternateRowStyles: { fillColor: [248, 248, 248] },
+    columnStyles: {
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 30 },
+      3: { cellWidth: 22 },
+      4: { cellWidth: 12, halign: "right" },
+      5: { cellWidth: 22, halign: "right" },
+      6: { cellWidth: 22, halign: "right" },
+      7: { cellWidth: 24, halign: "right" },
+    },
+    margin: { left: margin, right: margin },
+  });
 
   const finalY = (doc as any).lastAutoTable?.finalY || y + 30;
   let totalsY = finalY + 12;
@@ -235,9 +225,9 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text(`AED ${vatAmount.toFixed(2)}`, valueX, totalsY, { align: "right" });
 
   totalsY += 9;
-  doc.setFillColor(...RED);
+  doc.setFillColor(...GREY_BAND);
   doc.rect(labelX - 4, totalsY - 5, rightCol - labelX + 6, 8, "F");
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(40, 40, 40);
   doc.setFont("helvetica", "bold");
   doc.text("Total Amount", labelX, totalsY);
   doc.text(`AED ${grandTotal.toFixed(2)}`, valueX, totalsY, { align: "right" });
