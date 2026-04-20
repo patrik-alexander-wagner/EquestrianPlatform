@@ -738,6 +738,7 @@ export class DatabaseStorage implements IStorage {
         itemId: item?.netsuiteId || "",
         horseId: el.horseId,
         horse: horse ? String(horse.netsuiteId || "") : "",
+        horseName: horse?.horseName || "",
         quantity: el.quantity,
         rate: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
         description: item?.name || "Unknown",

@@ -926,11 +926,22 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Customer does not have a NetSuite ID. Please set it before generating SO." });
       }
 
-      const missingItems: string[] = [];
+      const missingItemIds = new Set<string>();
+      const missingHorseIds = new Set<string>();
+      const missingItemMessages: string[] = [];
+      const missingHorseMessages: string[] = [];
       for (const item of details.items) {
-        if (!item.itemId) missingItems.push(`Item "${item.description}" is missing NetSuite ID`);
-        if (item.horseId && !item.horse) missingItems.push(`Horse for item "${item.description}" is missing NetSuite ID`);
+        if (!item.itemId && !missingItemIds.has(item.description)) {
+          missingItemIds.add(item.description);
+          missingItemMessages.push(`Item "${item.description}" is missing NetSuite ID`);
+        }
+        if (item.horseId && !item.horse && !missingHorseIds.has(item.horseId)) {
+          missingHorseIds.add(item.horseId);
+          const horseLabel = item.horseName || item.horseId;
+          missingHorseMessages.push(`Horse "${horseLabel}" is missing NetSuite ID`);
+        }
       }
+      const missingItems = [...missingItemMessages, ...missingHorseMessages];
       if (missingItems.length > 0) {
         return res.status(400).json({ message: `Missing NetSuite IDs:\n${missingItems.join("\n")}` });
       }
