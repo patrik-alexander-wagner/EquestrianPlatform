@@ -106,7 +106,14 @@ export default function InvoicesPage() {
     setLoadingPdf(invoiceId);
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/details`);
-      if (!res.ok) throw new Error("Failed to load invoice details");
+      if (!res.ok) {
+        let msg = "Failed to load invoice details";
+        try {
+          const body = await res.json();
+          if (body?.message) msg = body.message;
+        } catch {}
+        throw new Error(msg);
+      }
       const details = await res.json();
       if (action === "view") {
         await viewInvoicePDF(details);
@@ -180,7 +187,7 @@ export default function InvoicesPage() {
               className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-0 text-xs"
               data-testid={`badge-no-items-${item.id}`}
             >
-              No items
+              No line items — regenerate
             </Badge>
           )}
         </div>
