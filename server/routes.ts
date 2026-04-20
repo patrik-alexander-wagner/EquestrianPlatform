@@ -825,7 +825,7 @@ export async function registerRoutes(
               boxId: item.boxId,
               itemId: item.itemId,
               agreementId: item.agreementId,
-              quantity: 1,
+              quantity: "1",
               price: item.price,
               transactionDate: invoiceDate,
               billingMonth: item.billingMonth,
