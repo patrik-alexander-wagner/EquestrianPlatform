@@ -134,8 +134,21 @@ export default function InvoicesPage() {
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       toast({ title: `NetSuite SO generated (PO: ${data.poNumber})` });
-    } catch {
-      toast({ title: "Failed to generate SO", variant: "destructive" });
+    } catch (e: any) {
+      let msg = "Failed to generate SO";
+      const raw = e?.message || "";
+      const jsonStart = raw.indexOf("{");
+      if (jsonStart !== -1) {
+        try {
+          const parsed = JSON.parse(raw.slice(jsonStart));
+          if (parsed?.message) msg = parsed.message;
+        } catch {
+          if (raw) msg = raw;
+        }
+      } else if (raw) {
+        msg = raw;
+      }
+      toast({ title: msg, variant: "destructive" });
     } finally {
       setGeneratingSo(null);
     }
