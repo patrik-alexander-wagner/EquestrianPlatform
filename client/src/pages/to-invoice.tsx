@@ -222,6 +222,26 @@ export default function ToInvoicePage() {
       setSelectedItems(new Set());
       toast({ title: "Invoice generated successfully" });
     },
+    onError: (error: any) => {
+      let message = "Failed to generate invoice";
+      const raw = error?.message || "";
+      const jsonStart = raw.indexOf("{");
+      if (jsonStart !== -1) {
+        try {
+          const parsed = JSON.parse(raw.slice(jsonStart));
+          if (parsed?.message) message = parsed.message;
+        } catch {
+          if (raw) message = raw;
+        }
+      } else if (raw) {
+        message = raw;
+      }
+      toast({
+        title: "Invoice not created",
+        description: message,
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteBillingMutation = useMutation({
