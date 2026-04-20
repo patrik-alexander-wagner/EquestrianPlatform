@@ -94,6 +94,8 @@ export interface IStorage {
   getInvoice(id: string): Promise<Invoice | undefined>;
   getInvoiceDetails(id: string): Promise<any>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  createInvoiceWithLineItems(invoice: InsertInvoice, liveryItems: InsertBillingElement[], adhocBillingElementIds: string[]): Promise<Invoice>;
+  getInvoiceLineItemCount(invoiceId: string): Promise<number>;
   updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined>;
   unbillByInvoiceId(invoiceId: string): Promise<void>;
   deleteInvoice(id: string): Promise<boolean>;
@@ -570,13 +572,68 @@ export class DatabaseStorage implements IStorage {
   async getInvoices(): Promise<any[]> {
     const allInvoices = await db.select().from(invoices).orderBy(desc(invoices.invoiceDate));
     const allCustomers = await db.select().from(customers);
+    const counts = await db
+      .select({ invoiceId: billingElements.invoiceId, count: sql<number>`count(*)::int` })
+      .from(billingElements)
+      .where(sql`${billingElements.invoiceId} IS NOT NULL`)
+      .groupBy(billingElements.invoiceId);
+    const countMap = new Map(counts.map(c => [c.invoiceId, Number(c.count)]));
 
     return allInvoices.map(invoice => {
       const customer = allCustomers.find(c => c.id === invoice.customerId);
       return {
         ...invoice,
         customerName: customer ? customer.fullname : "Unknown",
+        lineItemCount: countMap.get(invoice.id) || 0,
       };
+    });
+  }
+
+  async getInvoiceLineItemCount(invoiceId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(billingElements)
+      .where(eq(billingElements.invoiceId, invoiceId));
+    return Number(row?.count || 0);
+  }
+
+  async createInvoiceWithLineItems(
+    invoiceData: InsertInvoice,
+    liveryItems: InsertBillingElement[],
+    adhocBillingElementIds: string[],
+  ): Promise<Invoice> {
+    return await db.transaction(async (tx) => {
+      const [invoice] = await tx.insert(invoices).values(invoiceData).returning();
+
+      for (const li of liveryItems) {
+        await tx.insert(billingElements).values({ ...li, invoiceId: invoice.id, billed: true });
+      }
+
+      if (adhocBillingElementIds.length > 0) {
+        for (const id of adhocBillingElementIds) {
+          const result = await tx.update(billingElements)
+            .set({ billed: true, invoiceId: invoice.id })
+            .where(and(
+              eq(billingElements.id, id),
+              eq(billingElements.customerId, invoiceData.customerId),
+              sql`${billingElements.invoiceId} IS NULL`,
+            ))
+            .returning({ id: billingElements.id });
+          if (result.length === 0) {
+            throw new Error(`Billing element ${id} could not be linked (not found, already invoiced, or wrong customer) — invoice rolled back`);
+          }
+        }
+      }
+
+      const [{ count }] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(billingElements)
+        .where(eq(billingElements.invoiceId, invoice.id));
+      if (Number(count) === 0) {
+        throw new Error("Invoice would be created with no line items — rolled back");
+      }
+
+      return invoice;
     });
   }
 

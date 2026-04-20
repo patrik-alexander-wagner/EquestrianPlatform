@@ -109,12 +109,12 @@ export default function InvoicesPage() {
       if (!res.ok) throw new Error("Failed to load invoice details");
       const details = await res.json();
       if (action === "view") {
-        viewInvoicePDF(details);
+        await viewInvoicePDF(details);
       } else {
-        downloadInvoicePDF(details);
+        await downloadInvoicePDF(details);
       }
-    } catch {
-      toast({ title: "Failed to generate PDF", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: e?.message || "Failed to generate PDF", variant: "destructive" });
     } finally {
       setLoadingPdf(null);
     }
@@ -168,7 +168,24 @@ export default function InvoicesPage() {
   };
 
   const columns = [
-    { key: "id", label: "Invoice No", render: (item: any) => item.poNumber || item.id.substring(0, 8) + "..." },
+    {
+      key: "id",
+      label: "Invoice No",
+      render: (item: any) => (
+        <div className="flex items-center gap-2">
+          <span>{item.poNumber || item.id.substring(0, 8) + "..."}</span>
+          {item.lineItemCount === 0 && (
+            <Badge
+              variant="outline"
+              className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-0 text-xs"
+              data-testid={`badge-no-items-${item.id}`}
+            >
+              No items
+            </Badge>
+          )}
+        </div>
+      ),
+    },
     { key: "customerName", label: "Customer" },
     {
       key: "billingMonth",

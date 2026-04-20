@@ -813,31 +813,49 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invoice generation requires both Vet and Stores sign-off for this billing month" });
       }
 
-      const invoice = await storage.createInvoice({ customerId, invoiceDate, billingMonth, totalAmount, status: "APPROVED" });
-
       const invoiceUser = req.user as any;
+      const validatedLiveryItems: any[] = [];
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
-        for (const item of liveryItems) {
-          const validatedItem = validateBody(insertBillingElementSchema, {
-            horseId: item.horseId,
-            customerId,
-            boxId: item.boxId,
-            itemId: item.itemId,
-            agreementId: item.agreementId,
-            quantity: 1,
-            price: item.price,
-            transactionDate: invoiceDate,
-            billingMonth: item.billingMonth,
-            billed: true,
-            invoiceId: invoice.id,
-            userId: invoiceUser?.id || null,
-          });
-          await storage.createBillingElement(validatedItem);
+        for (let i = 0; i < liveryItems.length; i++) {
+          const item = liveryItems[i];
+          try {
+            const validatedItem = validateBody(insertBillingElementSchema, {
+              horseId: item.horseId,
+              customerId,
+              boxId: item.boxId,
+              itemId: item.itemId,
+              agreementId: item.agreementId,
+              quantity: 1,
+              price: item.price,
+              transactionDate: invoiceDate,
+              billingMonth: item.billingMonth,
+              billed: true,
+              userId: invoiceUser?.id || null,
+            });
+            validatedLiveryItems.push(validatedItem);
+          } catch (err: any) {
+            return res.status(400).json({
+              message: `Livery line item ${i + 1} is invalid: ${err.message || "validation failed"}. Invoice was not created.`,
+            });
+          }
         }
       }
 
-      if (billingElementIds && billingElementIds.length > 0) {
-        await storage.markBillingElementsByIds(billingElementIds, invoice.id);
+      const adhocIds: string[] = Array.isArray(billingElementIds) ? billingElementIds : [];
+
+      if (validatedLiveryItems.length === 0 && adhocIds.length === 0) {
+        return res.status(400).json({ message: "Cannot create invoice with no line items" });
+      }
+
+      let invoice;
+      try {
+        invoice = await storage.createInvoiceWithLineItems(
+          { customerId, invoiceDate, billingMonth, totalAmount, status: "APPROVED" },
+          validatedLiveryItems,
+          adhocIds,
+        );
+      } catch (err: any) {
+        return res.status(400).json({ message: err.message || "Failed to create invoice — rolled back" });
       }
 
       auditLog(req, "create_invoice", "invoice", invoice.id, `Created invoice for billing month ${billingMonth || "N/A"}`);
@@ -895,6 +913,11 @@ export async function registerRoutes(
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+      const lineCount = await storage.getInvoiceLineItemCount(req.params.id);
+      if (lineCount === 0) {
+        return res.status(400).json({ message: "Invoice has no line items — cannot generate SO. Please delete this empty invoice." });
+      }
 
       const details = await storage.getInvoiceDetailsForSO(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice details not found" });
@@ -1022,6 +1045,11 @@ export async function registerRoutes(
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
       if (!invoice.soGenerated) return res.status(400).json({ message: "SO must be generated before sending to NetSuite" });
       if (!invoice.netsuiteJson) return res.status(400).json({ message: "No NetSuite JSON found on this invoice" });
+
+      const lineCount = await storage.getInvoiceLineItemCount(req.params.id);
+      if (lineCount === 0) {
+        return res.status(400).json({ message: "Invoice has no line items — cannot send to NetSuite. Please delete this empty invoice." });
+      }
 
       const restletUrl = process.env.NETSUITE_RESTLET_URL;
       const consumerKey = process.env.NETSUITE_CONSUMER_KEY;
