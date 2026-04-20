@@ -68,7 +68,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   const logo = await loadLogoDataUrl();
   if (logo) {
     try {
-      doc.addImage(logo, "PNG", margin, 12, 28, 28);
+      doc.addImage(logo, "PNG", margin, 12, 26, 26);
     } catch {
       // ignore — render without logo
     }
@@ -83,28 +83,29 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
     doc.text(`[${monthLabel}]`, rightCol, 30, { align: "right" });
   }
 
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "normal");
-  const issuerLeft = margin + 32;
-  doc.text("United Arab Emirates", issuerLeft, 18);
-  doc.text("Al Mushrif West, Abu Dhabi", issuerLeft, 23);
-  doc.text("PO Box 590, Abu Dhabi UAE", issuerLeft, 28);
+  const addrY = 44;
+  doc.text("United Arab Emirates", margin, addrY);
+  doc.text("Al Mushrif West, Abu Dhabi", margin, addrY + 4);
+  doc.text("PO Box 590, Abu Dhabi UAE", margin, addrY + 8);
+  doc.text("TRN: 100259446100003", margin, addrY + 12);
 
   let totalAmountNum = parseFloat(invoice.totalAmount);
   if (!Number.isFinite(totalAmountNum)) totalAmountNum = 0;
 
   doc.setFillColor(...GREY_BAND);
-  doc.rect(pageWidth - margin - 70, 36, 70, 16, "F");
+  doc.rect(pageWidth - margin - 70, 42, 70, 16, "F");
   doc.setTextColor(60, 60, 60);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text("Total Amount", pageWidth - margin - 67, 42);
+  doc.text("Total Amount", pageWidth - margin - 67, 48);
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(15);
   doc.setFont("helvetica", "bold");
-  doc.text(`AED ${totalAmountNum.toFixed(2)}`, pageWidth - margin - 67, 49);
+  doc.text(`AED ${totalAmountNum.toFixed(2)}`, pageWidth - margin - 67, 55);
 
-  let y = 60;
+  let y = 66;
   const halfW = (pageWidth - margin * 2 - 6) / 2;
   doc.setFillColor(...GREY_BAND);
   doc.rect(margin, y, halfW, 7, "F");
@@ -233,7 +234,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text(`AED ${grandTotal.toFixed(2)}`, valueX, totalsY, { align: "right" });
   doc.setTextColor(0, 0, 0);
 
-  const footerY = pageHeight - 22;
+  const footerY = pageHeight - 30;
   doc.setDrawColor(...RED);
   doc.setLineWidth(0.5);
   doc.line(margin, footerY - 5, rightCol, footerY - 5);
@@ -245,11 +246,19 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text("Al Mushrif - Abu Dhabi", margin, footerY + 4);
   doc.text("United Arab Emirates", margin, footerY + 8);
 
-  doc.text("Tel: +971 2 445 5500", pageWidth / 3 + 10, footerY);
-  doc.text("Fax: 02 445 5500", pageWidth / 3 + 10, footerY + 4);
+  const contactX = margin + 60;
+  doc.text("Tel: +971 2 445 5500", contactX, footerY);
+  doc.text("Fax: 02 445 5500", contactX, footerY + 4);
   doc.setTextColor(0, 0, 200);
-  doc.text("www.adec.ae/", pageWidth / 3 + 10, footerY + 8);
+  doc.text("www.adec.ae/", contactX, footerY + 8);
   doc.setTextColor(0, 0, 0);
+
+  const bankX = margin + 115;
+  doc.text("BankName: Abu Dhabi Commercial Bank", bankX, footerY);
+  doc.text("IBAN: AE630030000131122020002", bankX, footerY + 4);
+  doc.text("Account Number : 131122020002", bankX, footerY + 8);
+  doc.text("BIC / SWIFT : ADCBAEAAXXX", bankX, footerY + 12);
+  doc.text("Branch Name : 105 / AL SALAM STREET", bankX, footerY + 16);
 
   if (monthLabel) {
     doc.setFontSize(7);
