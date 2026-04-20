@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import adecLogoUrl from "@assets/image_1776669073080.png";
+import adecLogoUrl from "@assets/image_1776675363121.png";
 
 interface InvoiceLineItem {
   description?: string;
@@ -68,7 +68,10 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   const logo = await loadLogoDataUrl();
   if (logo) {
     try {
-      doc.addImage(logo, "PNG", margin, 12, 26, 26);
+      const props = doc.getImageProperties(logo);
+      const targetW = 50;
+      const targetH = (props.height / props.width) * targetW;
+      doc.addImage(logo, "PNG", margin, 14, targetW, targetH);
     } catch {
       // ignore — render without logo
     }
