@@ -194,7 +194,7 @@ export default function InvoicesPage() {
       render: (item: any) => (
         <div className="flex items-center gap-2">
           <span>{item.poNumber || item.id.substring(0, 8) + "..."}</span>
-          {item.lineItemCount === 0 && (
+          {item.lineItemCount === 0 && (item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (
             <Badge
               variant="outline"
               className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-0 text-xs"
