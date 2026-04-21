@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "r0FyuhmgVGSsyQHeRg859"
+uri = "file://CHANGELOG.md"
+type = "text"
+title = "StableMaster Changelog (11–21 April 2026)"
