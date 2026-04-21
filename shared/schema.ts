@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -169,7 +169,9 @@ export const invoices = pgTable("invoices", {
   sentToNetsuite: boolean("sent_to_netsuite").notNull().default(false),
   poNumber: text("po_number"),
   netsuiteJson: text("netsuite_json"),
-});
+}, (table) => ({
+  uniqueCustomerMonth: unique("invoices_customer_month_unique").on(table.customerId, table.billingMonth),
+}));
 
 export const agreementDocuments = pgTable("agreement_documents", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -794,6 +794,12 @@ export async function registerRoutes(
     try {
       const details = await storage.getInvoiceDetails(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice not found" });
+      const user = req.user as any;
+      const canViewErpData = user?.role === "ADMIN" || user?.role === "FINANCE";
+      if (!canViewErpData) {
+        const { netsuiteJson, netsuiteId, poNumber, soGenerated, sentToNetsuite, customerNumber, ...safeDetails } = details;
+        return res.json(safeDetails);
+      }
       res.json(details);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -810,10 +816,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices", async (req, res) => {
+  app.post("/api/invoices", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
-      const { customerId, invoiceDate, billingMonth, totalAmount, billingElementIds, liveryItems } = req.body;
-      if (!customerId || !invoiceDate || !totalAmount) throw { status: 400, message: "Missing required fields: customerId, invoiceDate, totalAmount" };
+      const { customerId, invoiceDate, billingMonth, billingElementIds, liveryItems } = req.body;
+      if (!customerId || !invoiceDate) throw { status: 400, message: "Missing required fields: customerId, invoiceDate" };
       if (!billingMonth || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billingMonth)) {
         throw { status: 400, message: "billingMonth is required and must be in YYYY-MM format" };
       }
@@ -842,24 +848,67 @@ export async function registerRoutes(
 
       const invoiceUser = req.user as any;
       const validatedLiveryItems: any[] = [];
+      let computedTotal = 0;
+
+      const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
+      const periodStart = `${bmYear}-${String(bmMonth).padStart(2, "0")}-01`;
+      const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
+      const periodEnd = `${bmYear}-${String(bmMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
+        const seenAgreementIds = new Set<string>();
         for (let i = 0; i < liveryItems.length; i++) {
           const item = liveryItems[i];
+
+          if (!item.agreementId) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} is missing agreementId.` });
+          }
+
+          if (seenAgreementIds.has(item.agreementId)) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} duplicates agreement ${item.agreementId} already in this request.` });
+          }
+          seenAgreementIds.add(item.agreementId);
+
+          const agreement = await storage.getLiveryAgreement(item.agreementId);
+          if (!agreement) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} references an unknown agreement.` });
+          }
+          if (agreement.customerId !== customerId) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} agreement does not belong to this customer.` });
+          }
+
+          const agreementStatus = agreement.status;
+          if (agreementStatus !== "active" && agreementStatus !== "ended") {
+            return res.status(400).json({ message: `Livery line item ${i + 1} agreement is not in an active or ended state.` });
+          }
+          if (agreement.startDate && agreement.startDate > periodEnd) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} agreement has not started for billing month ${billingMonth}.` });
+          }
+          if (agreement.endDate && agreement.endDate < periodStart) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} agreement ended before billing month ${billingMonth}.` });
+          }
+
+          const activeMovement = await storage.getActiveMovementByBoxId(agreement.boxId);
+          const trustedHorseId = activeMovement?.horseId ?? null;
+
+          const trustedPrice = agreement.monthlyAmount ?? "0";
+
           try {
             const validatedItem = validateBody(insertBillingElementSchema, {
-              horseId: item.horseId,
+              horseId: trustedHorseId,
               customerId,
-              boxId: item.boxId,
-              itemId: item.itemId,
+              boxId: agreement.boxId,
+              itemId: agreement.itemId,
               agreementId: item.agreementId,
               quantity: "1",
-              price: item.price,
+              price: trustedPrice,
               transactionDate: invoiceDate,
-              billingMonth: item.billingMonth,
+              billingMonth,
               billed: true,
               userId: invoiceUser?.id || null,
             });
             validatedLiveryItems.push(validatedItem);
+            computedTotal += parseFloat(trustedPrice as string);
           } catch (err: any) {
             return res.status(400).json({
               message: `Livery line item ${i + 1} is invalid: ${err.message || "validation failed"}. Invoice was not created.`,
@@ -870,9 +919,25 @@ export async function registerRoutes(
 
       const adhocIds: string[] = Array.isArray(billingElementIds) ? billingElementIds : [];
 
+      for (const elId of adhocIds) {
+        const element = await storage.getBillingElement(elId);
+        if (!element) {
+          return res.status(400).json({ message: `Ad-hoc billing element ${elId} not found.` });
+        }
+        if (element.customerId !== customerId) {
+          return res.status(400).json({ message: `Ad-hoc billing element ${elId} does not belong to this customer.` });
+        }
+        if (element.billed || element.invoiceId) {
+          return res.status(400).json({ message: `Ad-hoc billing element ${elId} has already been invoiced.` });
+        }
+        computedTotal += parseFloat(element.price || "0");
+      }
+
       if (validatedLiveryItems.length === 0 && adhocIds.length === 0) {
         return res.status(400).json({ message: "Cannot create invoice with no line items" });
       }
+
+      const totalAmount = computedTotal.toFixed(2);
 
       let invoice;
       try {
@@ -882,6 +947,9 @@ export async function registerRoutes(
           adhocIds,
         );
       } catch (err: any) {
+        if (err.code === "23505") {
+          return res.status(400).json({ message: "An invoice already exists for this customer and billing month" });
+        }
         return res.status(400).json({ message: err.message || "Failed to create invoice — rolled back" });
       }
 
