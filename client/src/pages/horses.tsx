@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -25,6 +26,7 @@ export default function HorsesPage() {
   const [search, setSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableBoxSearch, setStableBoxSearch] = useState("");
+  const [displayInactives, setDisplayInactives] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -64,6 +66,11 @@ export default function HorsesPage() {
   const { data: horses = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/horses", qs ? `?${qs}` : ""],
   });
+
+  const visibleHorses = useMemo(
+    () => (displayInactives ? horses : horses.filter((h: any) => (h.status || "active") !== "inactive")),
+    [horses, displayInactives],
+  );
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/horses", data),
@@ -155,15 +162,24 @@ export default function HorsesPage() {
         ) : undefined}
       />
 
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
         <SearchBar placeholder="Horse name..." value={search} onChange={setSearch} className="w-52" />
         <SearchBar placeholder="Customer..." value={customerSearch} onChange={setCustomerSearch} className="w-52" />
         <SearchBar placeholder="Stable / Box..." value={stableBoxSearch} onChange={setStableBoxSearch} className="w-52" />
+        <div className="flex items-center gap-2 ml-2">
+          <Switch
+            id="display-inactives"
+            checked={displayInactives}
+            onCheckedChange={setDisplayInactives}
+            data-testid="switch-display-inactives"
+          />
+          <Label htmlFor="display-inactives" className="cursor-pointer">Display inactives</Label>
+        </div>
       </div>
 
       <DataTable
         columns={columns}
-        data={horses}
+        data={visibleHorses}
         isLoading={isLoading}
         actions={(item) => (
           <DropdownMenu>
