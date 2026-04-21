@@ -6,3 +6,9 @@ id = "r0FyuhmgVGSsyQHeRg859"
 uri = "file://CHANGELOG.md"
 type = "text"
 title = "StableMaster Changelog (11–21 April 2026)"
+
+[[outputs]]
+id = "-QJCDJJFSILQrw9LXaZYs"
+uri = "file://UPDATE_PROMPT.md"
+type = "text"
+title = "Update prompt for another project"
