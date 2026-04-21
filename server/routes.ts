@@ -1107,18 +1107,15 @@ export async function registerRoutes(
       let netsuiteId: string | null = null;
       try {
         const responseText = await response.text();
-        console.log("[NetSuite] Raw response body:", responseText);
         const responseData = JSON.parse(responseText);
-        console.log("[NetSuite] Parsed response keys:", Object.keys(responseData));
         if (responseData?.netsuiteId) netsuiteId = String(responseData.netsuiteId);
         else if (responseData?.salesOrderId) netsuiteId = String(responseData.salesOrderId);
         else if (responseData?.SalesOrderId) netsuiteId = String(responseData.SalesOrderId);
         else if (responseData?.salesOrderInternalId) netsuiteId = String(responseData.salesOrderInternalId);
         else if (responseData?.internalId) netsuiteId = String(responseData.internalId);
         else if (responseData?.id) netsuiteId = String(responseData.id);
-        console.log("[NetSuite] Extracted netsuiteId:", netsuiteId);
       } catch {
-        console.log("[NetSuite] Response was not valid JSON");
+        // Response was not valid JSON; netsuiteId remains null
       }
 
       const updateData: any = {
