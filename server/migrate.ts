@@ -44,16 +44,28 @@ export async function runMigration() {
     if (userIdColCheck.rows.length === 0) {
       console.log("Migration: Adding user_id column to billing_elements...");
       await client.query(`ALTER TABLE billing_elements ADD COLUMN user_id uuid REFERENCES users(id)`);
-      await client.query(`
-        UPDATE billing_elements be
-        SET user_id = al.user_id::uuid
+      console.log("Migration: user_id column added");
+    }
+
+    const beBackfill = await client.query(`
+      UPDATE billing_elements be
+      SET user_id = sub.user_uuid
+      FROM (
+        SELECT DISTINCT ON (al.entity_id)
+          al.entity_id AS be_id,
+          al.user_id::uuid AS user_uuid
         FROM audit_logs al
         WHERE al.entity_type = 'billing_element'
-        AND al.action = 'create_billing_element'
-        AND al.entity_id = be.id::text
+          AND al.action = 'create_billing_element'
+          AND al.user_id IS NOT NULL
+          AND al.user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ORDER BY al.entity_id, al.created_at ASC
+      ) AS sub
+      WHERE be.id::text = sub.be_id
         AND be.user_id IS NULL
-      `);
-      console.log("Migration: user_id column added and backfilled from audit logs");
+    `);
+    if ((beBackfill.rowCount ?? 0) > 0) {
+      console.log(`Migration: Backfilled user_id on ${beBackfill.rowCount} billing_elements from audit_logs`);
     }
 
     const ssoIdColCheck = await client.query(`
