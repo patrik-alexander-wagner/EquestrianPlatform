@@ -326,6 +326,7 @@ export default function HorsesPage() {
                 updateMutation.mutate({
                   id: editingHorse.id,
                   horseName: fd.get("horseName"),
+                  passportName: fd.get("passportName") || null,
                   breed: fd.get("breed") || null,
                   dateOfBirth: fd.get("dateOfBirth") || null,
                   sex: fd.get("sex") || null,
@@ -387,8 +388,12 @@ export default function HorsesPage() {
                   </Popover>
                 </div>
                 <div>
-                  <Label>Horse Name</Label>
+                  <Label>Stable Name</Label>
                   <Input name="horseName" defaultValue={editingHorse.rawHorseName || editingHorse.horseName} required data-testid="input-edit-horse-name" />
+                </div>
+                <div>
+                  <Label>Passport Name</Label>
+                  <Input name="passportName" defaultValue={editingHorse.passportName || ""} data-testid="input-edit-passport-name" />
                 </div>
                 <div>
                   <Label>Breed</Label>
