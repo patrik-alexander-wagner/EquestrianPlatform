@@ -1412,6 +1412,19 @@ export async function registerRoutes(
           return res.status(400).json({ message: "This box already has a horse checked in" });
         }
       }
+      if (data.agreementId) {
+        const agreement = await storage.getLiveryAgreement(data.agreementId);
+        if (!agreement) {
+          return res.status(400).json({ message: "Agreement not found" });
+        }
+        if (data.stableboxId && agreement.boxId !== data.stableboxId) {
+          return res.status(400).json({ message: "Agreement does not belong to the specified box" });
+        }
+        const ownership = await storage.getHorseOwnershipByHorseId(data.horseId);
+        if (!ownership || ownership.customerId !== agreement.customerId) {
+          return res.status(400).json({ message: "Horse does not belong to the customer of this agreement" });
+        }
+      }
       const movement = await storage.createHorseMovement(data);
       res.json(movement);
     } catch (e: any) {
@@ -1421,8 +1434,29 @@ export async function registerRoutes(
 
   app.patch("/api/horse-movements/:id", async (req, res) => {
     try {
-      const data = validateBody(insertHorseMovementSchema.partial(), req.body);
-      const movement = await storage.updateHorseMovement(req.params.id, data);
+      const { checkOut } = req.body;
+      if (!checkOut || typeof checkOut !== "string") {
+        return res.status(400).json({ message: "Only checkOut may be set via this endpoint" });
+      }
+      const allowedKeys = Object.keys(req.body).filter(k => k !== "checkOut");
+      if (allowedKeys.length > 0) {
+        return res.status(400).json({ message: "Only checkOut may be set via this endpoint" });
+      }
+      if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(checkOut)) {
+        return res.status(400).json({ message: "checkOut must be a valid date in YYYY-MM-DD format" });
+      }
+      const allMovements = await storage.getHorseMovements();
+      const existing = allMovements.find(m => m.id === req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Movement not found" });
+      }
+      if (existing.checkOut) {
+        return res.status(400).json({ message: "Movement is already checked out" });
+      }
+      if (checkOut < existing.checkIn) {
+        return res.status(400).json({ message: "Check-out date cannot be before check-in date" });
+      }
+      const movement = await storage.updateHorseMovement(req.params.id, { checkOut });
       if (!movement) return res.status(404).json({ message: "Movement not found" });
       res.json(movement);
     } catch (e: any) {
