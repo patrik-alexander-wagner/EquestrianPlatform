@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -395,7 +396,15 @@ export default function HorsesPage() {
                 </div>
                 <div>
                   <Label>Status</Label>
-                  <Input name="status" defaultValue={editingHorse.status} data-testid="input-edit-status" />
+                  <Select name="status" defaultValue={editingHorse.status === "inactive" ? "inactive" : "active"}>
+                    <SelectTrigger data-testid="select-edit-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <DialogFooter className="mt-4">
