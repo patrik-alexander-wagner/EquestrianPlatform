@@ -56,6 +56,21 @@ export async function runMigration() {
       console.log("Migration: user_id column added and backfilled from audit logs");
     }
 
+    const ssoIdColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'sso_id'
+    `);
+    if (ssoIdColCheck.rows.length === 0) {
+      console.log("Migration: Adding sso_id column to users...");
+      await client.query(`ALTER TABLE users ADD COLUMN sso_id TEXT`);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_sso_id_unique
+        ON users(sso_id)
+        WHERE sso_id IS NOT NULL
+      `);
+      console.log("Migration: sso_id column added to users");
+    }
+
     const colCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'livery_agreements' AND column_name = 'horse_id'

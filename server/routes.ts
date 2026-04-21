@@ -86,6 +86,11 @@ export async function registerRoutes(
 
       const userData = await response.json();
 
+      if (!userData.id || typeof userData.id !== "string") {
+        console.warn("SSO login rejected: missing or invalid external subject identifier");
+        return res.redirect("/login?error=sso_failed");
+      }
+
       if (!userData.username || typeof userData.username !== "string") {
         return res.redirect("/login?error=sso_failed");
       }
@@ -95,16 +100,33 @@ export async function registerRoutes(
         "livery_admin": "LIVERY_ADMIN", "veterinary": "VETERINARY",
         "stores": "STORES", "finance": "FINANCE",
       };
-      const mappedRole = ssoRoleMap[userData.role?.toLowerCase()] || "LIVERY_ADMIN";
+      const incomingRole = userData.role?.toLowerCase();
+      const mappedRole = incomingRole ? ssoRoleMap[incomingRole] : undefined;
+      if (!mappedRole) {
+        console.warn(`SSO login rejected: unrecognized or missing role '${userData.role}' for SSO id '${userData.id}'`);
+        return res.redirect("/login?error=sso_role_unknown");
+      }
 
-      let localUser = await storage.getUserByUsername(userData.username);
+      let localUser = await storage.getUserBySsoId(userData.id);
       if (!localUser) {
         const crypto = await import("crypto");
-        localUser = await storage.createUser({
-          username: userData.username,
-          password: crypto.randomUUID(),
-          role: mappedRole,
-        });
+        try {
+          localUser = await storage.createUser({
+            username: userData.username,
+            password: crypto.randomUUID(),
+            role: mappedRole,
+            ssoId: userData.id,
+          });
+        } catch (createErr: any) {
+          if (createErr?.code === "23505") {
+            console.warn(
+              `SSO provisioning blocked: username '${userData.username}' already exists as a local account ` +
+              `(SSO id '${userData.id}'). Manual account linking is required.`
+            );
+            return res.redirect("/login?error=sso_username_conflict");
+          }
+          throw createErr;
+        }
       }
 
       const sessionUser = { id: localUser.id, username: localUser.username, role: localUser.role };

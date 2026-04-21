@@ -40,6 +40,7 @@ function isExcludedReportCustomer(name: string | undefined | null): boolean {
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserBySsoId(ssoId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserPassword(id: string, password: string, role?: string): Promise<void>;
   getUsers(): Promise<Omit<User, "password">[]>;
@@ -157,6 +158,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserBySsoId(ssoId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.ssoId, ssoId));
     return user;
   }
 

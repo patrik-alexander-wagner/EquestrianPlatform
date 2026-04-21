@@ -18,6 +18,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("LIVERY_ADMIN"),
+  ssoId: text("sso_id").unique(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
