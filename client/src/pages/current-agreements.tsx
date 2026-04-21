@@ -320,13 +320,15 @@ export default function CurrentAgreementsPage() {
                   <Pencil className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
-                  data-testid={`button-documents-${item.id}`}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Documents
-                </DropdownMenuItem>
+                {canManageDocuments && (
+                  <DropdownMenuItem
+                    onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
+                    data-testid={`button-documents-${item.id}`}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Documents
+                  </DropdownMenuItem>
+                )}
                 {!item.endDate && (
                   <DropdownMenuItem
                     onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}

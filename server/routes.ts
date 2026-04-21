@@ -1272,7 +1272,7 @@ export async function registerRoutes(
   });
 
   // Agreement Documents
-  app.get("/api/livery-agreements/:id/documents", async (req, res) => {
+  app.get("/api/livery-agreements/:id/documents", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const docs = await storage.getAgreementDocuments(req.params.id);
       res.json(docs.map(d => ({ id: d.id, agreementId: d.agreementId, filename: d.filename, uploadedAt: d.uploadedAt })));
@@ -1307,7 +1307,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/agreement-documents/:id/download", async (req, res) => {
+  app.get("/api/agreement-documents/:id/download", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const doc = await storage.getAgreementDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
