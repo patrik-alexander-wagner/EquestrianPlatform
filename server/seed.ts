@@ -3,15 +3,31 @@ import { db } from "./db";
 import { customers, horses, stables, boxes, items, liveryAgreements, horseOwnership, horseMovements } from "@shared/schema";
 
 async function ensureAdminUser() {
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
   const existing = await storage.getUserByUsername("admin");
   if (existing) {
-    await storage.updateUserPassword(existing.id, adminPassword, "ADMIN");
-    console.log("Admin user password and role updated");
+    return;
+  }
+
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "SEED_ADMIN_PASSWORD is not set. Skipping admin user creation in production. " +
+        "Set this environment variable to provision an initial admin account."
+      );
+      return;
+    }
+    console.warn(
+      "Warning: No SEED_ADMIN_PASSWORD set. Creating admin user with default password 'admin123' " +
+      "for development only. Never deploy without setting SEED_ADMIN_PASSWORD."
+    );
+    await storage.createUser({ username: "admin", password: "admin123", role: "ADMIN" });
   } else {
     await storage.createUser({ username: "admin", password: adminPassword, role: "ADMIN" });
-    console.log("Admin user created");
   }
+
+  console.log("Admin user created");
 }
 
 export async function seedDatabase() {
