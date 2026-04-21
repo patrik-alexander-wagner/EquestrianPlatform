@@ -292,7 +292,7 @@ export default function InvoicesPage() {
                   Validation History
                 </DropdownMenuItem>
 
-                {item.soGenerated && item.netsuiteJson && (
+                {item.soGenerated && item.netsuiteJson && (userRole === "ADMIN" || userRole === "FINANCE") && (
                   <DropdownMenuItem
                     onClick={() => handleDownloadJson(item)}
                     data-testid={`button-download-json-${item.id}`}

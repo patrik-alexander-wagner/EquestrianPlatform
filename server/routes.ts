@@ -217,7 +217,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/customers", async (req, res) => {
+  app.post("/api/customers", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertCustomerSchema, req.body);
       const customer = await storage.createCustomer(data);
@@ -227,7 +227,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/customers/import", async (req, res) => {
+  app.post("/api/customers/import", requireAdmin, async (req, res) => {
     try {
       const { customers: data } = req.body;
       if (!Array.isArray(data)) throw { status: 400, message: "customers must be an array" };
@@ -288,7 +288,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horses", async (req, res) => {
+  app.post("/api/horses", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { ownerId, ...horseData } = req.body;
       if (!ownerId) {
@@ -302,7 +302,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/horses/:id", async (req, res) => {
+  app.patch("/api/horses/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { ownerId, ...rest } = req.body;
       const data = validateBody(insertHorseSchema.partial(), rest);
@@ -325,7 +325,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horses/import", async (req, res) => {
+  app.post("/api/horses/import", requireAdmin, async (req, res) => {
     try {
       const { horses: data } = req.body;
       if (!Array.isArray(data)) throw { status: 400, message: "horses must be an array" };
@@ -351,7 +351,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stables", async (req, res) => {
+  app.post("/api/stables", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertStableSchema, req.body);
       const stable = await storage.createStable(data);
@@ -361,7 +361,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/stables/:id", async (req, res) => {
+  app.patch("/api/stables/:id", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertStableSchema.partial(), req.body);
       const stable = await storage.updateStable(req.params.id, data);
@@ -396,7 +396,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/boxes", async (req, res) => {
+  app.post("/api/boxes", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertBoxSchema, req.body);
       const box = await storage.createBox(data);
@@ -406,7 +406,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/boxes/:id", async (req, res) => {
+  app.patch("/api/boxes/:id", requireAdmin, async (req, res) => {
     try {
       const data = validateBody(insertBoxSchema.partial(), req.body);
       const box = await storage.updateBox(req.params.id, data);
@@ -429,7 +429,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/boxes/import", async (req, res) => {
+  app.post("/api/boxes/import", requireAdmin, async (req, res) => {
     try {
       const { boxes: data } = req.body;
       if (!Array.isArray(data)) throw { status: 400, message: "boxes must be an array" };
@@ -474,7 +474,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/items/import", async (req, res) => {
+  app.post("/api/items/import", requireAdmin, async (req, res) => {
     try {
       const { items: data } = req.body;
       if (!Array.isArray(data)) throw { status: 400, message: "items must be an array" };
@@ -754,10 +754,15 @@ export async function registerRoutes(
   });
 
   // Invoices
-  app.get("/api/invoices", async (_req, res) => {
+  app.get("/api/invoices", async (req, res) => {
     try {
       const invoices = await storage.getInvoices();
-      res.json(invoices);
+      const user = req.user as any;
+      const canViewErpData = user?.role === "ADMIN" || user?.role === "FINANCE";
+      const result = canViewErpData
+        ? invoices
+        : invoices.map(({ netsuiteJson, netsuiteId, poNumber, soGenerated, sentToNetsuite, ...rest }: any) => rest);
+      res.json(result);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -1133,7 +1138,7 @@ export async function registerRoutes(
   });
 
   // Settings - N8N Webhook URL
-  app.get("/api/settings/n8n-webhook", async (_req, res) => {
+  app.get("/api/settings/n8n-webhook", requireAdmin, async (_req, res) => {
     try {
       const url = await storage.getSetting("n8n_webhook_url");
       res.json({ url: url || "" });
@@ -1186,7 +1191,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements/:id/documents", async (req, res) => {
+  app.post("/api/livery-agreements/:id/documents", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { filename, fileData } = req.body;
       if (!filename || !fileData) throw { status: 400, message: "filename and fileData are required" };
@@ -1225,7 +1230,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/agreement-documents/:id", async (req, res) => {
+  app.delete("/api/agreement-documents/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const deleted = await storage.deleteAgreementDocument(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Document not found" });
@@ -1266,7 +1271,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-ownership", async (req, res) => {
+  app.post("/api/horse-ownership", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const data = validateBody(insertHorseOwnershipSchema, req.body);
       const ownership = await storage.createHorseOwnership(data);

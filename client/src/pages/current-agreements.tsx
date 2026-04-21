@@ -46,6 +46,12 @@ export default function CurrentAgreementsPage() {
 
   const { toast } = useToast();
 
+  const { data: me } = useQuery<{ id: string; username: string; role: string }>({
+    queryKey: ["/api/me"],
+  });
+  const userRole = me?.role || "";
+  const canManageDocuments = userRole === "ADMIN" || userRole === "LIVERY_ADMIN";
+
   const { data: agreements = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/livery-agreements", "?status=active"],
   });
@@ -566,23 +572,25 @@ export default function CurrentAgreementsPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="pdf-upload" className="cursor-pointer">
-                <div className="flex items-center gap-2 px-4 py-2 border rounded-md hover:bg-accent text-sm">
-                  <Upload className="w-4 h-4" />
-                  {uploading ? "Uploading..." : "Upload PDF"}
-                </div>
-              </Label>
-              <input
-                id="pdf-upload"
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={uploading}
-                data-testid="input-upload-document"
-              />
-            </div>
+            {canManageDocuments && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="pdf-upload" className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-4 py-2 border rounded-md hover:bg-accent text-sm">
+                    <Upload className="w-4 h-4" />
+                    {uploading ? "Uploading..." : "Upload PDF"}
+                  </div>
+                </Label>
+                <input
+                  id="pdf-upload"
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  data-testid="input-upload-document"
+                />
+              </div>
+            )}
 
             {documents.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">No documents uploaded yet</p>
@@ -609,16 +617,18 @@ export default function CurrentAgreementsPage() {
                       >
                         <Download className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => deleteDocMutation.mutate(doc.id)}
-                        disabled={deleteDocMutation.isPending}
-                        data-testid={`button-delete-doc-${doc.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {canManageDocuments && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => deleteDocMutation.mutate(doc.id)}
+                          disabled={deleteDocMutation.isPending}
+                          data-testid={`button-delete-doc-${doc.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
