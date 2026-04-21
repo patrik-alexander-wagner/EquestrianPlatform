@@ -508,7 +508,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/items/:id", async (req, res) => {
+  app.patch("/api/items/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const data = validateBody(insertItemSchema.partial(), req.body);
       const item = await storage.updateItem(req.params.id, data);
@@ -530,7 +530,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/items/:id/change-price", async (req, res) => {
+  app.post("/api/items/:id/change-price", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const item = await storage.getItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -639,7 +639,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing-elements", async (req, res) => {
+  app.post("/api/billing-elements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       if (req.body.transactionDate && !req.body.billingMonth) {
         req.body.billingMonth = req.body.transactionDate.substring(0, 7);
@@ -657,7 +657,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/billing-elements/:id", async (req, res) => {
+  app.patch("/api/billing-elements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const existing = await storage.getBillingElement(req.params.id);
       if (!existing) return res.status(404).json({ message: "Billing element not found" });
@@ -694,7 +694,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/billing-elements/:id", async (req, res) => {
+  app.delete("/api/billing-elements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const deleted = await storage.deleteBillingElement(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Billing element not found" });

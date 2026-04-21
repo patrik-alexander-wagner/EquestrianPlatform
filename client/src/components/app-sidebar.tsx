@@ -37,6 +37,7 @@ const navGroups = [
   {
     label: "Billing Element",
     adminOnly: false,
+    liveryAdminOnly: true,
     items: [
       { title: "Billing Elements", url: "/billing-elements", icon: Receipt },
     ],
@@ -118,7 +119,11 @@ export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.filter(group => !group.adminOnly || userRole === "ADMIN").map((group) => (
+        {navGroups.filter(group => {
+          if (group.adminOnly && userRole !== "ADMIN") return false;
+          if (group.liveryAdminOnly && userRole !== "ADMIN" && userRole !== "LIVERY_ADMIN") return false;
+          return true;
+        }).map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

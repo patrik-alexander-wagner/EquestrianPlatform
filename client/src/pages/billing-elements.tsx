@@ -35,6 +35,11 @@ interface PendingItem {
 }
 
 export default function BillingElementsPage() {
+  const { data: me } = useQuery<{ id: string; username: string; role: string }>({
+    queryKey: ["/api/me"],
+  });
+  const isLiveryAdmin = me?.role === "ADMIN" || me?.role === "LIVERY_ADMIN";
+
   const [horseSearch, setHorseSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableSearch, setStableSearch] = useState("");
@@ -293,7 +298,7 @@ export default function BillingElementsPage() {
         data={filteredHorses}
         isLoading={isLoading}
         emptyMessage="No horses found"
-        actions={(item) => (
+        actions={isLiveryAdmin ? (item) => (
           <Button
             size="sm"
             onClick={() => openDialog(item)}
@@ -302,7 +307,7 @@ export default function BillingElementsPage() {
             <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
-        )}
+        ) : undefined}
       />
 
       {billingElements.length > 0 && (
@@ -452,17 +457,19 @@ export default function BillingElementsPage() {
                       <span>Base Price (per unit factor):</span>
                       <span className="flex items-center gap-2">
                         AED {itemPrice.toFixed(2)}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => openChangePriceDialog(selectedItem)}
-                          data-testid="button-change-price"
-                        >
-                          <DollarSign className="w-3 h-3 mr-1" />
-                          Change Price
-                        </Button>
+                        {isLiveryAdmin && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => openChangePriceDialog(selectedItem)}
+                            data-testid="button-change-price"
+                          >
+                            <DollarSign className="w-3 h-3 mr-1" />
+                            Change Price
+                          </Button>
+                        )}
                       </span>
                     </div>
                   </div>
