@@ -37,7 +37,6 @@ const navGroups = [
   {
     label: "Billing Element",
     adminOnly: false,
-    liveryAdminOnly: true,
     items: [
       { title: "Billing Elements", url: "/billing-elements", icon: Receipt },
     ],

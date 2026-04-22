@@ -51,6 +51,7 @@ export default function CurrentAgreementsPage() {
   });
   const userRole = me?.role || "";
   const canManageDocuments = userRole === "ADMIN" || userRole === "LIVERY_ADMIN";
+  const canViewDocuments = !!userRole;
 
   const { data: agreements = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/livery-agreements", "?status=active"],
@@ -320,7 +321,7 @@ export default function CurrentAgreementsPage() {
                   <Pencil className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                {canManageDocuments && (
+                {canViewDocuments && (
                   <DropdownMenuItem
                     onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
                     data-testid={`button-documents-${item.id}`}

@@ -530,7 +530,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/items/:id/change-price", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/items/:id/change-price", requireAuth, async (req, res) => {
     try {
       const item = await storage.getItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -639,7 +639,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing-elements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/billing-elements", requireAuth, async (req, res) => {
     try {
       if (req.body.transactionDate && !req.body.billingMonth) {
         req.body.billingMonth = req.body.transactionDate.substring(0, 7);
@@ -657,7 +657,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/billing-elements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.patch("/api/billing-elements/:id", requireAuth, async (req, res) => {
     try {
       const existing = await storage.getBillingElement(req.params.id);
       if (!existing) return res.status(404).json({ message: "Billing element not found" });
@@ -694,7 +694,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/billing-elements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.delete("/api/billing-elements/:id", requireAuth, async (req, res) => {
     try {
       const deleted = await storage.deleteBillingElement(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Billing element not found" });
@@ -780,11 +780,7 @@ export async function registerRoutes(
     try {
       const invoices = await storage.getInvoices();
       const user = req.user as any;
-      const canViewErpData = user?.role === "ADMIN" || user?.role === "FINANCE";
-      const result = canViewErpData
-        ? invoices
-        : invoices.map(({ netsuiteJson, netsuiteId, poNumber, soGenerated, sentToNetsuite, ...rest }: any) => rest);
-      res.json(result);
+      res.json(invoices);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -794,12 +790,6 @@ export async function registerRoutes(
     try {
       const details = await storage.getInvoiceDetails(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice not found" });
-      const user = req.user as any;
-      const canViewErpData = user?.role === "ADMIN" || user?.role === "FINANCE";
-      if (!canViewErpData) {
-        const { netsuiteJson, netsuiteId, poNumber, soGenerated, sentToNetsuite, customerNumber, ...safeDetails } = details;
-        return res.json(safeDetails);
-      }
       res.json(details);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
@@ -1272,7 +1262,7 @@ export async function registerRoutes(
   });
 
   // Agreement Documents
-  app.get("/api/livery-agreements/:id/documents", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.get("/api/livery-agreements/:id/documents", requireAuth, async (req, res) => {
     try {
       const docs = await storage.getAgreementDocuments(req.params.id);
       res.json(docs.map(d => ({ id: d.id, agreementId: d.agreementId, filename: d.filename, uploadedAt: d.uploadedAt })));
@@ -1307,7 +1297,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/agreement-documents/:id/download", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.get("/api/agreement-documents/:id/download", requireAuth, async (req, res) => {
     try {
       const doc = await storage.getAgreementDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });

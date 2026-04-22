@@ -38,7 +38,7 @@ export default function BillingElementsPage() {
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
     queryKey: ["/api/me"],
   });
-  const isLiveryAdmin = me?.role === "ADMIN" || me?.role === "LIVERY_ADMIN";
+  const isLiveryAdmin = !!me?.role;
 
   const [horseSearch, setHorseSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
