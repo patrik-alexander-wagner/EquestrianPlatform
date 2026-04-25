@@ -420,7 +420,10 @@ export default function BillingElementsPage() {
                     )}
                   </div>
                   {itemDropdownOpen && !selectedItemId && (
-                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                    <div
+                      className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto"
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
                       {filteredItems.length === 0 ? (
                         <div className="p-3 text-sm text-muted-foreground">No items found</div>
                       ) : (
@@ -430,7 +433,8 @@ export default function BillingElementsPage() {
                             key={i.id}
                             data-testid={`item-option-${i.id}`}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                            onClick={() => {
+                            onMouseDown={(e) => {
+                              e.preventDefault();
                               handleItemChange(i.id);
                               setItemSearch("");
                               setItemDropdownOpen(false);
