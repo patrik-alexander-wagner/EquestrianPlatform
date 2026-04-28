@@ -51,7 +51,8 @@ waitForPort = 5000
 
 [userenv.shared]
 NETSUITE_ACCOUNT_ID = "5834136_SB1"
-NETSUITE_RESTLET_URL = "https://5834136-sb1.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=1883&deploy=1"
+#NETSUITE_RESTLET_URL = "https://5834136-sb1.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=1883&deploy=1"
+NETSUITE_RESTLET_URL = "https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2464&deploy=1"
 
 [postMerge]
 path = "scripts/post-merge.sh"
