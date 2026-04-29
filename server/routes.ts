@@ -1044,8 +1044,15 @@ export async function registerRoutes(
         ? details.customer.fullname
         : "Unknown";
 
-      const today = new Date();
-      const tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+      let tranDate: string;
+      if (billingMonth) {
+        const [y, m] = billingMonth.split("-").map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        tranDate = `${String(lastDay).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+      } else {
+        const today = new Date();
+        tranDate = `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
+      }
 
       const soJson = {
         customerId: details.customer?.netsuiteId || "",
