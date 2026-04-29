@@ -155,6 +155,12 @@ shared/
 - Audit logging: critical actions logged to audit_logs table (user, action, entity, details, timestamp)
   - Actions logged: create/delete user, create/checkout agreement, create/delete invoice, create/delete billing element, upload/delete document, update settings
   - Audit logs viewable at /admin/audit-logs (admin-only)
+- RBAC on operational mutations (LIVERY_ADMIN/ADMIN only): livery agreement create/patch/cancel-checkout, horse movement create/patch/move/swap
+- Invoice integrity:
+  - Server-side proration of livery line items (matches UI getProRateFraction): partial-month agreements are billed daysOverlap/daysInMonth × monthlyAmount; total accumulated raw, rounded once at end
+  - Cross-month ad-hoc charges blocked: POST /api/invoices rejects billing elements whose billing_month (or transaction_date prefix) doesn't match invoice billing_month
+  - Atomic PO number generation: storage.getNextPoNumber() uses single INSERT ... ON CONFLICT DO UPDATE ... RETURNING (no read-modify-write race)
+  - Unique constraint invoices_po_number_unique on invoices.po_number (prevents duplicate PO assignment)
 
 ## Dependencies
 - jspdf + jspdf-autotable - PDF generation for invoices

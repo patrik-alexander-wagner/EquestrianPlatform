@@ -171,6 +171,7 @@ export const invoices = pgTable("invoices", {
   netsuiteJson: text("netsuite_json"),
 }, (table) => ({
   uniqueCustomerMonth: unique("invoices_customer_month_unique").on(table.customerId, table.billingMonth),
+  uniquePoNumber: unique("invoices_po_number_unique").on(table.poNumber),
 }));
 
 export const agreementDocuments = pgTable("agreement_documents", {

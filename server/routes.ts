@@ -556,7 +556,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements", async (req, res) => {
+  app.post("/api/livery-agreements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema, req.body);
       const agreement = await storage.createLiveryAgreement(data);
@@ -567,7 +567,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/livery-agreements/:id", async (req, res) => {
+  app.patch("/api/livery-agreements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
       const existing = await storage.getLiveryAgreement(req.params.id);
@@ -594,7 +594,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements/:id/cancel-checkout", async (req, res) => {
+  app.post("/api/livery-agreements/:id/cancel-checkout", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const agreement = await storage.getLiveryAgreement(req.params.id);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
@@ -881,7 +881,15 @@ export async function registerRoutes(
           const activeMovement = await storage.getActiveMovementByBoxId(agreement.boxId);
           const trustedHorseId = activeMovement?.horseId ?? null;
 
-          const trustedPrice = agreement.monthlyAmount ?? "0";
+          const monthlyAmount = parseFloat(agreement.monthlyAmount ?? "0");
+          const overlapStart = agreement.startDate && agreement.startDate > periodStart ? agreement.startDate : periodStart;
+          const overlapEnd = agreement.endDate && agreement.endDate < periodEnd ? agreement.endDate : periodEnd;
+          const overlapStartDay = parseInt(overlapStart.slice(8, 10), 10);
+          const overlapEndDay = parseInt(overlapEnd.slice(8, 10), 10);
+          const daysOverlap = Math.max(0, overlapEndDay - overlapStartDay + 1);
+          const fraction = daysInMonth > 0 ? daysOverlap / daysInMonth : 0;
+          const proratedRaw = monthlyAmount * fraction;
+          const proratedPrice = proratedRaw.toFixed(2);
 
           try {
             const validatedItem = validateBody(insertBillingElementSchema, {
@@ -891,14 +899,14 @@ export async function registerRoutes(
               itemId: agreement.itemId,
               agreementId: item.agreementId,
               quantity: "1",
-              price: trustedPrice,
+              price: proratedPrice,
               transactionDate: invoiceDate,
               billingMonth,
               billed: true,
               userId: invoiceUser?.id || null,
             });
             validatedLiveryItems.push(validatedItem);
-            computedTotal += parseFloat(trustedPrice as string);
+            computedTotal += proratedRaw;
           } catch (err: any) {
             return res.status(400).json({
               message: `Livery line item ${i + 1} is invalid: ${err.message || "validation failed"}. Invoice was not created.`,
@@ -916,6 +924,12 @@ export async function registerRoutes(
         }
         if (element.customerId !== customerId) {
           return res.status(400).json({ message: `Ad-hoc billing element ${elId} does not belong to this customer.` });
+        }
+        const elementMonth = element.billingMonth || (element.transactionDate ? element.transactionDate.substring(0, 7) : null);
+        if (elementMonth !== billingMonth) {
+          return res.status(400).json({
+            message: `Ad-hoc billing element ${elId} belongs to billing month ${elementMonth || "(none)"}, not ${billingMonth}. Cross-month billing is not allowed.`,
+          });
         }
         if (element.billed || element.invoiceId) {
           return res.status(400).json({ message: `Ad-hoc billing element ${elId} has already been invoiced.` });
@@ -1395,7 +1409,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements", async (req, res) => {
+  app.post("/api/horse-movements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const data = validateBody(insertHorseMovementSchema, req.body);
       const allMovements = await storage.getHorseMovements();
@@ -1429,7 +1443,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/horse-movements/:id", async (req, res) => {
+  app.patch("/api/horse-movements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { checkOut } = req.body;
       if (!checkOut || typeof checkOut !== "string") {
@@ -1493,7 +1507,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements/move", async (req, res) => {
+  app.post("/api/horse-movements/move", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const schema = z.object({ movementId: z.string().uuid(), newBoxId: z.string().uuid() });
       const data = validateBody(schema, req.body);
@@ -1505,7 +1519,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements/swap", async (req, res) => {
+  app.post("/api/horse-movements/swap", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const schema = z.object({
         movementId: z.string().uuid(),

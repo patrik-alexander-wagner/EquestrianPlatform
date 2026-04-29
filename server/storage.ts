@@ -717,13 +717,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextPoNumber(): Promise<string> {
-    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, "last_po_number"));
-    const current = setting ? parseInt(setting.value) : 2026002999;
-    const next = current + 1;
-    await db.insert(appSettings)
-      .values({ key: "last_po_number", value: String(next) })
-      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(next) } });
-    return String(next);
+    const result = await db.execute(sql`
+      INSERT INTO app_settings (key, value)
+      VALUES ('last_po_number', '2026003000')
+      ON CONFLICT (key) DO UPDATE
+        SET value = (CAST(app_settings.value AS BIGINT) + 1)::TEXT
+      RETURNING value
+    `);
+    const row: any = (result as any).rows?.[0] ?? (result as any)[0];
+    return String(row.value);
   }
 
   async getInvoiceDetailsForSO(id: string): Promise<any> {
