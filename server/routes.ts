@@ -64,27 +64,43 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const ssoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { message: "Too many SSO requests. Please try again in a minute." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.get("/sso", async (req, res) => {
+  app.get("/sso", ssoLimiter, async (req, res) => {
     const token = req.query.token;
     if (!token) return res.redirect("/login?error=missing_token");
 
     try {
-      const response = await fetch("https://aksportal.com/api/sso/verify-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      let ssoResponse: globalThis.Response;
+      try {
+        ssoResponse = await fetch("https://aksportal.com/api/sso/verify-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
-      if (!response.ok) {
+      if (!ssoResponse.ok) {
         return res.redirect("/login?error=invalid_token");
       }
 
-      const userData = await response.json();
+      const userData = await ssoResponse.json();
 
       if (!userData.id || typeof userData.id !== "string") {
         console.warn("SSO login rejected: missing or invalid external subject identifier");
@@ -127,6 +143,13 @@ export async function registerRoutes(
           }
           throw createErr;
         }
+      } else if (localUser.role !== mappedRole) {
+        const updated = await storage.updateUser(localUser.id, { role: mappedRole });
+        if (!updated) {
+          console.error(`SSO login rejected: failed to synchronize role for user id '${localUser.id}'`);
+          return res.redirect("/login?error=sso_failed");
+        }
+        localUser = updated;
       }
 
       const sessionUser = { id: localUser.id, username: localUser.username, role: localUser.role };
