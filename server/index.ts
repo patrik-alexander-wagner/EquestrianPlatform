@@ -7,6 +7,7 @@ import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { verifyPassword } from "./auth";
 
@@ -55,7 +56,7 @@ const PgStore = ConnectPgSimple(session);
 if (!process.env.SESSION_SECRET) {
   console.warn("WARNING: SESSION_SECRET is not set. Sessions will be invalidated on every server restart. Set SESSION_SECRET in environment variables for stable sessions.");
 }
-const sessionSecret = process.env.SESSION_SECRET || require("crypto").randomBytes(32).toString("hex");
+const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
 app.use(
   session({
