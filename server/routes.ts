@@ -1050,7 +1050,7 @@ export async function registerRoutes(
       const soJson = {
         customerId: details.customer?.netsuiteId || "",
         po: poNumber,
-        department: "32",
+        department: "188",
         memo: `Monthly Livery Invoice - ${customerName} (${memoMonth})`,
         tranDate,
         items: details.items,
