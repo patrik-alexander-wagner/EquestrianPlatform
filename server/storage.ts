@@ -247,7 +247,8 @@ export class DatabaseStorage implements IStorage {
       result = result.filter(h => h.horseName.toLowerCase().includes(search.toLowerCase()));
     }
     if (customerSearch) {
-      result = result.filter(h => h.customer && h.customer.toLowerCase().includes(customerSearch.toLowerCase()));
+      const term = customerSearch.toLowerCase();
+      result = result.filter(h => h.ownerName && h.ownerName.toLowerCase().includes(term));
     }
     if (stableBoxSearch) {
       result = result.filter(h =>
