@@ -823,6 +823,7 @@ export class DatabaseStorage implements IStorage {
 
     const monthBillingElements = allBillingElements.filter(el => {
       if (excludedCustomerIds.has(el.customerId)) return false;
+      if (!el.invoiceId) return false;
       return el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
     });
 
@@ -889,9 +890,9 @@ export class DatabaseStorage implements IStorage {
     const allCustomers = await db.select().from(customers);
     const allItems = await db.select().from(items);
 
-    let filtered = allBillingElements;
+    let filtered = allBillingElements.filter(el => !!el.invoiceId);
     if (month && groupBy === "customer") {
-      filtered = allBillingElements.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
+      filtered = filtered.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
     }
 
     const grouped: Record<string, any> = {};
