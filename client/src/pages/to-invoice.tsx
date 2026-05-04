@@ -52,18 +52,21 @@ function getProRateFraction(agreement: any, billingMonth: string): { fraction: n
   const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
   const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
 
-  const startDate = agreement.startDate ? new Date(agreement.startDate) : null;
-  const endDate = agreement.endDate ? new Date(agreement.endDate) : null;
-
   let firstDay = 1;
   let lastDay = daysInMonth;
 
-  if (startDate && startDate.getFullYear() === bmYear && startDate.getMonth() + 1 === bmMonth && startDate.getDate() > 1) {
-    firstDay = startDate.getDate();
+  if (agreement.startDate) {
+    const [sY, sM, sD] = agreement.startDate.split("-").map(Number);
+    if (sY === bmYear && sM === bmMonth && sD > 1) {
+      firstDay = sD;
+    }
   }
 
-  if (endDate && endDate.getFullYear() === bmYear && endDate.getMonth() + 1 === bmMonth && endDate.getDate() < daysInMonth) {
-    lastDay = endDate.getDate();
+  if (agreement.endDate) {
+    const [eY, eM, eD] = agreement.endDate.split("-").map(Number);
+    if (eY === bmYear && eM === bmMonth && eD < daysInMonth) {
+      lastDay = eD;
+    }
   }
 
   const activeDays = lastDay - firstDay + 1;
@@ -74,19 +77,12 @@ function getProRateFraction(agreement: any, billingMonth: string): { fraction: n
 
 function isMonthInAgreementRange(agreement: any, billingMonth: string): boolean {
   const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
-  const bmDate = new Date(bmYear, bmMonth - 1, 1);
-  const bmEnd = new Date(bmYear, bmMonth, 0);
+  const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
+  const bmStartStr = `${bmYear}-${String(bmMonth).padStart(2, "0")}-01`;
+  const bmEndStr = `${bmYear}-${String(bmMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 
-  if (agreement.startDate) {
-    const start = new Date(agreement.startDate);
-    if (start > bmEnd) return false;
-  }
-
-  if (agreement.endDate) {
-    const end = new Date(agreement.endDate);
-    const bmStart = new Date(bmYear, bmMonth - 1, 1);
-    if (end < bmStart) return false;
-  }
+  if (agreement.startDate && agreement.startDate > bmEndStr) return false;
+  if (agreement.endDate && agreement.endDate < bmStartStr) return false;
 
   return true;
 }
