@@ -416,15 +416,15 @@ export class DatabaseStorage implements IStorage {
 
     return await db.transaction(async (tx) => {
       for (const ns of netsuiteItems) {
-        const netsuiteIdRaw = pickField(ns, "internalId", "internalid", "id", "netsuiteId", "netsuite_id");
+        const netsuiteIdRaw = pickField(ns, "id", "internalId", "internalid", "netsuiteId", "netsuite_id");
         const netsuiteId = toStr(netsuiteIdRaw);
         if (!netsuiteId) { skipped++; continue; }
 
-        const name = toStr(pickField(ns, "name", "displayName", "itemId")) || "Unnamed";
+        const name = toStr(pickField(ns, "fullname", "fullName", "name", "displayName", "displayname", "itemId", "itemid")) || `NS#${netsuiteId}`;
         const price = toStr(pickField(ns, "price", "salesPrice", "rate"));
-        const lastPurchasePrice = toStr(pickField(ns, "lastPurchasePrice", "last_purchase_price"));
-        const unitFactor = toStr(pickField(ns, "unitFactor", "unit_factor", "unitsType"));
-        const isInactive = toBool(pickField(ns, "isInactive", "is_inactive", "inactive"));
+        const lastPurchasePrice = toStr(pickField(ns, "lastpurchaseprice", "lastPurchasePrice", "last_purchase_price"));
+        const unitFactor = toStr(pickField(ns, "unitfactor", "unitFactor", "unit_factor", "unitsType"));
+        const isInactive = toBool(pickField(ns, "isinactive", "isInactive", "is_inactive", "inactive"));
 
         const existingItem = byNetsuiteId.get(netsuiteId);
         if (existingItem) {
