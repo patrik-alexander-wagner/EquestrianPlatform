@@ -519,6 +519,46 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/items/sync-netsuite/debug", requireAdmin, async (_req, res) => {
+    try {
+      const restletUrl = "https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2163&deploy=1";
+      const consumerKey = process.env.NETSUITE_CONSUMER_KEY!;
+      const consumerSecret = process.env.NETSUITE_CONSUMER_SECRET!;
+      const tokenId = process.env.NETSUITE_TOKEN_ID!;
+      const tokenSecret = process.env.NETSUITE_TOKEN_SECRET!;
+      const accountId = process.env.NETSUITE_ACCOUNT_ID!;
+      const oauth = new OAuth({
+        consumer: { key: consumerKey, secret: consumerSecret },
+        signature_method: "HMAC-SHA256",
+        hash_function(b: string, k: string) { return crypto.createHmac("sha256", k).update(b).digest("base64"); },
+      });
+      const token = { key: tokenId, secret: tokenSecret };
+      const authHeader = oauth.toHeader(oauth.authorize({ url: restletUrl, method: "GET" }, token));
+      const authWithRealm = authHeader.Authorization.replace("OAuth ", `OAuth realm="${accountId}", `);
+      const response = await fetch(restletUrl, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "Authorization": authWithRealm, "Cookie": "" },
+      });
+      const text = await response.text();
+      let payload: any = null;
+      try { payload = JSON.parse(text); } catch { payload = { rawText: text.slice(0, 2000) }; }
+      const arr = Array.isArray(payload) ? payload
+        : Array.isArray(payload?.items) ? payload.items
+        : Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(payload?.results) ? payload.results
+        : null;
+      res.json({
+        httpStatus: response.status,
+        topLevelShape: Array.isArray(payload) ? "array" : (payload && typeof payload === "object" ? Object.keys(payload) : typeof payload),
+        totalItems: arr?.length ?? null,
+        firstThree: arr?.slice(0, 3) ?? null,
+        firstItemKeys: arr?.[0] ? Object.keys(arr[0]) : null,
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   let netsuiteSyncInProgress = false;
   app.post("/api/items/sync-netsuite", requireAdmin, async (_req, res) => {
     if (netsuiteSyncInProgress) {
