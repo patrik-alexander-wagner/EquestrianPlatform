@@ -672,6 +672,11 @@ export async function registerRoutes(
         req.body.userId = user.id;
       }
       const data = validateBody(insertBillingElementSchema, req.body);
+      if (data.itemId) {
+        const item = await storage.getItem(data.itemId);
+        if (!item) return res.status(404).json({ message: "Item not found" });
+        if (item.isInactive) return res.status(400).json({ message: `Item "${item.name}" is inactive and cannot be used in new billing elements.` });
+      }
       const element = await storage.createBillingElement(data);
       auditLog(req, "create_billing_element", "billing_element", element.id);
       res.json(element);

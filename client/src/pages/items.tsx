@@ -48,6 +48,22 @@ export default function ItemsPage() {
       label: "Price",
       render: (item: Item) => item.price ? `AED ${item.price}` : "-",
     },
+    {
+      key: "isInactive",
+      label: "Status",
+      render: (item: Item) => (
+        <span
+          className={
+            item.isInactive
+              ? "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground"
+              : "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+          }
+          data-testid={`status-item-${item.id}`}
+        >
+          {item.isInactive ? "Inactive" : "Active"}
+        </span>
+      ),
+    },
   ];
 
   const importFields = [

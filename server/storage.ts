@@ -381,11 +381,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLiveryPackageItems(): Promise<Item[]> {
-    return await db.select().from(items).where(eq(items.isLiveryPackage, true));
+    return await db.select().from(items).where(and(eq(items.isLiveryPackage, true), eq(items.isInactive, false)));
   }
 
   async getNonLiveryPackageItems(): Promise<Item[]> {
-    return await db.select().from(items).where(eq(items.isLiveryPackage, false));
+    return await db.select().from(items).where(and(eq(items.isLiveryPackage, false), eq(items.isInactive, false)));
   }
 
   async getLiveryAgreements(status?: string): Promise<any[]> {
