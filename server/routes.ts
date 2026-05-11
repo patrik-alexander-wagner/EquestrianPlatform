@@ -519,6 +519,82 @@ export async function registerRoutes(
     }
   });
 
+  let netsuiteSyncInProgress = false;
+  app.post("/api/items/sync-netsuite", requireAdmin, async (_req, res) => {
+    if (netsuiteSyncInProgress) {
+      return res.status(409).json({ message: "A NetSuite sync is already in progress. Please wait for it to finish." });
+    }
+    netsuiteSyncInProgress = true;
+    const startedAt = Date.now();
+    try {
+      const restletUrl = "https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2163&deploy=1";
+      const consumerKey = process.env.NETSUITE_CONSUMER_KEY;
+      const consumerSecret = process.env.NETSUITE_CONSUMER_SECRET;
+      const tokenId = process.env.NETSUITE_TOKEN_ID;
+      const tokenSecret = process.env.NETSUITE_TOKEN_SECRET;
+      const accountId = process.env.NETSUITE_ACCOUNT_ID;
+
+      if (!consumerKey || !consumerSecret || !tokenId || !tokenSecret || !accountId) {
+        return res.status(400).json({ message: "NetSuite credentials are not configured. Please set NETSUITE_* environment variables." });
+      }
+
+      const oauth = new OAuth({
+        consumer: { key: consumerKey, secret: consumerSecret },
+        signature_method: "HMAC-SHA256",
+        hash_function(baseString: string, key: string) {
+          return crypto.createHmac("sha256", key).update(baseString).digest("base64");
+        },
+      });
+
+      const token = { key: tokenId, secret: tokenSecret };
+      const requestData = { url: restletUrl, method: "GET" };
+      const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
+      const authWithRealm = authHeader.Authorization.replace("OAuth ", `OAuth realm="${accountId}", `);
+
+      const response = await fetch(restletUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authWithRealm,
+          "Cookie": "",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        return res.status(502).json({ message: `NetSuite returned ${response.status}: ${errorText.slice(0, 500)}` });
+      }
+
+      const responseText = await response.text();
+      let payload: any;
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        return res.status(502).json({ message: "NetSuite response was not valid JSON" });
+      }
+
+      const netsuiteItems: any[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.items) ? payload.items
+        : Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(payload?.results) ? payload.results
+        : [];
+
+      if (!Array.isArray(netsuiteItems) || netsuiteItems.length === 0) {
+        return res.status(502).json({ message: "NetSuite returned no items (or unexpected response shape)" });
+      }
+
+      const result = await storage.syncItemsFromNetsuite(netsuiteItems);
+      const durationMs = Date.now() - startedAt;
+      auditLog(_req as Request, "sync_netsuite_items", "items", "bulk", `created=${result.created} updated=${result.updated} total=${result.processed}`);
+      res.json({ success: true, ...result, durationMs });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "NetSuite sync failed" });
+    } finally {
+      netsuiteSyncInProgress = false;
+    }
+  });
+
   app.post("/api/items/import", requireAdmin, async (req, res) => {
     try {
       const { items: data } = req.body;

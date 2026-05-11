@@ -75,6 +75,7 @@ export interface IStorage {
   updateItem(id: string, item: Partial<InsertItem>): Promise<Item | undefined>;
   getLiveryPackageItems(): Promise<Item[]>;
   getNonLiveryPackageItems(): Promise<Item[]>;
+  syncItemsFromNetsuite(netsuiteItems: any[]): Promise<{ created: number; updated: number; processed: number; skipped: number }>;
 
   getLiveryAgreements(status?: string): Promise<any[]>;
   getLiveryAgreement(id: string): Promise<LiveryAgreement | undefined>;
@@ -386,6 +387,66 @@ export class DatabaseStorage implements IStorage {
 
   async getNonLiveryPackageItems(): Promise<Item[]> {
     return await db.select().from(items).where(and(eq(items.isLiveryPackage, false), eq(items.isInactive, false)));
+  }
+
+  async syncItemsFromNetsuite(netsuiteItems: any[]): Promise<{ created: number; updated: number; processed: number; skipped: number }> {
+    const pickField = (obj: any, ...keys: string[]) => {
+      for (const k of keys) {
+        if (obj?.[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+      }
+      return null;
+    };
+    const toStr = (v: any) => v === null || v === undefined ? null : String(v);
+    const toBool = (v: any) => {
+      if (typeof v === "boolean") return v;
+      if (typeof v === "string") return v.toLowerCase() === "true" || v === "T" || v === "t" || v === "1";
+      if (typeof v === "number") return v !== 0;
+      return false;
+    };
+
+    const existing = await db.select().from(items);
+    const byNetsuiteId = new Map<string, Item>();
+    for (const it of existing) {
+      if (it.netsuiteId) byNetsuiteId.set(String(it.netsuiteId), it);
+    }
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    return await db.transaction(async (tx) => {
+      for (const ns of netsuiteItems) {
+        const netsuiteIdRaw = pickField(ns, "internalId", "internalid", "id", "netsuiteId", "netsuite_id");
+        const netsuiteId = toStr(netsuiteIdRaw);
+        if (!netsuiteId) { skipped++; continue; }
+
+        const name = toStr(pickField(ns, "name", "displayName", "itemId")) || "Unnamed";
+        const price = toStr(pickField(ns, "price", "salesPrice", "rate"));
+        const lastPurchasePrice = toStr(pickField(ns, "lastPurchasePrice", "last_purchase_price"));
+        const unitFactor = toStr(pickField(ns, "unitFactor", "unit_factor", "unitsType"));
+        const isInactive = toBool(pickField(ns, "isInactive", "is_inactive", "inactive"));
+
+        const existingItem = byNetsuiteId.get(netsuiteId);
+        if (existingItem) {
+          await tx.update(items)
+            .set({ name, price, lastPurchasePrice, unitFactor, isInactive })
+            .where(eq(items.id, existingItem.id));
+          updated++;
+        } else {
+          await tx.insert(items).values({
+            netsuiteId,
+            name,
+            price,
+            lastPurchasePrice,
+            unitFactor,
+            isInactive,
+            isLiveryPackage: false,
+          });
+          created++;
+        }
+      }
+      return { created, updated, processed: created + updated, skipped };
+    });
   }
 
   async getLiveryAgreements(status?: string): Promise<any[]> {

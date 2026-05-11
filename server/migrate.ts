@@ -24,6 +24,16 @@ export async function runMigration() {
       console.log("Migration: Obsolete items columns dropped");
     }
 
+    const lastPurchasePriceCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'items' AND column_name = 'last_purchase_price'
+    `);
+    if (lastPurchasePriceCheck.rows.length === 0) {
+      console.log("Migration: Adding last_purchase_price column to items...");
+      await client.query(`ALTER TABLE items ADD COLUMN last_purchase_price NUMERIC`);
+      console.log("Migration: last_purchase_price column added");
+    }
+
     const approvalTableCheck = await client.query(`
       SELECT table_name FROM information_schema.tables
       WHERE table_name = 'monthly_billing_approvals'

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, DollarSign, Trash2 } from "lucide-react";
+import { Plus, DollarSign, Trash2, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { AlertTriangle } from "lucide-react";
 import type { Item } from "@shared/schema";
 
@@ -39,6 +39,50 @@ export default function BillingElementsPage() {
     queryKey: ["/api/me"],
   });
   const isLiveryAdmin = !!me?.role;
+  const isAdmin = me?.role === "ADMIN";
+
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; processed: number; skipped: number; durationMs: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const syncNetsuiteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/items/sync-netsuite", {});
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      setSyncResult({
+        created: data.created || 0,
+        updated: data.updated || 0,
+        processed: data.processed || 0,
+        skipped: data.skipped || 0,
+        durationMs: data.durationMs || 0,
+      });
+      setSyncError(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/items/non-livery-packages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/items/livery-packages"] });
+      toast({ title: "Sync complete", description: `Created ${data.created}, updated ${data.updated}` });
+    },
+    onError: (err: any) => {
+      setSyncResult(null);
+      setSyncError(err?.message || "Sync failed");
+    },
+  });
+
+  const startSync = () => {
+    setSyncResult(null);
+    setSyncError(null);
+    setShowSyncDialog(true);
+    syncNetsuiteMutation.mutate();
+  };
+
+  const closeSyncDialog = () => {
+    if (syncNetsuiteMutation.isPending) return;
+    setShowSyncDialog(false);
+    setSyncResult(null);
+    setSyncError(null);
+  };
 
   const [horseSearch, setHorseSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -283,7 +327,96 @@ export default function BillingElementsPage() {
       <PageHeader
         title="Billing Elements"
         description="Add extra billable items per horse"
+        actions={isAdmin ? (
+          <Button
+            variant="outline"
+            onClick={startSync}
+            disabled={syncNetsuiteMutation.isPending}
+            data-testid="button-sync-netsuite"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
+            {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
+          </Button>
+        ) : undefined}
       />
+
+      <Dialog open={showSyncDialog} onOpenChange={(open) => { if (!open) closeSyncDialog(); }}>
+        <DialogContent data-testid="dialog-sync-netsuite">
+          <DialogHeader>
+            <DialogTitle>NetSuite Item Sync</DialogTitle>
+            <DialogDescription>
+              {syncNetsuiteMutation.isPending
+                ? "Fetching items from NetSuite and updating the local catalogue. This usually takes 20-60 seconds for ~2,000 items. Please don't close this window."
+                : syncError
+                ? "Sync failed."
+                : "Sync complete."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {syncNetsuiteMutation.isPending && (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <RefreshCw className="w-10 h-10 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Syncing items from NetSuite...</p>
+            </div>
+          )}
+
+          {!syncNetsuiteMutation.isPending && syncResult && (
+            <div className="py-4 space-y-3" data-testid="sync-result">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="font-medium">Sync complete</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded border p-3">
+                  <div className="text-muted-foreground">Created</div>
+                  <div className="text-2xl font-semibold" data-testid="sync-created">{syncResult.created.toLocaleString()}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="text-muted-foreground">Updated</div>
+                  <div className="text-2xl font-semibold" data-testid="sync-updated">{syncResult.updated.toLocaleString()}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="text-muted-foreground">Total processed</div>
+                  <div className="text-2xl font-semibold" data-testid="sync-processed">{syncResult.processed.toLocaleString()}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="text-muted-foreground">Duration</div>
+                  <div className="text-2xl font-semibold">{(syncResult.durationMs / 1000).toFixed(1)}s</div>
+                </div>
+              </div>
+              {syncResult.skipped > 0 && (
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  {syncResult.skipped} item{syncResult.skipped === 1 ? " was" : "s were"} skipped (missing internalId).
+                </p>
+              )}
+            </div>
+          )}
+
+          {!syncNetsuiteMutation.isPending && syncError && (
+            <div className="py-4 space-y-3" data-testid="sync-error">
+              <div className="flex items-center gap-2 text-destructive">
+                <XCircle className="w-5 h-5" />
+                <span className="font-medium">Sync failed</span>
+              </div>
+              <p className="text-sm text-muted-foreground break-words">{syncError}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {!syncNetsuiteMutation.isPending && syncError && (
+              <Button onClick={startSync} data-testid="button-sync-retry">Retry</Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={closeSyncDialog}
+              disabled={syncNetsuiteMutation.isPending}
+              data-testid="button-sync-close"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex gap-3 mb-4 flex-wrap items-center">
         <SearchBar placeholder="Horse..." value={horseSearch} onChange={setHorseSearch} className="w-52" />

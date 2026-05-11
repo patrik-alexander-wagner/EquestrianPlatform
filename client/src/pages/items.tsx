@@ -49,6 +49,11 @@ export default function ItemsPage() {
       render: (item: Item) => item.price ? `AED ${item.price}` : "-",
     },
     {
+      key: "lastPurchasePrice",
+      label: "Last Purchase Price",
+      render: (item: Item) => item.lastPurchasePrice ? `AED ${item.lastPurchasePrice}` : "-",
+    },
+    {
       key: "isInactive",
       label: "Status",
       render: (item: Item) => (
