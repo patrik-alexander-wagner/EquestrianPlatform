@@ -137,7 +137,7 @@ shared/
   - If any agreements lack a horse assignment, a blocking modal appears listing Customer, Box, and Package for each unassigned agreement
   - Pre-check is scoped per customer (not global) and enforced both client-side and server-side (POST /api/invoices returns 400)
   - API: GET /api/horse-assignment-check?billingMonth=YYYY-MM&customerId=UUID
-- NetSuite item sync (Billing Elements page, top-right "Sync with NetSuite" button, ADMIN only):
+- NetSuite item sync (Items page, top-right "Sync with NetSuite" button, ADMIN only):
   - POST /api/items/sync-netsuite calls hardcoded RESTlet https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2163&deploy=1 via GET with OAuth 1.0 TBA (HMAC-SHA256), reuses NETSUITE_* env vars
   - Upserts items by netsuiteId in a single DB transaction; updates name/price/lastPurchasePrice/unitFactor/isInactive; never touches id or isLiveryPackage; new items default isLiveryPackage=false
   - In-process lock prevents concurrent syncs (returns 409 if one is already running)
