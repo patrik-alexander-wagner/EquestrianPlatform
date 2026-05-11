@@ -833,10 +833,7 @@ export class DatabaseStorage implements IStorage {
         quantity: el.quantity,
         rate: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),
         description: item?.name || "Unknown",
-        department: "",
-        class: "",
         subclass: box?.netsuiteId || "",
-        location: "",
       };
     });
 
