@@ -626,7 +626,7 @@ export async function registerRoutes(
 
       const result = await storage.syncItemsFromNetsuite(netsuiteItems);
       const durationMs = Date.now() - startedAt;
-      auditLog(_req as Request, "sync_netsuite_items", "items", "bulk", `created=${result.created} updated=${result.updated} total=${result.processed}`);
+      auditLog(_req as Request, "sync_netsuite_items", "items", "bulk", `created=${result.created} updated=${result.updated} unchanged=${result.unchanged} total=${result.processed}`);
       res.json({ success: true, ...result, durationMs });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "NetSuite sync failed" });

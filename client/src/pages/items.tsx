@@ -38,7 +38,7 @@ export default function ItemsPage() {
   });
 
   const [showSyncDialog, setShowSyncDialog] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; processed: number; skipped: number; durationMs: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; unchanged: number; processed: number; skipped: number; durationMs: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const syncNetsuiteMutation = useMutation({
@@ -50,6 +50,7 @@ export default function ItemsPage() {
       setSyncResult({
         created: data.created || 0,
         updated: data.updated || 0,
+        unchanged: data.unchanged || 0,
         processed: data.processed || 0,
         skipped: data.skipped || 0,
         durationMs: data.durationMs || 0,
@@ -193,14 +194,18 @@ export default function ItemsPage() {
                   <div className="text-2xl font-semibold" data-testid="sync-created">{syncResult.created.toLocaleString()}</div>
                 </div>
                 <div className="rounded border p-3">
-                  <div className="text-muted-foreground">Updated</div>
+                  <div className="text-muted-foreground">Updated (changed)</div>
                   <div className="text-2xl font-semibold" data-testid="sync-updated">{syncResult.updated.toLocaleString()}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="text-muted-foreground">Unchanged</div>
+                  <div className="text-2xl font-semibold" data-testid="sync-unchanged">{syncResult.unchanged.toLocaleString()}</div>
                 </div>
                 <div className="rounded border p-3">
                   <div className="text-muted-foreground">Total processed</div>
                   <div className="text-2xl font-semibold" data-testid="sync-processed">{syncResult.processed.toLocaleString()}</div>
                 </div>
-                <div className="rounded border p-3">
+                <div className="rounded border p-3 col-span-2">
                   <div className="text-muted-foreground">Duration</div>
                   <div className="text-2xl font-semibold">{(syncResult.durationMs / 1000).toFixed(1)}s</div>
                 </div>
