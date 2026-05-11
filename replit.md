@@ -52,7 +52,8 @@ shared/
 ```
 
 ## Database Tables
-- users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes, items
+- users (role: ADMIN | LIVERY_ADMIN | VETERINARY | STORES | FINANCE), customers (fullname; firstname/lastname kept but empty), horses, stables, boxes
+- items (id, netsuiteId, name, unitFactor, price, averageCost, isInactive, isLiveryPackage) — `department`, `location`, `class`, `status` were removed (unused); NetSuite SO body still emits these keys but with empty string values
 - livery_agreements (NO horseId — horse linkage is via horse_movements), billing_elements (has its own horseId, userId tracks who created it), invoices (status: APPROVED | PUSHED_TO_ERP; created directly as APPROVED after pre-generation sign-off)
 - monthly_billing_approvals (customerId, billingMonth, step[VET|STORES], userId, approved: pre-generation sign-off; unique constraint on customer+month+step)
 - horse_ownership (horseId → customerId: tracks which customer owns which horse)

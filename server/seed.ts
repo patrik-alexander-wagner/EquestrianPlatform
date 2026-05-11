@@ -72,14 +72,14 @@ export async function seedDatabase() {
   ]).returning();
 
   const createdItems = await db.insert(items).values([
-    { name: "Full Livery Package", unitFactor: "1", price: "1200", department: "Livery", status: "active", isLiveryPackage: true },
-    { name: "Part Livery Package", unitFactor: "1", price: "750", department: "Livery", status: "active", isLiveryPackage: true },
-    { name: "DIY Livery Package", unitFactor: "1", price: "450", department: "Livery", status: "active", isLiveryPackage: true },
-    { name: "Farrier Service", unitFactor: "1", price: "120", department: "Services", status: "active", isLiveryPackage: false },
-    { name: "Veterinary Check", unitFactor: "1", price: "150", department: "Services", status: "active", isLiveryPackage: false },
-    { name: "Saddle Fitting", unitFactor: "1", price: "75", department: "Equipment", status: "active", isLiveryPackage: false },
-    { name: "Feed Supplement", unitFactor: "1", price: "45", department: "Feed", status: "active", isLiveryPackage: false },
-    { name: "Arena Booking", unitFactor: "1", price: "35", department: "Facilities", status: "active", isLiveryPackage: false },
+    { name: "Full Livery Package", unitFactor: "1", price: "1200", isLiveryPackage: true },
+    { name: "Part Livery Package", unitFactor: "1", price: "750", isLiveryPackage: true },
+    { name: "DIY Livery Package", unitFactor: "1", price: "450", isLiveryPackage: true },
+    { name: "Farrier Service", unitFactor: "1", price: "120", isLiveryPackage: false },
+    { name: "Veterinary Check", unitFactor: "1", price: "150", isLiveryPackage: false },
+    { name: "Saddle Fitting", unitFactor: "1", price: "75", isLiveryPackage: false },
+    { name: "Feed Supplement", unitFactor: "1", price: "45", isLiveryPackage: false },
+    { name: "Arena Booking", unitFactor: "1", price: "35", isLiveryPackage: false },
   ]).returning();
 
   const allBoxes = await storage.getBoxes();

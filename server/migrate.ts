@@ -7,6 +7,23 @@ export async function runMigration() {
   try {
     await client.query("SELECT pg_advisory_lock(20260410)");
 
+    const itemsObsoleteCols = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'items'
+        AND column_name IN ('department', 'location', 'class', 'status')
+    `);
+    if (itemsObsoleteCols.rows.length > 0) {
+      console.log(`Migration: Dropping obsolete items columns: ${itemsObsoleteCols.rows.map(r => r.column_name).join(", ")}`);
+      await client.query(`
+        ALTER TABLE items
+          DROP COLUMN IF EXISTS department,
+          DROP COLUMN IF EXISTS location,
+          DROP COLUMN IF EXISTS class,
+          DROP COLUMN IF EXISTS status
+      `);
+      console.log("Migration: Obsolete items columns dropped");
+    }
+
     const approvalTableCheck = await client.query(`
       SELECT table_name FROM information_schema.tables
       WHERE table_name = 'monthly_billing_approvals'

@@ -55,11 +55,7 @@ export default function ItemsPage() {
     { targetField: "unitFactor", label: "Unit Factor" },
     { targetField: "price", label: "Price" },
     { targetField: "averageCost", label: "Average Cost" },
-    { targetField: "department", label: "Department" },
-    { targetField: "class", label: "Class" },
-    { targetField: "location", label: "Location" },
     { targetField: "netsuiteId", label: "NetSuite ID" },
-    { targetField: "status", label: "Status" },
     { targetField: "isInactive", label: "Is Inactive (true/false)" },
   ];
 
@@ -69,11 +65,7 @@ export default function ItemsPage() {
       unitFactor: row.unitFactor || null,
       price: row.price || null,
       averageCost: row.averageCost || null,
-      department: row.department || null,
-      class: row.class || null,
-      location: row.location || null,
       netsuiteId: row.netsuiteId || null,
-      status: row.status || "active",
       isLiveryPackage: false,
       isInactive: row.isInactive === "true",
     }));

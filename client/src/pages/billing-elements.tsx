@@ -127,9 +127,7 @@ export default function BillingElementsPage() {
     if (!itemSearch.trim()) return nonLiveryItems;
     const search = itemSearch.toLowerCase();
     return nonLiveryItems.filter((i: Item) =>
-      i.name.toLowerCase().includes(search) ||
-      (i.department && i.department.toLowerCase().includes(search)) ||
-      (i.location && i.location.toLowerCase().includes(search))
+      i.name.toLowerCase().includes(search)
     );
   }, [nonLiveryItems, itemSearch]);
 
@@ -442,7 +440,7 @@ export default function BillingElementsPage() {
                           >
                             <div className="font-medium">{i.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {i.price ? `AED ${i.price}` : "No price"}{i.department ? ` · ${i.department}` : ""}{i.location ? ` · ${i.location}` : ""}
+                              {i.price ? `AED ${i.price}` : "No price"}
                             </div>
                           </button>
                         ))

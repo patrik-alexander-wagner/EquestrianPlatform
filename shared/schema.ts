@@ -90,11 +90,7 @@ export const items = pgTable("items", {
   unitFactor: numeric("unit_factor"),
   price: numeric("price"),
   averageCost: numeric("average_cost"),
-  department: text("department"),
-  class: text("class"),
-  location: text("location"),
   isInactive: boolean("is_inactive").notNull().default(false),
-  status: text("status").notNull().default("active"),
   isLiveryPackage: boolean("is_livery_package").notNull().default(false),
 });
 
