@@ -176,6 +176,43 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
         ];
       });
 
+  const FOOTER_HEIGHT = 35;
+  const TOTALS_BLOCK_HEIGHT = 40;
+
+  const drawFooter = () => {
+    const footerY = pageHeight - 30;
+    doc.setDrawColor(...RED);
+    doc.setLineWidth(0.5);
+    doc.line(margin, footerY - 5, rightCol, footerY - 5);
+
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Abu Dhabi Equestrian Club", margin, footerY);
+    doc.setFont("helvetica", "normal");
+    doc.text("Al Mushrif - Abu Dhabi", margin, footerY + 4);
+    doc.text("United Arab Emirates", margin, footerY + 8);
+
+    const contactX = margin + 60;
+    doc.text("Tel: +971 2 445 5500", contactX, footerY);
+    doc.text("Fax: 02 445 5500", contactX, footerY + 4);
+    doc.setTextColor(0, 0, 200);
+    doc.text("www.adec.ae/", contactX, footerY + 8);
+    doc.setTextColor(0, 0, 0);
+
+    const bankX = margin + 115;
+    doc.text("BankName: Abu Dhabi Commercial Bank", bankX, footerY);
+    doc.text("IBAN: AE630030000131122020002", bankX, footerY + 4);
+    doc.text("Account Number : 131122020002", bankX, footerY + 8);
+    doc.text("BIC / SWIFT : ADCBAEAAXXX", bankX, footerY + 12);
+    doc.text("Branch Name : 105 / AL SALAM STREET", bankX, footerY + 16);
+
+    if (monthLabel) {
+      doc.setFontSize(7);
+      doc.text(`[${monthLabel}]`, margin, pageHeight - 6);
+    }
+  };
+
   autoTable(doc, {
     startY: y,
     head: [["#", "Ln. Description", "Horse", "Bill Date", "Qty", "Amount", "Vat Amount", "Net Amount"]],
@@ -200,11 +237,20 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
       6: { cellWidth: 22, halign: "right" },
       7: { cellWidth: 24, halign: "right" },
     },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, bottom: FOOTER_HEIGHT },
+    didDrawPage: () => {
+      drawFooter();
+    },
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY || y + 30;
-  let totalsY = finalY + 12;
+  const availableSpace = pageHeight - FOOTER_HEIGHT - finalY;
+  if (availableSpace < TOTALS_BLOCK_HEIGHT) {
+    doc.addPage();
+    drawFooter();
+  }
+
+  let totalsY = (availableSpace < TOTALS_BLOCK_HEIGHT ? 20 : finalY + 12);
 
   doc.setFontSize(10);
   const labelX = pageWidth / 2 + 10;
@@ -213,6 +259,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.setFillColor(...GREY_BAND);
   doc.rect(labelX - 4, totalsY - 5, rightCol - labelX + 6, 7, "F");
   doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
   doc.text("Total (exc. VAT)", labelX, totalsY);
   doc.text(`AED ${subtotal.toFixed(2)}`, valueX, totalsY, { align: "right" });
 
@@ -237,37 +284,14 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text(`AED ${grandTotal.toFixed(2)}`, valueX, totalsY, { align: "right" });
   doc.setTextColor(0, 0, 0);
 
-  const footerY = pageHeight - 30;
-  doc.setDrawColor(...RED);
-  doc.setLineWidth(0.5);
-  doc.line(margin, footerY - 5, rightCol, footerY - 5);
-
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "bold");
-  doc.text("Abu Dhabi Equestrian Club", margin, footerY);
-  doc.setFont("helvetica", "normal");
-  doc.text("Al Mushrif - Abu Dhabi", margin, footerY + 4);
-  doc.text("United Arab Emirates", margin, footerY + 8);
-
-  const contactX = margin + 60;
-  doc.text("Tel: +971 2 445 5500", contactX, footerY);
-  doc.text("Fax: 02 445 5500", contactX, footerY + 4);
-  doc.setTextColor(0, 0, 200);
-  doc.text("www.adec.ae/", contactX, footerY + 8);
-  doc.setTextColor(0, 0, 0);
-
-  const bankX = margin + 115;
-  doc.text("BankName: Abu Dhabi Commercial Bank", bankX, footerY);
-  doc.text("IBAN: AE630030000131122020002", bankX, footerY + 4);
-  doc.text("Account Number : 131122020002", bankX, footerY + 8);
-  doc.text("BIC / SWIFT : ADCBAEAAXXX", bankX, footerY + 12);
-  doc.text("Branch Name : 105 / AL SALAM STREET", bankX, footerY + 16);
-
-  if (monthLabel) {
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
     doc.setFontSize(7);
-    doc.text(`[${monthLabel}]`, margin, pageHeight - 6);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`${p}/${totalPages}`, rightCol, pageHeight - 6, { align: "right" });
   }
-  doc.text("1/1", rightCol, pageHeight - 6, { align: "right" });
 
   return doc;
 }
