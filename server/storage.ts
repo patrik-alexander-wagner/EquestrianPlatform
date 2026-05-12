@@ -1,4 +1,4 @@
-import { eq, and, ilike, or, sql, desc } from "drizzle-orm";
+import { eq, and, ilike, or, sql, desc, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import {
@@ -27,7 +27,7 @@ async function applyActiveItemPrices<T extends { id: string; price: string | nul
   if (rows.length === 0) return rows;
   const ids = rows.map(r => r.id);
   const activePrices = await db.select().from(itemPrices)
-    .where(and(eq(itemPrices.isActive, true), sql`${itemPrices.itemId} = ANY(${ids}::uuid[])`));
+    .where(and(eq(itemPrices.isActive, true), inArray(itemPrices.itemId, ids)));
   const priceByItemId = new Map<string, string>();
   for (const p of activePrices) priceByItemId.set(p.itemId, p.price);
   return rows.map(r => priceByItemId.has(r.id) ? { ...r, price: priceByItemId.get(r.id)! } : r);
