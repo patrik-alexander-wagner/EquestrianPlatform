@@ -187,6 +187,22 @@ export default function BillingElementsPage() {
   const itemUnitFactor = selectedItem?.unitFactor ? parseFloat(selectedItem.unitFactor) : 1;
   const numericQuantity = quantity === "" ? 0 : Number(quantity);
   const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * numericQuantity : 0;
+  const itemLastPurchasePrice = selectedItem?.lastPurchasePrice ? parseFloat(selectedItem.lastPurchasePrice) : null;
+  const finalSellingPriceNum = finalSellingPrice ? parseFloat(finalSellingPrice) : 0;
+  const perUnitSellingPrice = numericQuantity > 0 ? finalSellingPriceNum / numericQuantity : 0;
+  const belowPurchasePrice =
+    itemLastPurchasePrice !== null &&
+    itemLastPurchasePrice > 0 &&
+    finalSellingPrice !== "" &&
+    numericQuantity > 0 &&
+    perUnitSellingPrice < itemLastPurchasePrice;
+
+  const checkBelowPurchasePrice = (): boolean => {
+    if (!selectedItem || !belowPurchasePrice) return true;
+    return window.confirm(
+      `Warning: Per-unit selling price (AED ${perUnitSellingPrice.toFixed(2)}) is below the item's last purchase price (AED ${itemLastPurchasePrice!.toFixed(2)}).\n\nDo you want to continue anyway?`
+    );
+  };
 
   const handleItemChange = (val: string) => {
     setSelectedItemId(val);
@@ -231,6 +247,7 @@ export default function BillingElementsPage() {
 
   const addToPending = () => {
     if (!selectedHorse || !selectedItemId || !finalSellingPrice || quantity === "" || Number(quantity) <= 0) return;
+    if (!checkBelowPurchasePrice()) return;
     const item = nonLiveryItems.find(i => i.id === selectedItemId);
     setPendingItems(prev => [...prev, {
       horseId: selectedHorse.horseId,
@@ -253,6 +270,7 @@ export default function BillingElementsPage() {
   const handleSave = () => {
     let allItems = [...pendingItems];
     if (selectedItemId && finalSellingPrice && quantity !== "" && Number(quantity) > 0) {
+      if (!checkBelowPurchasePrice()) return;
       const item = nonLiveryItems.find(i => i.id === selectedItemId);
       allItems.push({
         horseId: selectedHorse.horseId,
@@ -510,6 +528,18 @@ export default function BillingElementsPage() {
                         onChange={(e) => setFinalSellingPrice(e.target.value)}
                         data-testid="input-final-selling-price"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {selectedItem && belowPurchasePrice && (
+                  <div
+                    className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-sm text-destructive"
+                    data-testid="warning-below-purchase-price"
+                  >
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div>
+                      Per-unit selling price (AED {perUnitSellingPrice.toFixed(2)}) is below the item's last purchase price (AED {itemLastPurchasePrice!.toFixed(2)}).
                     </div>
                   </div>
                 )}
