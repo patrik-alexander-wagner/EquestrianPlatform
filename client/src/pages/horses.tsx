@@ -110,7 +110,7 @@ export default function HorsesPage() {
         columns={columns}
         data={visibleHorses}
         isLoading={isLoading}
-        actions={isAdmin ? (item) => (
+        actions={(item) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" data-testid={`button-actions-${item.id}`}>
@@ -126,7 +126,7 @@ export default function HorsesPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        ) : undefined}
+        )}
       />
 
       <Dialog open={showEditDialog} onOpenChange={(open) => {
