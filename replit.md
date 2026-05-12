@@ -120,6 +120,7 @@ shared/
 - Livery package configuration in settings
 - Items: unitFactor (renamed from base) = quantity unit for pricing; price formula: selling_price = (price / unitFactor) * quantity
 - Item price history: item_prices table tracks all price changes per item (id, item_id, price, is_active, created_at, created_by). Only one active price per item. "Change Price" button in Add Billing Element dialog allows updating item price with history preservation. Existing billing records unaffected.
+  - Effective item price = active row in item_prices if one exists, otherwise items.price (the value from NetSuite sync). Storage layer overlays the active item_prices.price onto getItems / getItem / getLiveryPackageItems / getNonLiveryPackageItems results, so all UI surfaces (Items page, Add Billing Element, To Invoice, agreements) see the override automatically. changeItemPrice only writes to item_prices and never mutates items.price; NetSuite sync continues to update items.price as the default fallback.
 - Billing elements: price field stores Final Selling Price (total, not per-unit)
 - PO number counter stored in app_settings table (key: last_po_number)
 - NetSuite RESTlet integration: "Send to NetSuite" button on invoices sends SO JSON directly to NetSuite RESTlet via OAuth 1.0 TBA authentication, stores sent status and NetSuite ID from response

@@ -23,6 +23,16 @@ import {
   type MonthlyBillingApproval, type InsertMonthlyBillingApproval,
 } from "@shared/schema";
 
+async function applyActiveItemPrices<T extends { id: string; price: string | null }>(rows: T[]): Promise<T[]> {
+  if (rows.length === 0) return rows;
+  const ids = rows.map(r => r.id);
+  const activePrices = await db.select().from(itemPrices)
+    .where(and(eq(itemPrices.isActive, true), sql`${itemPrices.itemId} = ANY(${ids}::uuid[])`));
+  const priceByItemId = new Map<string, string>();
+  for (const p of activePrices) priceByItemId.set(p.itemId, p.price);
+  return rows.map(r => priceByItemId.has(r.id) ? { ...r, price: priceByItemId.get(r.id)! } : r);
+}
+
 function formatHorseName(horse: { horseName: string; passportName?: string | null }): string {
   if (horse.passportName) {
     return `${horse.horseName} (${horse.passportName})`;
@@ -338,15 +348,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getItems(search?: string): Promise<Item[]> {
-    if (search) {
-      return await db.select().from(items).where(ilike(items.name, `%${search}%`));
-    }
-    return await db.select().from(items);
+    const rows = search
+      ? await db.select().from(items).where(ilike(items.name, `%${search}%`))
+      : await db.select().from(items);
+    return await applyActiveItemPrices(rows);
   }
 
   async getItem(id: string): Promise<Item | undefined> {
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    return item;
+    if (!item) return undefined;
+    const [withPrice] = await applyActiveItemPrices([item]);
+    return withPrice;
   }
 
   async createItem(item: InsertItem): Promise<Item> {
@@ -360,11 +372,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLiveryPackageItems(): Promise<Item[]> {
-    return await db.select().from(items).where(and(eq(items.isLiveryPackage, true), eq(items.isInactive, false)));
+    const rows = await db.select().from(items).where(and(eq(items.isLiveryPackage, true), eq(items.isInactive, false)));
+    return await applyActiveItemPrices(rows);
   }
 
   async getNonLiveryPackageItems(): Promise<Item[]> {
-    return await db.select().from(items).where(and(eq(items.isLiveryPackage, false), eq(items.isInactive, false)));
+    const rows = await db.select().from(items).where(and(eq(items.isLiveryPackage, false), eq(items.isInactive, false)));
+    return await applyActiveItemPrices(rows);
   }
 
   async syncItemsFromNetsuite(netsuiteItems: any[]): Promise<{ created: number; updated: number; unchanged: number; processed: number; skipped: number }> {
@@ -1006,8 +1020,6 @@ export class DatabaseStorage implements IStorage {
         isActive: true,
         createdBy: createdBy || null,
       }).returning();
-
-      await tx.update(items).set({ price: newPrice }).where(eq(items.id, itemId));
 
       return newRecord;
     });
