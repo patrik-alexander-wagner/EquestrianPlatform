@@ -22,11 +22,11 @@ client/src/
   pages/
     login.tsx                - Login page (username/password)
     dashboard.tsx            - Home dashboard with stats
-    customers.tsx            - Customer list (read-only + import)
-    horses.tsx               - Horse management (CRUD + import)
+    customers.tsx            - Customer list (read-only)
+    horses.tsx               - Horse management (edit only; data sourced from NetSuite)
     stables.tsx              - Stable management (CRUD)
     boxes.tsx                - Box management (CRUD + import)
-    items.tsx                - Items list (read-only + import)
+    items.tsx                - Items list (read-only; sync from NetSuite)
     current-agreements.tsx   - Active livery agreements with checkout and edit
     new-agreement.tsx        - New agreement creation (box grid view, with/without horse)
     agreement-history.tsx    - Historical agreements with cancel checkout
@@ -89,7 +89,7 @@ shared/
 - Sidebar navigation matching requirements order
 - Pagination (25 rows/page) on all lists
 - Search/filter on all list pages
-- Excel/CSV import (.xlsx, .xls, .csv) for customers, horses, boxes, items (3-step wizard, batch insert)
+- Excel/CSV import (.xlsx, .xls, .csv) for boxes (3-step wizard, batch insert); customers/horses/items synced from NetSuite
 - Livery agreement creation via box-first grid view (no horse field on agreement; horse check-in via post-save modal using horse_movements)
 - Billing element management: shows all horses with their owners; if horse is checked into a stable/box, displays the location; Add button per horse to create adhoc billing elements (no agreement dependency)
 - Billing month auto-derived from transaction date (YYYY-MM format)
@@ -137,7 +137,7 @@ shared/
   - If any agreements lack a horse assignment, a blocking modal appears listing Customer, Box, and Package for each unassigned agreement
   - Pre-check is scoped per customer (not global) and enforced both client-side and server-side (POST /api/invoices returns 400)
   - API: GET /api/horse-assignment-check?billingMonth=YYYY-MM&customerId=UUID
-- NetSuite item sync (Items page, top-right "Sync with NetSuite" button, ADMIN only):
+- NetSuite item sync (Items page, top-right "Sync with NetSuite" button, available to all authenticated users):
   - POST /api/items/sync-netsuite calls hardcoded RESTlet https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2163&deploy=1 via GET with OAuth 1.0 TBA (HMAC-SHA256), reuses NETSUITE_* env vars
   - Upserts items by netsuiteId in a single DB transaction; updates name/price/lastPurchasePrice/unitFactor/isInactive; never touches id or isLiveryPackage; new items default isLiveryPackage=false
   - In-process lock prevents concurrent syncs (returns 409 if one is already running)

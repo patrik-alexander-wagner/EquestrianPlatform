@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import OAuth from "oauth-1.0a";
 import crypto from "crypto";
 import {
-  insertUserSchema, insertCustomerSchema, insertHorseSchema,
+  insertUserSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
   insertLiveryAgreementSchema, insertBillingElementSchema, insertInvoiceSchema,
   insertAgreementDocumentSchema, insertHorseOwnershipSchema, insertHorseMovementSchema,
@@ -262,37 +262,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/customers", requireAdmin, async (req, res) => {
-    try {
-      const data = validateBody(insertCustomerSchema, req.body);
-      const customer = await storage.createCustomer(data);
-      res.json(customer);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
-  app.post("/api/customers/import", requireAdmin, async (req, res) => {
-    try {
-      const { customers: data } = req.body;
-      if (!Array.isArray(data)) throw { status: 400, message: "customers must be an array" };
-      const results = [];
-      for (const c of data) {
-        const withDefaults = {
-          ...c,
-          firstname: c.firstname || "",
-          lastname: c.lastname || "",
-        };
-        const validated = validateBody(insertCustomerSchema, withDefaults);
-        const created = await storage.createCustomer(validated);
-        results.push(created);
-      }
-      res.json(results);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
   // Horses
   app.get("/api/horses", async (req, res) => {
     try {
@@ -333,20 +302,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horses", requireRoles("LIVERY_ADMIN"), async (req, res) => {
-    try {
-      const { ownerId, ...horseData } = req.body;
-      if (!ownerId) {
-        return res.status(400).json({ message: "Owner (ownerId) is required" });
-      }
-      const data = validateBody(insertHorseSchema, horseData);
-      const horse = await storage.createHorseWithOwner(data, ownerId);
-      res.json(horse);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
   app.patch("/api/horses/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { ownerId, ...rest } = req.body;
@@ -365,22 +320,6 @@ export async function registerRoutes(
         }
       }
       res.json(horse);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
-  app.post("/api/horses/import", requireAdmin, async (req, res) => {
-    try {
-      const { horses: data } = req.body;
-      if (!Array.isArray(data)) throw { status: 400, message: "horses must be an array" };
-      const results = [];
-      for (const h of data) {
-        const validated = validateBody(insertHorseSchema, h);
-        const created = await storage.createHorse(validated);
-        results.push(created);
-      }
-      res.json(results);
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -560,7 +499,7 @@ export async function registerRoutes(
   });
 
   let netsuiteSyncInProgress = false;
-  app.post("/api/items/sync-netsuite", requireAdmin, async (_req, res) => {
+  app.post("/api/items/sync-netsuite", requireAuth, async (_req, res) => {
     if (netsuiteSyncInProgress) {
       return res.status(409).json({ message: "A NetSuite sync is already in progress. Please wait for it to finish." });
     }
@@ -632,18 +571,6 @@ export async function registerRoutes(
       res.status(e.status || 500).json({ message: e.message || "NetSuite sync failed" });
     } finally {
       netsuiteSyncInProgress = false;
-    }
-  });
-
-  app.post("/api/items/import", requireAdmin, async (req, res) => {
-    try {
-      const { items: data } = req.body;
-      if (!Array.isArray(data)) throw { status: 400, message: "items must be an array" };
-      const validated = data.map(item => validateBody(insertItemSchema, item));
-      const results = await storage.createItemsBulk(validated);
-      res.json({ imported: results.length });
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });
 

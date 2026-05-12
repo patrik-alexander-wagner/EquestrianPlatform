@@ -4,37 +4,20 @@ import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
 
-import { ImportDialog } from "@/components/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { useToast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/use-user-role";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Item } from "@shared/schema";
 
 export default function ItemsPage() {
-  const userRole = useUserRole();
-  const isAdmin = userRole === "ADMIN";
   const [search, setSearch] = useState("");
-  const [showImportDialog, setShowImportDialog] = useState(false);
   const { toast } = useToast();
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["/api/items", search ? `?search=${search}` : ""],
-  });
-
-  const importMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/items/import", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
-      setShowImportDialog(false);
-      toast({ title: "Items imported successfully" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Import failed", description: error.message, variant: "destructive" });
-    },
   });
 
   const [showSyncDialog, setShowSyncDialog] = useState(false);
@@ -116,50 +99,22 @@ export default function ItemsPage() {
     },
   ];
 
-  const importFields = [
-    { targetField: "name", label: "Item Name", required: true },
-    { targetField: "unitFactor", label: "Unit Factor" },
-    { targetField: "price", label: "Price" },
-    { targetField: "averageCost", label: "Average Cost" },
-    { targetField: "netsuiteId", label: "NetSuite ID" },
-    { targetField: "isInactive", label: "Is Inactive (true/false)" },
-  ];
-
-  const handleImport = (data: Record<string, string>[]) => {
-    const mapped = data.map(row => ({
-      name: row.name || "Unknown",
-      unitFactor: row.unitFactor || null,
-      price: row.price || null,
-      averageCost: row.averageCost || null,
-      netsuiteId: row.netsuiteId || null,
-      isLiveryPackage: false,
-      isInactive: row.isInactive === "true",
-    }));
-    importMutation.mutate({ items: mapped });
-  };
-
   return (
     <div className="p-6">
       <PageHeader
         title="Items"
         description="Items and service items. Unit Factor = quantity unit for pricing, Price = price for that unit factor."
-        actions={isAdmin ? (
-          <>
-            <Button
-              variant="outline"
-              onClick={startSync}
-              disabled={syncNetsuiteMutation.isPending}
-              data-testid="button-sync-netsuite"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
-              {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
-            </Button>
-            <Button variant="outline" onClick={() => setShowImportDialog(true)} data-testid="button-import-items">
-              <Upload className="w-4 h-4 mr-2" />
-              Import (Temp)
-            </Button>
-          </>
-        ) : undefined}
+        actions={
+          <Button
+            variant="outline"
+            onClick={startSync}
+            disabled={syncNetsuiteMutation.isPending}
+            data-testid="button-sync-netsuite"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
+            {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
+          </Button>
+        }
       />
 
       <Dialog open={showSyncDialog} onOpenChange={(open) => { if (!open) closeSyncDialog(); }}>
@@ -249,15 +204,6 @@ export default function ItemsPage() {
       </div>
 
       <DataTable columns={columns} data={items} isLoading={isLoading} />
-
-      <ImportDialog
-        open={showImportDialog}
-        onOpenChange={setShowImportDialog}
-        title="Import Items"
-        fields={importFields}
-        onImport={handleImport}
-        isPending={importMutation.isPending}
-      />
     </div>
   );
 }
