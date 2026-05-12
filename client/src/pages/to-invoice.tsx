@@ -46,6 +46,8 @@ type LineItem = {
   itemId?: string;
   billingMonth?: string;
   createdByUsername?: string | null;
+  unitFactor?: number | null;
+  pieces?: number | null;
 };
 
 function getProRateFraction(agreement: any, billingMonth: string): { fraction: number; label: string } {
@@ -402,8 +404,12 @@ export default function ToInvoicePage() {
       for (const b of customerBilling) {
         const bMonth = b.billingMonth || (b.transactionDate ? b.transactionDate.substring(0, 7) : null);
         if (bMonth && bMonth !== billingMonth) continue;
-        const qty = b.quantity || 1;
+        const qty = Number(b.quantity) || 1;
         const totalPrice = parseFloat(b.price || "0");
+        const beItem = nonLiveryItems.find(i => i.id === b.itemId);
+        const ufRaw = beItem?.unitFactor ? parseFloat(beItem.unitFactor) : null;
+        const uf = ufRaw && ufRaw > 0 && ufRaw !== 1 ? Math.round(ufRaw) : null;
+        const pieces = uf ? Math.round(qty * uf) : null;
         lineItems.push({
           key: `billing-${b.id}`,
           type: "billing",
@@ -415,6 +421,8 @@ export default function ToInvoicePage() {
           amount: totalPrice,
           billingElementId: b.id,
           createdByUsername: b.createdByUsername || null,
+          unitFactor: uf,
+          pieces,
         });
       }
 
@@ -655,7 +663,14 @@ export default function ToInvoicePage() {
                           <TableCell>{li.description}</TableCell>
                           <TableCell>{li.horseName || "—"}</TableCell>
                           <TableCell>{li.date}</TableCell>
-                          <TableCell className="text-right">{Number(li.qty).toFixed(2)}</TableCell>
+                          <TableCell className="text-right">
+                            <div>{Number(li.qty).toFixed(2)}</div>
+                            {li.unitFactor && li.pieces ? (
+                              <div className="text-xs text-muted-foreground" data-testid={`text-qty-fraction-${li.billingElementId}`}>
+                                ({li.pieces}/{li.unitFactor})
+                              </div>
+                            ) : null}
+                          </TableCell>
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
                           <TableCell>
