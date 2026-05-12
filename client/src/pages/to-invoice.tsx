@@ -298,7 +298,11 @@ export default function ToInvoicePage() {
     setEditItemId(be.itemId || "");
     setEditItemSearch("");
     setEditItemDropdownOpen(false);
-    setEditQuantity(be.quantity || 1);
+    const beItem = nonLiveryItems.find(i => i.id === be.itemId);
+    const beUf = beItem?.unitFactor ? parseFloat(beItem.unitFactor) : 1;
+    const storedQty = be.quantity ? parseFloat(be.quantity) : 1;
+    const piecesQty = beUf > 0 ? storedQty * beUf : storedQty;
+    setEditQuantity(piecesQty || 1);
     setEditFinalPrice(be.price ? String(parseFloat(be.price)) : "");
     setEditTransactionDate(be.transactionDate || "");
     setShowEditDialog(true);
@@ -846,9 +850,14 @@ export default function ToInvoicePage() {
                   <Label>Quantity</Label>
                   <Input
                     type="number"
-                    min="1"
+                    step="any"
+                    min="0"
                     value={editQuantity}
-                    onChange={(e) => handleEditQuantityChange(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const n = v === "" ? 0 : parseFloat(v);
+                      if (!isNaN(n)) handleEditQuantityChange(n);
+                    }}
                     data-testid="input-edit-quantity"
                   />
                 </div>
@@ -897,12 +906,14 @@ export default function ToInvoicePage() {
                   onClick={() => {
                     if (!editTransactionDate || !/^\d{4}-\d{2}-\d{2}$/.test(editTransactionDate)) return;
                     if (!editFinalPrice || parseFloat(editFinalPrice) <= 0) return;
+                    const uf = editItemUnitFactor > 0 ? editItemUnitFactor : 1;
+                    const storedQty = editQuantity / uf;
                     editBillingMutation.mutate({
                       id: editingElement.id,
                       data: {
                         horseId: editHorseId || null,
                         itemId: editItemId,
-                        quantity: editQuantity,
+                        quantity: storedQty,
                         price: parseFloat(editFinalPrice).toFixed(2),
                         transactionDate: editTransactionDate,
                       },

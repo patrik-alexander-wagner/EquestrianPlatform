@@ -29,6 +29,7 @@ interface PendingItem {
   itemId: string;
   itemName: string;
   quantity: number;
+  unitFactor: number;
   price: string;
   transactionDate: string;
   billingMonth: string;
@@ -75,12 +76,14 @@ export default function BillingElementsPage() {
   const saveBatchMutation = useMutation({
     mutationFn: async (items: PendingItem[]) => {
       for (const item of items) {
+        const uf = item.unitFactor > 0 ? item.unitFactor : 1;
+        const storedQuantity = item.quantity / uf;
         await apiRequest("POST", "/api/billing-elements", {
           horseId: item.horseId,
           customerId: item.customerId,
           boxId: item.boxId,
           itemId: item.itemId,
-          quantity: String(item.quantity),
+          quantity: storedQuantity.toString(),
           price: item.price,
           transactionDate: item.transactionDate,
           billingMonth: item.billingMonth,
@@ -256,6 +259,7 @@ export default function BillingElementsPage() {
       itemId: selectedItemId,
       itemName: item?.name || "Unknown",
       quantity: numericQuantity,
+      unitFactor: itemUnitFactor,
       price: finalSellingPrice,
       transactionDate,
       billingMonth: deriveBillingMonth(transactionDate),
@@ -279,6 +283,7 @@ export default function BillingElementsPage() {
         itemId: selectedItemId,
         itemName: item?.name || "Unknown",
         quantity: numericQuantity,
+        unitFactor: itemUnitFactor,
         price: finalSellingPrice,
         transactionDate,
         billingMonth: deriveBillingMonth(transactionDate),

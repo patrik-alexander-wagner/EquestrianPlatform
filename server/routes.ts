@@ -737,7 +737,7 @@ export async function registerRoutes(
       const editSchema = z.object({
         horseId: z.string().uuid().nullable().optional(),
         itemId: z.string().uuid().optional(),
-        quantity: z.number().int().min(1).optional(),
+        quantity: z.number().positive().optional(),
         price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid price format").optional(),
         transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format").optional(),
       });
