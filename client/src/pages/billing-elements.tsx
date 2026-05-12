@@ -191,19 +191,21 @@ export default function BillingElementsPage() {
   const numericQuantity = quantity === "" ? 0 : Number(quantity);
   const computedSellingPrice = itemUnitFactor > 0 ? (itemPrice / itemUnitFactor) * numericQuantity : 0;
   const itemLastPurchasePrice = selectedItem?.lastPurchasePrice ? parseFloat(selectedItem.lastPurchasePrice) : null;
+  const perPiecePurchasePrice =
+    itemLastPurchasePrice !== null && itemUnitFactor > 0 ? itemLastPurchasePrice / itemUnitFactor : null;
   const finalSellingPriceNum = finalSellingPrice ? parseFloat(finalSellingPrice) : 0;
   const perUnitSellingPrice = numericQuantity > 0 ? finalSellingPriceNum / numericQuantity : 0;
   const belowPurchasePrice =
-    itemLastPurchasePrice !== null &&
-    itemLastPurchasePrice > 0 &&
+    perPiecePurchasePrice !== null &&
+    perPiecePurchasePrice > 0 &&
     finalSellingPrice !== "" &&
     numericQuantity > 0 &&
-    perUnitSellingPrice < itemLastPurchasePrice;
+    perUnitSellingPrice < perPiecePurchasePrice;
 
   const checkBelowPurchasePrice = (): boolean => {
     if (!selectedItem || !belowPurchasePrice) return true;
     return window.confirm(
-      `Warning: Per-unit selling price (AED ${perUnitSellingPrice.toFixed(2)}) is below the item's last purchase price (AED ${itemLastPurchasePrice!.toFixed(2)}).\n\nDo you want to continue anyway?`
+      `Warning: Per-piece selling price (AED ${perUnitSellingPrice.toFixed(2)}) is below the item's per-piece purchase price (AED ${perPiecePurchasePrice!.toFixed(2)}).\n\nDo you want to continue anyway?`
     );
   };
 
@@ -544,7 +546,7 @@ export default function BillingElementsPage() {
                   >
                     <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <div>
-                      Per-unit selling price (AED {perUnitSellingPrice.toFixed(2)}) is below the item's last purchase price (AED {itemLastPurchasePrice!.toFixed(2)}).
+                      Per-piece selling price (AED {perUnitSellingPrice.toFixed(2)}) is below the item's per-piece purchase price (AED {perPiecePurchasePrice!.toFixed(2)}).
                     </div>
                   </div>
                 )}
