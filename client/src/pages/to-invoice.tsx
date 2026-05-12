@@ -655,7 +655,7 @@ export default function ToInvoicePage() {
                           <TableCell>{li.description}</TableCell>
                           <TableCell>{li.horseName || "—"}</TableCell>
                           <TableCell>{li.date}</TableCell>
-                          <TableCell className="text-right">{li.qty}</TableCell>
+                          <TableCell className="text-right">{Number(li.qty).toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
                           <TableCell>
@@ -907,7 +907,7 @@ export default function ToInvoicePage() {
                     if (!editTransactionDate || !/^\d{4}-\d{2}-\d{2}$/.test(editTransactionDate)) return;
                     if (!editFinalPrice || parseFloat(editFinalPrice) <= 0) return;
                     const uf = editItemUnitFactor > 0 ? editItemUnitFactor : 1;
-                    const storedQty = editQuantity / uf;
+                    const storedQty = parseFloat((editQuantity / uf).toFixed(5));
                     editBillingMutation.mutate({
                       id: editingElement.id,
                       data: {

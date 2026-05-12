@@ -83,7 +83,7 @@ export default function BillingElementsPage() {
           customerId: item.customerId,
           boxId: item.boxId,
           itemId: item.itemId,
-          quantity: storedQuantity.toString(),
+          quantity: storedQuantity.toFixed(5),
           price: item.price,
           transactionDate: item.transactionDate,
           billingMonth: item.billingMonth,

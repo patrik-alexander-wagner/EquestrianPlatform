@@ -169,7 +169,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
           li.description,
           li.horseName,
           li.billDate,
-          li.quantity.toString(),
+          li.quantity.toFixed(2),
           li.amount.toFixed(2),
           lineVat.toFixed(2),
           (li.amount + lineVat).toFixed(2),
