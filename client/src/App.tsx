@@ -58,9 +58,19 @@ function Router({ userRole }: { userRole: string }) {
   );
 }
 
+function getInitials(username: string): string {
+  if (!username) return "?";
+  const local = username.split("@")[0];
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return username.slice(0, 2).toUpperCase();
+}
+
 function App() {
   const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const [userRole, setUserRole] = useState<string>("user");
+  const [username, setUsername] = useState<string>("");
 
   const checkAuth = async () => {
     try {
@@ -68,6 +78,7 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setUserRole(data.role || "user");
+        setUsername(data.username || "");
         setAuthState("authenticated");
       } else {
         setAuthState("unauthenticated");
@@ -90,6 +101,7 @@ function App() {
     await fetch("/api/logout", { method: "POST" });
     setAuthState("unauthenticated");
     setUserRole("user");
+    setUsername("");
     queryClient.clear();
   };
 
@@ -126,6 +138,15 @@ function App() {
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center gap-2 p-2 border-b shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <div className="ml-auto flex items-center gap-2 pr-2" title={username} data-testid="user-badge">
+                  <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-username">{username}</span>
+                  <div
+                    className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold"
+                    data-testid="avatar-initials"
+                  >
+                    {getInitials(username)}
+                  </div>
+                </div>
               </header>
               <main className="flex-1 overflow-auto">
                 <Router userRole={userRole} />

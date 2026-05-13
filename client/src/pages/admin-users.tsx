@@ -43,16 +43,19 @@ export default function AdminUsersPage() {
     },
   });
 
-  const updateRoleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: string }) =>
-      apiRequest("PATCH", `/api/users/${id}`, { role }),
-    onSuccess: () => {
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, role, password }: { id: string; role: string; password?: string }) => {
+      const body: any = { role };
+      if (password) body.password = password;
+      return apiRequest("PATCH", `/api/users/${id}`, body);
+    },
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setEditingUser(null);
-      toast({ title: "User role updated" });
+      toast({ title: vars.password ? "User updated and password reset" : "User role updated" });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to update role", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to update user", description: error.message, variant: "destructive" });
     },
   });
 
@@ -150,9 +153,11 @@ export default function AdminUsersPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
-                updateRoleMutation.mutate({
+                const password = (fd.get("password") as string)?.trim();
+                updateUserMutation.mutate({
                   id: editingUser.id,
                   role: fd.get("role") as string,
+                  password: password || undefined,
                 });
               }}
             >
@@ -169,9 +174,20 @@ export default function AdminUsersPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <Label>Reset Password</Label>
+                  <Input
+                    name="password"
+                    type="password"
+                    placeholder="Leave blank to keep current password"
+                    autoComplete="new-password"
+                    data-testid="input-edit-password"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Min 6 characters. Leave blank to keep the current password.</p>
+                </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button type="submit" disabled={updateRoleMutation.isPending} data-testid="button-save-role">
+                <Button type="submit" disabled={updateUserMutation.isPending} data-testid="button-save-role">
                   Save
                 </Button>
               </DialogFooter>

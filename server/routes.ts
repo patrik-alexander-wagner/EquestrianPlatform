@@ -228,13 +228,26 @@ export async function registerRoutes(
 
   app.patch("/api/users/:id", requireAdmin, async (req, res) => {
     try {
-      const { role } = req.body;
+      const { role, password } = req.body;
       if (role && !VALID_ROLES.includes(role)) {
         return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
       }
-      const updated = await storage.updateUser(req.params.id, { role });
-      if (!updated) return res.status(404).json({ message: "User not found" });
-      auditLog(req, "update_user", "user", req.params.id, `Updated user role to: ${role}`);
+      if (password !== undefined && password !== null && password !== "") {
+        if (typeof password !== "string" || password.length < 6) {
+          return res.status(400).json({ message: "Password must be at least 6 characters" });
+        }
+        await storage.updateUserPassword(req.params.id, password);
+        auditLog(req, "reset_password", "user", req.params.id, `Reset password for user`);
+      }
+      let updated;
+      if (role) {
+        updated = await storage.updateUser(req.params.id, { role });
+        if (!updated) return res.status(404).json({ message: "User not found" });
+        auditLog(req, "update_user", "user", req.params.id, `Updated user role to: ${role}`);
+      } else {
+        updated = await storage.getUser(req.params.id);
+        if (!updated) return res.status(404).json({ message: "User not found" });
+      }
       res.json({ id: updated.id, username: updated.username, role: updated.role });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
