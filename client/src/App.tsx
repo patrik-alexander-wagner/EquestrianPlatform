@@ -138,14 +138,12 @@ function App() {
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center gap-2 p-2 border-b shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <div className="ml-auto flex items-center gap-2 pr-2" title={username} data-testid="user-badge">
-                  <span className="text-sm text-muted-foreground hidden sm:inline" data-testid="text-username">{username}</span>
-                  <div
-                    className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold"
-                    data-testid="avatar-initials"
-                  >
-                    {getInitials(username)}
-                  </div>
+                <div
+                  className="ml-auto mr-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold cursor-default"
+                  title={username}
+                  data-testid="avatar-initials"
+                >
+                  {getInitials(username)}
                 </div>
               </header>
               <main className="flex-1 overflow-auto">
