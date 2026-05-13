@@ -315,6 +315,20 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/horses", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+    try {
+      const { ownerId, ...horseData } = req.body;
+      if (!ownerId) {
+        return res.status(400).json({ message: "Owner (ownerId) is required" });
+      }
+      const data = validateBody(insertHorseSchema, horseData);
+      const horse = await storage.createHorseWithOwner(data, ownerId);
+      res.json(horse);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   app.patch("/api/horses/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const { ownerId, ...rest } = req.body;
