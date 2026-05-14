@@ -26,7 +26,6 @@ import {
 } from "recharts";
 import {
   Calendar,
-  Printer,
   FileDown,
   Download,
   Search,
@@ -431,9 +430,6 @@ export default function ReportsPage() {
         description={`Operational and business performance for ${monthLabel}`}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
-              <Printer className="w-4 h-4" />
-            </Button>
             <Button onClick={downloadFullPdf} disabled={downloadingPdf || isLoading} data-testid="button-download-full-pdf">
               <FileDown className="w-4 h-4 mr-2" />
               {downloadingPdf ? "Generating..." : "Download Complete Report (PDF)"}
@@ -506,7 +502,6 @@ export default function ReportsPage() {
             {isLoading ? <Skeleton className="h-9 w-16" /> : (
               <>
                 <BigNumber value={op?.adecHorses ?? 0} testId="text-adec-horses" />
-                <div className="mt-3 text-[12.5px] text-muted-foreground">House-owned, in residence</div>
               </>
             )}
           </KpiCard>
@@ -555,7 +550,7 @@ export default function ReportsPage() {
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Business Performance</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="Active Customers"
+            label="Active Livery Customers"
             icon={<UserIcon className="w-5 h-5" />}
             iconColor="text-emerald-700"
             iconBg="bg-emerald-50"
@@ -564,7 +559,6 @@ export default function ReportsPage() {
             {isLoading ? <Skeleton className="h-9 w-16" /> : (
               <>
                 <BigNumber value={biz?.activeCustomers ?? 0} testId="text-active-customers" />
-                <div className="mt-3 text-[12.5px] text-muted-foreground">with active agreements</div>
               </>
             )}
           </KpiCard>
@@ -579,7 +573,6 @@ export default function ReportsPage() {
             {isLoading ? <Skeleton className="h-9 w-16" /> : (
               <>
                 <BigNumber value={biz?.activeAgreements ?? 0} testId="text-active-agreements" />
-                <div className="mt-3 text-[12.5px] text-muted-foreground">excluding ADEC-owned</div>
               </>
             )}
           </KpiCard>
@@ -599,8 +592,7 @@ export default function ReportsPage() {
                     {formatAed(biz?.revenueMTD ?? 0)}
                   </span>
                 </div>
-                <div className="mt-3 flex items-center justify-between gap-2 text-[11.5px]">
-                  <span className="text-muted-foreground">Livery cycle posts {rev?.liveryCycleDay ?? 15}th</span>
+                <div className="mt-3 flex items-center justify-end gap-2 text-[11.5px]">
                   <span className="font-medium text-foreground" data-testid="text-prev-month-revenue">
                     Prev month: AED {formatAed(biz?.revenuePrevMonth ?? 0)}
                   </span>
@@ -624,7 +616,6 @@ export default function ReportsPage() {
                 <div className="mt-1.5 text-[12.5px] text-muted-foreground" data-testid="text-top-customer-detail">
                   {biz.topCustomer.horses} horse{biz.topCustomer.horses === 1 ? "" : "s"} · AED {formatAed(biz.topCustomer.monthlyValue)} / mo
                 </div>
-                <div className="mt-3 text-[11.5px] text-muted-foreground">By active contract value</div>
               </>
             ) : (
               <div className="text-sm text-muted-foreground">No active customer</div>
@@ -642,8 +633,8 @@ export default function ReportsPage() {
           <CardContent className="p-0">
             <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x">
               {[
-                { label: "Total Revenue", value: rev?.total ?? 0, note: "All sources, posted to date", testId: "text-rev-total" },
-                { label: "Livery Revenue", value: rev?.livery ?? 0, note: `Cycle bills ${rev?.liveryCycleDay ?? 15} ${formatMonthShort(selectedMonth)}`, testId: "text-rev-livery" },
+                { label: "Total Revenue", value: rev?.total ?? 0, note: "", testId: "text-rev-total" },
+                { label: "Livery Revenue", value: rev?.livery ?? 0, note: "Livery package", testId: "text-rev-livery" },
                 { label: "Service Revenue", value: rev?.service ?? 0, note: "Clinic, Farrier, Stores & Extras", testId: "text-rev-service" },
               ].map((c) => (
                 <div key={c.label} className="p-5">
@@ -865,13 +856,6 @@ export default function ReportsPage() {
                     {s.name} ({stableTagCounts[s.name] || 0})
                   </button>
                 ))}
-                <button
-                  onClick={() => setRosterFilter("new")}
-                  className={`px-3 py-1 text-[12px] rounded ${rosterFilter === "new" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
-                  data-testid="filter-new"
-                >
-                  New in {formatMonthShort(selectedMonth).split(" ")[0]} ({newCount})
-                </button>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={downloadRosterCsv} data-testid="button-roster-csv">
