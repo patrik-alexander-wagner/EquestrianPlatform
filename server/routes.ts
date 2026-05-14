@@ -1261,6 +1261,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/kpis", requireAuth, async (_req, res) => {
+    try {
+      const data = await storage.getDashboardKpis();
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // Reports
   app.get("/api/reports/kpis", async (req, res) => {
     try {

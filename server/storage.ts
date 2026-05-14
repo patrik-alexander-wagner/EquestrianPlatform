@@ -122,6 +122,7 @@ export interface IStorage {
   changeItemPrice(itemId: string, newPrice: string, createdBy?: string): Promise<ItemPrice>;
 
   getReportKpis(month: string): Promise<any>;
+  getDashboardKpis(): Promise<any>;
   getReportData(groupBy: string, month?: string): Promise<any[]>;
   getNewLiveryHorses(month: string): Promise<any[]>;
   getDepartedLiveryHorses(month: string): Promise<any[]>;
@@ -977,6 +978,114 @@ export class DatabaseStorage implements IStorage {
       adhocRevenue,
       liveryHorses: uniqueHorseIds.size,
       liveryCustomers: uniqueCustomerIds.size,
+    };
+  }
+
+  async getDashboardKpis(): Promise<any> {
+    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const currentMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const priorMonth = `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}`;
+
+    const [allMovements, allBoxes, allCustomers, allAgreements, allOwnership, allBillingElements] = await Promise.all([
+      db.select().from(horseMovements),
+      db.select().from(boxes),
+      db.select().from(customers),
+      db.select().from(liveryAgreements),
+      db.select().from(horseOwnership),
+      db.select().from(billingElements),
+    ]);
+
+    const stableBoxes = allBoxes.filter(b => b.type === "box" && b.status === "active");
+    const stableBoxIds = new Set(stableBoxes.map(b => b.id));
+    const totalBoxCapacity = stableBoxes.length;
+
+    const openMovementsAll = allMovements.filter(m => !m.checkOut && stableBoxIds.has(m.stableboxId));
+    const seenHorseIds = new Set<string>();
+    const openMovements = openMovementsAll.filter(m => {
+      if (seenHorseIds.has(m.horseId)) return false;
+      seenHorseIds.add(m.horseId);
+      return true;
+    });
+    const totalCheckedInHorses = openMovements.length;
+
+    const adecCustomerIds = new Set(
+      allCustomers.filter(c => isExcludedReportCustomer(c.fullname)).map(c => c.id)
+    );
+
+    const horseToOwner = new Map<string, string>();
+    const sortedOwnership = [...allOwnership].sort(
+      (a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)
+    );
+    for (const o of sortedOwnership) {
+      horseToOwner.set(o.horseId, o.customerId);
+    }
+    const agreementById = new Map(allAgreements.map(a => [a.id, a]));
+
+    let adecCheckedInHorses = 0;
+    let customerCheckedInHorses = 0;
+    for (const m of openMovements) {
+      const agreement = m.agreementId ? agreementById.get(m.agreementId) : undefined;
+      const customerId = agreement?.customerId ?? horseToOwner.get(m.horseId);
+      if (customerId && adecCustomerIds.has(customerId)) adecCheckedInHorses++;
+      else customerCheckedInHorses++;
+    }
+
+    const activeAgreementsRaw = allAgreements.filter(a =>
+      a.status === "active" &&
+      !adecCustomerIds.has(a.customerId) &&
+      (!a.startDate || a.startDate <= today) &&
+      (!a.endDate || a.endDate >= today)
+    );
+    const activeAgreements = activeAgreementsRaw.length;
+    const activeCustomers = new Set(activeAgreementsRaw.map(a => a.customerId)).size;
+
+    const revenueForMonth = (month: string, maxDateInclusive?: string) => {
+      const monthEls = allBillingElements.filter(el => {
+        if (adecCustomerIds.has(el.customerId)) return false;
+        if (!el.invoiceId) return false;
+        const inMonth = el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+        if (!inMonth) return false;
+        if (maxDateInclusive && el.transactionDate && el.transactionDate > maxDateInclusive) return false;
+        return true;
+      });
+      const byCustomer = new Map<string, number>();
+      let total = 0;
+      for (const el of monthEls) {
+        const amt = parseFloat(el.price || "0");
+        if (Number.isNaN(amt)) continue;
+        total += amt;
+        byCustomer.set(el.customerId, (byCustomer.get(el.customerId) || 0) + amt);
+      }
+      return { total, byCustomer };
+    };
+
+    const cur = revenueForMonth(currentMonth, today);
+    const prv = revenueForMonth(priorMonth);
+
+    let topCustomerId: string | null = null;
+    let topCustomerRevenue = 0;
+    for (const [cid, rev] of prv.byCustomer.entries()) {
+      if (rev > topCustomerRevenue) { topCustomerRevenue = rev; topCustomerId = cid; }
+    }
+    const topCustomer = topCustomerId
+      ? { name: allCustomers.find(c => c.id === topCustomerId)?.fullname || "Unknown", revenue: topCustomerRevenue }
+      : null;
+
+    return {
+      totalCheckedInHorses,
+      adecCheckedInHorses,
+      customerCheckedInHorses,
+      totalBoxCapacity,
+      activeCustomers,
+      activeAgreements,
+      monthlyRevenue: cur.total,
+      priorMonthRevenue: prv.total,
+      topCustomer,
+      currentMonth,
+      priorMonth,
     };
   }
 

@@ -2,93 +2,263 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Building2, FileText, Receipt, CreditCard } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Users, FileText, TrendingUp, TrendingDown, Trophy, Wallet, Gauge, Building2 } from "lucide-react";
 import { Horseshoe } from "@/components/icons/horseshoe";
 import { Link } from "wouter";
 
-export default function DashboardPage() {
-  const { data: horses = [], isLoading: loadingHorses } = useQuery<any[]>({ queryKey: ["/api/horses"] });
-  const { data: customers = [], isLoading: loadingCustomers } = useQuery<any[]>({ queryKey: ["/api/customers"] });
-  const { data: stables = [], isLoading: loadingStables } = useQuery<any[]>({ queryKey: ["/api/stables"] });
-  const { data: agreements = [], isLoading: loadingAgreements } = useQuery<any[]>({ queryKey: ["/api/livery-agreements", "?status=active"] });
-  const { data: invoices = [], isLoading: loadingInvoices } = useQuery<any[]>({ queryKey: ["/api/invoices"] });
-  const { data: billingElements = [], isLoading: loadingBilling } = useQuery<any[]>({ queryKey: ["/api/billing-elements", "?billed=false"] });
+interface DashboardKpis {
+  totalCheckedInHorses: number;
+  adecCheckedInHorses: number;
+  customerCheckedInHorses: number;
+  totalBoxCapacity: number;
+  activeCustomers: number;
+  activeAgreements: number;
+  monthlyRevenue: number;
+  priorMonthRevenue: number;
+  topCustomer: { name: string; revenue: number } | null;
+  currentMonth: string;
+  priorMonth: string;
+}
 
-  const stats = [
-    {
-      title: "Active Horses",
-      value: horses.filter((h: any) => h.status === "active").length,
-      icon: Horseshoe,
-      loading: loadingHorses,
-      href: "/horses",
-      color: "text-primary",
-    },
-    {
-      title: "Active Customers",
-      value: customers.filter((c: any) => !c.isInactive).length,
-      icon: Users,
-      loading: loadingCustomers,
-      href: "/customers",
-      color: "text-chart-3",
-    },
-    {
-      title: "Stables",
-      value: stables.length,
-      icon: Building2,
-      loading: loadingStables,
-      href: "/stables",
-      color: "text-chart-2",
-    },
-    {
-      title: "Active Agreements",
-      value: agreements.length,
-      icon: FileText,
-      loading: loadingAgreements,
-      href: "/agreements/current",
-      color: "text-chart-4",
-    },
-    {
-      title: "Pending Billing",
-      value: billingElements.length,
-      icon: Receipt,
-      loading: loadingBilling,
-      href: "/billing/to-invoice",
-      color: "text-chart-5",
-    },
-    {
-      title: "Total Invoices",
-      value: invoices.length,
-      icon: CreditCard,
-      loading: loadingInvoices,
-      href: "/billing/invoices",
-      color: "text-muted-foreground",
-    },
-  ];
+function formatAed(n: number): string {
+  return `AED ${Math.round(n).toLocaleString()}`;
+}
+
+function formatMonthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short", year: "numeric" });
+}
+
+export default function DashboardPage() {
+  const { data: kpis, isLoading: loadingKpis } = useQuery<DashboardKpis>({
+    queryKey: ["/api/dashboard/kpis"],
+  });
+  const { data: agreements = [], isLoading: loadingAgreements } = useQuery<any[]>({
+    queryKey: ["/api/livery-agreements", "?status=active"],
+  });
+
+  const occupancyPct =
+    kpis && kpis.totalBoxCapacity > 0
+      ? Math.round((kpis.totalCheckedInHorses / kpis.totalBoxCapacity) * 100)
+      : 0;
+
+  const revenueDelta =
+    kpis && kpis.priorMonthRevenue > 0
+      ? ((kpis.monthlyRevenue - kpis.priorMonthRevenue) / kpis.priorMonthRevenue) * 100
+      : null;
 
   return (
     <div className="p-6">
       <PageHeader title="Dashboard" description="Welcome to StableMaster" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map((stat) => (
-          <Link key={stat.title} href={stat.href}>
-            <Card className="hover-elevate cursor-pointer transition-all">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
-              </CardHeader>
-              <CardContent>
-                {stat.loading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : (
-                  <div className="text-3xl font-bold" data-testid={`stat-${stat.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                    {stat.value}
+      {/* Row 1 — Operational Overview */}
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        Operational Overview
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Link href="/stable-management/horse-movements">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Checked-In Horses
+              </CardTitle>
+              <Horseshoe className="w-5 h-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-3xl font-bold" data-testid="stat-total-checked-in">
+                  {kpis?.totalCheckedInHorses ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/stable-management/horse-movements">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                ADEC Horses (On-Site)
+              </CardTitle>
+              <Horseshoe className="w-5 h-5 text-chart-2" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-3xl font-bold" data-testid="stat-adec-horses">
+                  {kpis?.adecCheckedInHorses ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/stable-management/horse-movements">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Customer Livery Horses
+              </CardTitle>
+              <Horseshoe className="w-5 h-5 text-chart-3" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-3xl font-bold" data-testid="stat-customer-horses">
+                  {kpis?.customerCheckedInHorses ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Card className="h-full">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Occupancy Rate
+            </CardTitle>
+            <Gauge className="w-5 h-5 text-chart-4" />
+          </CardHeader>
+          <CardContent>
+            {loadingKpis ? (
+              <Skeleton className="h-8 w-full" />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-3xl font-bold" data-testid="stat-occupancy-pct">
+                    {occupancyPct}%
+                  </span>
+                  <span className="text-xs text-muted-foreground" data-testid="stat-occupancy-fraction">
+                    {kpis?.totalCheckedInHorses ?? 0} / {kpis?.totalBoxCapacity ?? 0} boxes
+                  </span>
+                </div>
+                <Progress value={Math.min(occupancyPct, 100)} className="h-2" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 2 — Business Performance */}
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        Business Performance
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Link href="/customers">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Active Customers
+              </CardTitle>
+              <Users className="w-5 h-5 text-chart-3" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-3xl font-bold" data-testid="stat-active-customers">
+                  {kpis?.activeCustomers ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/agreements/current">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Active Livery Agreements
+              </CardTitle>
+              <FileText className="w-5 h-5 text-chart-4" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-3xl font-bold" data-testid="stat-active-agreements">
+                  {kpis?.activeAgreements ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/billing/invoices">
+          <Card className="hover-elevate cursor-pointer transition-all h-full">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Monthly Revenue (MTD)
+              </CardTitle>
+              <Wallet className="w-5 h-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              {loadingKpis ? (
+                <Skeleton className="h-8 w-32" />
+              ) : (
+                <div className="space-y-1">
+                  <div className="text-2xl font-bold" data-testid="stat-monthly-revenue">
+                    {formatAed(kpis?.monthlyRevenue ?? 0)}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                  <div className="text-xs text-muted-foreground flex items-center gap-1" data-testid="stat-revenue-delta">
+                    {revenueDelta === null ? (
+                      <span>vs {kpis ? formatMonthLabel(kpis.priorMonth) : ""}: no prior data</span>
+                    ) : revenueDelta >= 0 ? (
+                      <>
+                        <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
+                        <span className="text-green-700 dark:text-green-400 font-medium">
+                          +{revenueDelta.toFixed(1)}%
+                        </span>
+                        <span>vs {formatMonthLabel(kpis!.priorMonth)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />
+                        <span className="text-red-700 dark:text-red-400 font-medium">
+                          {revenueDelta.toFixed(1)}%
+                        </span>
+                        <span>vs {formatMonthLabel(kpis!.priorMonth)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Card className="h-full">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Top Customer ({kpis ? formatMonthLabel(kpis.priorMonth) : "Past Month"})
+            </CardTitle>
+            <Trophy className="w-5 h-5 text-chart-5" />
+          </CardHeader>
+          <CardContent>
+            {loadingKpis ? (
+              <Skeleton className="h-8 w-full" />
+            ) : kpis?.topCustomer ? (
+              <div className="space-y-1">
+                <div className="text-base font-semibold truncate" data-testid="stat-top-customer-name" title={kpis.topCustomer.name}>
+                  {kpis.topCustomer.name}
+                </div>
+                <div className="text-xl font-bold" data-testid="stat-top-customer-revenue">
+                  {formatAed(kpis.topCustomer.revenue)}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground" data-testid="stat-top-customer-empty">
+                No billed revenue last month
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mt-8">
@@ -128,3 +298,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+// Building2 import kept for potential future use; suppress unused warning if any
+void Building2;
