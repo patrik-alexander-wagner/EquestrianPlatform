@@ -85,6 +85,7 @@ export interface IStorage {
   getLiveryPackageItems(): Promise<Item[]>;
   getNonLiveryPackageItems(): Promise<Item[]>;
   syncItemsFromNetsuite(netsuiteItems: any[]): Promise<{ created: number; updated: number; unchanged: number; processed: number; skipped: number }>;
+  syncCustomersFromNetsuite(netsuiteCustomers: any[]): Promise<{ created: number; unchanged: number; processed: number; skipped: number }>;
 
   getLiveryAgreements(status?: string): Promise<any[]>;
   getLiveryAgreement(id: string): Promise<LiveryAgreement | undefined>;
@@ -215,6 +216,49 @@ export class DatabaseStorage implements IStorage {
   async updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined> {
     const [updated] = await db.update(customers).set(customer).where(eq(customers.id, id)).returning();
     return updated;
+  }
+
+  async syncCustomersFromNetsuite(netsuiteCustomers: any[]): Promise<{ created: number; unchanged: number; processed: number; skipped: number }> {
+    const pickField = (obj: any, ...keys: string[]) => {
+      for (const k of keys) {
+        if (obj?.[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+      }
+      return null;
+    };
+    const toStr = (v: any) => v === null || v === undefined ? null : String(v);
+
+    const existing = await db.select().from(customers);
+    const existingNetsuiteIds = new Set<string>();
+    for (const c of existing) {
+      if (c.netsuiteId) existingNetsuiteIds.add(String(c.netsuiteId));
+    }
+
+    let created = 0;
+    let unchanged = 0;
+    let skipped = 0;
+
+    return await db.transaction(async (tx) => {
+      for (const ns of netsuiteCustomers) {
+        const netsuiteIdRaw = pickField(ns, "internalId", "internalid", "netsuiteId", "netsuite_id", "id");
+        const netsuiteId = toStr(netsuiteIdRaw);
+        if (!netsuiteId) { skipped++; continue; }
+
+        if (existingNetsuiteIds.has(netsuiteId)) {
+          unchanged++;
+          continue;
+        }
+
+        const fullname = toStr(pickField(ns, "fullname", "fullName", "entityid", "entityId", "companyName", "companyname", "name", "displayName", "displayname")) || `NS#${netsuiteId}`;
+
+        await tx.insert(customers).values({
+          netsuiteId,
+          fullname,
+        });
+        existingNetsuiteIds.add(netsuiteId);
+        created++;
+      }
+      return { created, unchanged, processed: created + unchanged, skipped };
+    });
   }
 
   async getHorses(search?: string, customerSearch?: string, stableBoxSearch?: string): Promise<any[]> {
