@@ -112,50 +112,13 @@ function formatDate(s?: string | null) {
   if (!y || !m || !d) return s;
   return new Date(y, m - 1, d).toLocaleString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
-function formatAed(n: number) { return Math.round(n).toLocaleString(); }
 function formatK(v: number) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1000) return `${Math.round(v / 1000)}K`;
   return String(Math.round(v));
 }
 
-function KpiCard({
-  label,
-  icon,
-  iconColor,
-  iconBg,
-  children,
-  testId,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  iconColor: string;
-  iconBg: string;
-  children: React.ReactNode;
-  testId?: string;
-}) {
-  return (
-    <Card className="min-h-[124px]" data-testid={testId}>
-      <CardContent className="p-[18px] flex flex-col h-full">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
-          <div className={`w-8 h-8 rounded-md flex items-center justify-center ${iconBg} ${iconColor}`}>
-            {icon}
-          </div>
-        </div>
-        <div className="flex-1 flex flex-col justify-center">{children}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BigNumber({ value, testId }: { value: React.ReactNode; testId?: string }) {
-  return (
-    <div className="text-[32px] leading-none font-bold tabular-nums tracking-tight" data-testid={testId}>
-      {value}
-    </div>
-  );
-}
+import { KpiCard, BigNumber, formatAed } from "@/components/kpi-card";
 
 const COLOR_LIVERY = "#1F9D55";
 const COLOR_SERVICE = "#1E3A5F";

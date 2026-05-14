@@ -1261,7 +1261,21 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report", requireAuth, async (req, res) => {
+  app.get("/api/reports/dashboard-summary", requireAuth, async (req, res) => {
+    try {
+      const month = (req.query.month as string) || "";
+      if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
+      }
+      const data = await storage.getLiveryReport(month);
+      res.json({ month: data.month, operational: data.operational, business: data.business });
+    } catch (e: any) {
+      console.error("dashboard-summary error", e);
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/reports/livery-report", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -1274,7 +1288,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report-print", requireAuth, async (req, res) => {
+  app.get("/api/reports/livery-report-print", requireRoles("LIVERY_ADMIN"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {

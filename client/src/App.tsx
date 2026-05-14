@@ -33,6 +33,13 @@ function AdminRoute({ component: Component, userRole }: { component: React.Compo
   return <Component />;
 }
 
+function LiveryAdminRoute({ component: Component, userRole }: { component: React.ComponentType; userRole: string }) {
+  if (userRole !== "ADMIN" && userRole !== "LIVERY_ADMIN") {
+    return <Redirect to="/" />;
+  }
+  return <Component />;
+}
+
 function Router({ userRole }: { userRole: string }) {
   return (
     <Switch>
@@ -48,7 +55,7 @@ function Router({ userRole }: { userRole: string }) {
       <Route path="/billing-elements" component={BillingElementsPage} />
       <Route path="/billing/to-invoice" component={ToInvoicePage} />
       <Route path="/billing/invoices" component={InvoicesPage} />
-      <Route path="/reports/livery" component={ReportsPage} />
+      <Route path="/reports/livery">{() => <LiveryAdminRoute component={ReportsPage} userRole={userRole} />}</Route>
       <Route path="/stable-management/horse-movements" component={HorseMovementsPage} />
       <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} userRole={userRole} />}</Route>
       <Route path="/admin/settings">{() => <AdminRoute component={AdminSettingsPage} userRole={userRole} />}</Route>
