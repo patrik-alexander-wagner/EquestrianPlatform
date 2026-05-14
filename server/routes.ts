@@ -1261,6 +1261,19 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/livery-report", requireAuth, async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
+      }
+      const data = await storage.getLiveryReport(month);
+      res.json(data);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   app.get("/api/dashboard/kpis", requireAuth, async (_req, res) => {
     try {
       const data = await storage.getDashboardKpis();

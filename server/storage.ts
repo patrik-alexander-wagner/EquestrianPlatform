@@ -123,6 +123,7 @@ export interface IStorage {
 
   getReportKpis(month: string): Promise<any>;
   getDashboardKpis(): Promise<any>;
+  getLiveryReport(month: string): Promise<any>;
   getReportData(groupBy: string, month?: string): Promise<any[]>;
   getNewLiveryHorses(month: string): Promise<any[]>;
   getDepartedLiveryHorses(month: string): Promise<any[]>;
@@ -1091,6 +1092,271 @@ export class DatabaseStorage implements IStorage {
       topCustomer,
       currentMonth: pastMonth,
       priorMonth: compareMonth,
+    };
+  }
+
+  async getLiveryReport(month: string): Promise<any> {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const [yr, mo] = month.split("-").map(Number);
+    if (!yr || !mo) throw Object.assign(new Error("Invalid month"), { status: 400 });
+    const monthStart = `${month}-01`;
+    const monthEndDate = new Date(yr, mo, 0);
+    const monthEnd = `${yr}-${pad(mo)}-${pad(monthEndDate.getDate())}`;
+    const today = new Date().toISOString().split("T")[0];
+    const isCurrentMonth = today.startsWith(month);
+    // "As-of" date: today for current month, month-end for past months, month-end for future
+    const asOf = isCurrentMonth ? today : monthEnd;
+
+    const prevDate = new Date(yr, mo - 2, 1);
+    const prevMonth = `${prevDate.getFullYear()}-${pad(prevDate.getMonth() + 1)}`;
+
+    const [allMovements, allBoxes, allStables, allCustomers, allAgreements, allOwnership, allBillingElements, allItems, allHorses] =
+      await Promise.all([
+        db.select().from(horseMovements),
+        db.select().from(boxes),
+        db.select().from(stables),
+        db.select().from(customers),
+        db.select().from(liveryAgreements),
+        db.select().from(horseOwnership),
+        db.select().from(billingElements),
+        db.select().from(items),
+        db.select().from(horses),
+      ]);
+
+    // Stable boxes
+    const stableBoxes = allBoxes.filter(b => {
+      if (b.status !== "active") return false;
+      const t = (b.type || "").toLowerCase();
+      return t === "box" || t === "boxes";
+    });
+    const stableBoxIds = new Set(stableBoxes.map(b => b.id));
+    const totalCapacity = stableBoxes.length;
+
+    // Lookup maps
+    const stableById = new Map(allStables.map(s => [s.id, s]));
+    const boxById = new Map(allBoxes.map(b => [b.id, b]));
+    const customerById = new Map(allCustomers.map(c => [c.id, c]));
+    const horseById = new Map(allHorses.map(h => [h.id, h]));
+    const itemById = new Map(allItems.map(i => [i.id, i]));
+    const agreementById = new Map(allAgreements.map(a => [a.id, a]));
+
+    const adecCustomerIds = new Set(
+      allCustomers.filter(c => isExcludedReportCustomer(c.fullname)).map(c => c.id)
+    );
+
+    const horseToOwner = new Map<string, string>();
+    const sortedOwnership = [...allOwnership].sort(
+      (a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)
+    );
+    for (const o of sortedOwnership) horseToOwner.set(o.horseId, o.customerId);
+
+    // Movements active at the as-of date (deduped by horseId)
+    const movementsAsOf = allMovements.filter(m =>
+      stableBoxIds.has(m.stableboxId) &&
+      (m.checkIn || "") <= asOf &&
+      (!m.checkOut || m.checkOut > asOf)
+    );
+    const seenHorseIds = new Set<string>();
+    const openMovements = movementsAsOf.filter(m => {
+      if (seenHorseIds.has(m.horseId)) return false;
+      seenHorseIds.add(m.horseId);
+      return true;
+    });
+
+    let adecHorses = 0;
+    let customerHorses = 0;
+    for (const m of openMovements) {
+      const ag = m.agreementId ? agreementById.get(m.agreementId) : undefined;
+      const cid = ag?.customerId ?? horseToOwner.get(m.horseId);
+      if (cid && adecCustomerIds.has(cid)) adecHorses++;
+      else customerHorses++;
+    }
+    const totalCheckedIn = adecHorses + customerHorses;
+    const occupancyRate = totalCapacity > 0 ? Math.round((totalCheckedIn / totalCapacity) * 100) : 0;
+
+    // Arrivals this month (agreements starting in selected month, excl ADEC)
+    const arrivalsAgreements = allAgreements.filter(a =>
+      a.startDate && a.startDate >= monthStart && a.startDate <= monthEnd &&
+      !adecCustomerIds.has(a.customerId)
+    );
+    const arrivalsThisMonth = arrivalsAgreements.length;
+
+    // Active agreements as-of date (excl ADEC): started on/before asOf and not yet ended on asOf
+    const activeAtMonthEnd = allAgreements.filter(a => {
+      if (adecCustomerIds.has(a.customerId)) return false;
+      if (!a.startDate || a.startDate > asOf) return false;
+      if (a.endDate && a.endDate < asOf) return false;
+      // For past/current months, status filter only matters if the agreement was already cancelled
+      if (a.status !== "active" && (!a.endDate || a.endDate < asOf)) return false;
+      return true;
+    });
+    const activeAgreementsCount = activeAtMonthEnd.length;
+    const activeCustomers = new Set(activeAtMonthEnd.map(a => a.customerId)).size;
+
+    // Revenue (billed elements)
+    const revenueForMonth = (m: string) => {
+      let total = 0, livery = 0, service = 0;
+      const byCustomer = new Map<string, number>();
+      for (const el of allBillingElements) {
+        if (adecCustomerIds.has(el.customerId)) continue;
+        if (!el.invoiceId) continue;
+        const inMonth = el.billingMonth === m || el.transactionDate?.substring(0, 7) === m;
+        if (!inMonth) continue;
+        const amt = parseFloat(el.price || "0");
+        if (Number.isNaN(amt)) continue;
+        const item = itemById.get(el.itemId);
+        const isLivery = !!(el.agreementId && item?.isLiveryPackage);
+        total += amt;
+        if (isLivery) livery += amt; else service += amt;
+        byCustomer.set(el.customerId, (byCustomer.get(el.customerId) || 0) + amt);
+      }
+      return { total, livery, service, byCustomer };
+    };
+    const revCur = revenueForMonth(month);
+    const revPrev = revenueForMonth(prevMonth);
+
+    // Top customer by ACTIVE MONTHLY CONTRACT VALUE (sum of monthlyAmount for their active agreements)
+    const customerContractAgg = new Map<string, { value: number; horses: number }>();
+    for (const a of activeAtMonthEnd) {
+      const v = parseFloat(a.monthlyAmount || "0") || 0;
+      const cur = customerContractAgg.get(a.customerId) || { value: 0, horses: 0 };
+      cur.value += v;
+      cur.horses += 1;
+      customerContractAgg.set(a.customerId, cur);
+    }
+    let topCustomer: { name: string; horses: number; monthlyValue: number } | null = null;
+    for (const [cid, agg] of customerContractAgg.entries()) {
+      const name = customerById.get(cid)?.fullname || "Unknown";
+      if (!topCustomer || agg.value > topCustomer.monthlyValue ||
+          (agg.value === topCustomer.monthlyValue && name.localeCompare(topCustomer.name) < 0)) {
+        topCustomer = { name, horses: agg.horses, monthlyValue: agg.value };
+      }
+    }
+
+    // Trends — perMonth last 12 ending with selected month
+    const perMonth: Array<{ label: string; livery: number; service: number; mtd?: boolean }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(yr, mo - 1 - i, 1);
+      const ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+      const r = revenueForMonth(ym);
+      const entry: any = { label: ym, livery: r.livery, service: r.service };
+      if (ym === month && isCurrentMonth) entry.mtd = true;
+      perMonth.push(entry);
+    }
+
+    // Trends — topCustomers / bottomCustomers for selected month
+    const customerRevList: Array<{ customerId: string; label: string; livery: number; service: number; total: number }> = [];
+    const liveryByCust = new Map<string, number>();
+    const serviceByCust = new Map<string, number>();
+    for (const el of allBillingElements) {
+      if (adecCustomerIds.has(el.customerId)) continue;
+      if (!el.invoiceId) continue;
+      const inMonth = el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+      if (!inMonth) continue;
+      const amt = parseFloat(el.price || "0");
+      if (Number.isNaN(amt)) continue;
+      const item = itemById.get(el.itemId);
+      const isLivery = !!(el.agreementId && item?.isLiveryPackage);
+      if (isLivery) liveryByCust.set(el.customerId, (liveryByCust.get(el.customerId) || 0) + amt);
+      else serviceByCust.set(el.customerId, (serviceByCust.get(el.customerId) || 0) + amt);
+    }
+    const allCustIds = new Set([...liveryByCust.keys(), ...serviceByCust.keys()]);
+    for (const cid of allCustIds) {
+      const livery = liveryByCust.get(cid) || 0;
+      const service = serviceByCust.get(cid) || 0;
+      customerRevList.push({
+        customerId: cid,
+        label: customerById.get(cid)?.fullname || "Unknown",
+        livery,
+        service,
+        total: livery + service,
+      });
+    }
+    const sortedDesc = [...customerRevList].sort((a, b) => b.total - a.total);
+    const sortedAsc = [...customerRevList].sort((a, b) => a.total - b.total);
+    const topCustomersTrend = sortedDesc.slice(0, 10).map(({ label, livery, service }) => ({ label, livery, service }));
+    const bottomCustomersTrend = sortedAsc.slice(0, 10).map(({ label, livery, service }) => ({ label, livery, service }));
+
+    // Roster builder — picks horse movement that overlaps the as-of date for this agreement
+    const buildRoster = (agreementsList: typeof allAgreements, indexStart = 1, anchor: "asOf" | "departure" = "asOf") => {
+      return agreementsList.map((a, i) => {
+        const customer = customerById.get(a.customerId);
+        const box = boxById.get(a.boxId);
+        const stable = box ? stableById.get(box.stableId) : null;
+        const movements = allMovements.filter(m => m.agreementId === a.id);
+        let chosen = null as (typeof allMovements)[number] | null;
+        if (anchor === "departure" && a.endDate) {
+          // For departures: movement that was open at agreement endDate (most recent overlap)
+          chosen = movements.find(m => (m.checkIn || "") <= a.endDate! && (!m.checkOut || m.checkOut >= a.endDate!)) || null;
+          if (!chosen) chosen = [...movements].sort((x, y) => (y.checkIn || "").localeCompare(x.checkIn || ""))[0] || null;
+        } else {
+          chosen = movements.find(m => (m.checkIn || "") <= asOf && (!m.checkOut || m.checkOut > asOf)) || null;
+          if (!chosen) chosen = [...movements].sort((x, y) => (y.checkIn || "").localeCompare(x.checkIn || ""))[0] || null;
+        }
+        const horse = chosen ? horseById.get(chosen.horseId) : null;
+        const tags: string[] = [];
+        if (stable) tags.push(stable.name.toLowerCase().replace(/\s+/g, "-"));
+        if (a.startDate && a.startDate >= monthStart && a.startDate <= monthEnd) tags.push("new");
+        return {
+          index: indexStart + i,
+          customerId: customer?.netsuiteId || customer?.id?.slice(0, 8) || "—",
+          customerName: customer?.fullname || "Unknown",
+          stable: stable?.name || "—",
+          boxId: box ? (stable ? `${stable.name} - ${box.name}` : box.name) : "—",
+          horseName: horse?.horseName || null,
+          breedingName: horse?.passportName || null,
+          arrivalDate: a.startDate || "",
+          departureDate: a.endDate || null,
+          packageMonthly: parseFloat(a.monthlyAmount || "0") || 0,
+          tags,
+        };
+      });
+    };
+
+    const arrivals = buildRoster(arrivalsAgreements);
+    const departuresAgreements = allAgreements.filter(a =>
+      a.endDate && a.endDate >= monthStart && a.endDate <= monthEnd &&
+      !adecCustomerIds.has(a.customerId)
+    );
+    const departures = buildRoster(departuresAgreements, 1, "departure");
+    const roster = buildRoster(activeAtMonthEnd);
+
+    // Distinct stable list (for roster filter chips)
+    const stableNames = Array.from(new Set(roster.map(r => r.stable).filter(s => s !== "—"))).sort();
+
+    return {
+      month,
+      generatedAt: new Date().toISOString(),
+      operational: {
+        totalCheckedIn,
+        adecHorses,
+        customerHorses,
+        occupancyRate,
+        totalCapacity,
+        arrivalsThisMonth,
+      },
+      business: {
+        activeCustomers,
+        activeAgreements: activeAgreementsCount,
+        revenueMTD: revCur.total,
+        revenuePrevMonth: revPrev.total,
+        topCustomer,
+      },
+      revenue: {
+        total: revCur.total,
+        livery: revCur.livery,
+        service: revCur.service,
+        liveryCycleDay: 15,
+      },
+      trends: {
+        perMonth,
+        topCustomers: topCustomersTrend,
+        bottomCustomers: bottomCustomersTrend,
+      },
+      stables: stableNames,
+      arrivals,
+      departures,
+      roster,
     };
   }
 
