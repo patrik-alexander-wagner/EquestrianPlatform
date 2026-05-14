@@ -29,11 +29,7 @@ export const customers = pgTable("customers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   netsuiteId: text("netsuite_id"),
   fullname: text("fullname").notNull().default(""),
-  firstname: text("firstname").notNull().default(""),
-  lastname: text("lastname").notNull().default(""),
-  phone: text("phone"),
-  email: text("email"),
-  status: text("status").notNull().default("active"),
+  isInactive: boolean("is_inactive").notNull().default(false),
 });
 
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true });

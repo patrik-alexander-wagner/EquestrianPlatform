@@ -25,7 +25,7 @@ export default function DashboardPage() {
     },
     {
       title: "Active Customers",
-      value: customers.filter((c: any) => c.status === "active").length,
+      value: customers.filter((c: any) => !c.isInactive).length,
       icon: Users,
       loading: loadingCustomers,
       href: "/customers",

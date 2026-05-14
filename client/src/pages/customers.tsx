@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/data-table";
 import { SearchBar } from "@/components/search-bar";
+import { StatusBadge } from "@/components/status-badge";
 import type { Customer } from "@shared/schema";
 
 export default function CustomersPage() {
@@ -14,8 +15,13 @@ export default function CustomersPage() {
 
   const columns = [
     { key: "fullname", label: "Full Name" },
-    { key: "phone", label: "Phone" },
-    { key: "email", label: "Email" },
+    {
+      key: "isInactive",
+      label: "Status",
+      render: (c: Customer) => (
+        <StatusBadge status={c.isInactive ? "inactive" : "active"} />
+      ),
+    },
   ];
 
   return (

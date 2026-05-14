@@ -128,12 +128,11 @@ export default function NewAgreementPage() {
   }, [filteredBoxes]);
 
   const activeCustomers = useMemo(() => {
-    const active = customers.filter(c => c.status === "active");
+    const active = customers.filter(c => !c.isInactive);
     if (!customerSearch.trim()) return active;
     const s = customerSearch.toLowerCase();
     return active.filter(c =>
-      (c.fullname || '').toLowerCase().includes(s) ||
-      (c.email && c.email.toLowerCase().includes(s))
+      (c.fullname || '').toLowerCase().includes(s)
     );
   }, [customers, customerSearch]);
 
@@ -314,7 +313,6 @@ export default function NewAgreementPage() {
                             onClick={() => { setSelectedCustomerId(c.id); setCustomerSearch(""); setCustomerDropdownOpen(false); }}
                           >
                             <div className="font-medium">{c.fullname}</div>
-                            {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                           </button>
                         ))
                       )}

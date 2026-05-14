@@ -217,12 +217,11 @@ export default function CurrentAgreementsPage() {
   }, [agreements, todayStr, filterHorse, filterCustomer, filterBox]);
 
   const editActiveCustomers = useMemo(() => {
-    const active = customers.filter(c => c.status === "active");
+    const active = customers.filter(c => !c.isInactive);
     if (!editCustomerSearch.trim()) return active;
     const s = editCustomerSearch.toLowerCase();
     return active.filter(c =>
-      (c.fullname || '').toLowerCase().includes(s) ||
-      (c.email && c.email.toLowerCase().includes(s))
+      (c.fullname || '').toLowerCase().includes(s)
     );
   }, [customers, editCustomerSearch]);
 
@@ -430,7 +429,6 @@ export default function CurrentAgreementsPage() {
                             onClick={() => { setEditSelectedCustomerId(c.id); setEditCustomerSearch(""); setEditCustomerDropdownOpen(false); }}
                           >
                             <div className="font-medium">{c.fullname}</div>
-                            {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                           </button>
                         ))
                       )}
