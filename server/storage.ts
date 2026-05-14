@@ -219,13 +219,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async syncCustomersFromNetsuite(netsuiteCustomers: any[]): Promise<{ created: number; unchanged: number; processed: number; skipped: number }> {
-    const pickField = (obj: any, ...keys: string[]) => {
-      for (const k of keys) {
-        if (obj?.[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
-      }
-      return null;
-    };
     const toStr = (v: any) => v === null || v === undefined ? null : String(v);
+    const toBool = (v: any) => {
+      if (typeof v === "boolean") return v;
+      if (typeof v === "string") {
+        const s = v.toLowerCase();
+        return s === "true" || s === "t" || s === "1" || s === "yes";
+      }
+      if (typeof v === "number") return v !== 0;
+      return false;
+    };
 
     const existing = await db.select().from(customers);
     const existingNetsuiteIds = new Set<string>();
@@ -239,8 +242,7 @@ export class DatabaseStorage implements IStorage {
 
     return await db.transaction(async (tx) => {
       for (const ns of netsuiteCustomers) {
-        const netsuiteIdRaw = pickField(ns, "internalId", "internalid", "netsuiteId", "netsuite_id", "id");
-        const netsuiteId = toStr(netsuiteIdRaw);
+        const netsuiteId = toStr(ns?.id);
         if (!netsuiteId) { skipped++; continue; }
 
         if (existingNetsuiteIds.has(netsuiteId)) {
@@ -248,11 +250,13 @@ export class DatabaseStorage implements IStorage {
           continue;
         }
 
-        const fullname = toStr(pickField(ns, "fullname", "fullName", "entityid", "entityId", "companyName", "companyname", "name", "displayName", "displayname")) || `NS#${netsuiteId}`;
+        const fullname = toStr(ns?.fullname) || `NS#${netsuiteId}`;
+        const isInactive = toBool(ns?.isinactive);
 
         await tx.insert(customers).values({
           netsuiteId,
           fullname,
+          isInactive,
         });
         existingNetsuiteIds.add(netsuiteId);
         created++;
