@@ -998,7 +998,11 @@ export class DatabaseStorage implements IStorage {
       db.select().from(billingElements),
     ]);
 
-    const stableBoxes = allBoxes.filter(b => b.type === "box" && b.status === "active");
+    const stableBoxes = allBoxes.filter(b => {
+      if (b.status !== "active") return false;
+      const t = (b.type || "").toLowerCase();
+      return t === "box" || t === "boxes";
+    });
     const stableBoxIds = new Set(stableBoxes.map(b => b.id));
     const totalBoxCapacity = stableBoxes.length;
 
