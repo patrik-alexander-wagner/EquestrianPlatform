@@ -1110,7 +1110,7 @@ export class DatabaseStorage implements IStorage {
     const prevDate = new Date(yr, mo - 2, 1);
     const prevMonth = `${prevDate.getFullYear()}-${pad(prevDate.getMonth() + 1)}`;
 
-    const [allMovements, allBoxes, allStables, allCustomers, allAgreements, allOwnership, allBillingElements, allItems, allHorses] =
+    const [allMovements, allBoxes, allStables, allCustomers, allAgreements, allOwnership, allBillingElements, allItems, allHorses, allInvoicesRaw] =
       await Promise.all([
         db.select().from(horseMovements),
         db.select().from(boxes),
@@ -1121,6 +1121,7 @@ export class DatabaseStorage implements IStorage {
         db.select().from(billingElements),
         db.select().from(items),
         db.select().from(horses),
+        db.select().from(invoices),
       ]);
 
     // Stable boxes
@@ -1224,18 +1225,33 @@ export class DatabaseStorage implements IStorage {
       cur.horses += 1;
       customerContractAgg.set(a.customerId, cur);
     }
-    let topCustomer: { name: string; horses: number; monthlyValue: number } | null = null;
     const topByContract: Array<{ name: string; horses: number; monthlyValue: number }> = [];
     for (const [cid, agg] of customerContractAgg.entries()) {
       const name = customerById.get(cid)?.fullname || "Unknown";
       topByContract.push({ name, horses: agg.horses, monthlyValue: agg.value });
-      if (!topCustomer || agg.value > topCustomer.monthlyValue ||
-          (agg.value === topCustomer.monthlyValue && name.localeCompare(topCustomer.name) < 0)) {
-        topCustomer = { name, horses: agg.horses, monthlyValue: agg.value };
-      }
     }
     topByContract.sort((a, b) => b.monthlyValue - a.monthlyValue || a.name.localeCompare(b.name));
     const topCustomersByContract = topByContract.slice(0, 10);
+
+    // Top customer by BIGGEST INVOICE for the selected month (single largest invoice total)
+    let topCustomer: { name: string; horses: number; monthlyValue: number } | null = null;
+    let topInvoiceAmount = -1;
+    let topInvoiceCustomerId: string | null = null;
+    for (const inv of allInvoicesRaw) {
+      if (adecCustomerIds.has(inv.customerId)) continue;
+      if (inv.billingMonth !== month) continue;
+      const amt = parseFloat(inv.totalAmount as any || "0");
+      if (Number.isNaN(amt)) continue;
+      if (amt > topInvoiceAmount) {
+        topInvoiceAmount = amt;
+        topInvoiceCustomerId = inv.customerId;
+      }
+    }
+    if (topInvoiceCustomerId) {
+      const name = customerById.get(topInvoiceCustomerId)?.fullname || "Unknown";
+      const horses = customerContractAgg.get(topInvoiceCustomerId)?.horses ?? 0;
+      topCustomer = { name, horses, monthlyValue: topInvoiceAmount };
+    }
 
     // Trends — perMonth last 12 ending with selected month
     const perMonth: Array<{ label: string; livery: number; service: number; mtd?: boolean }> = [];

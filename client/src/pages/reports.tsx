@@ -270,7 +270,16 @@ export default function ReportsPage() {
       );
       if (!res.ok) {
         let msg = "Failed to generate PDF";
-        try { const j = await res.json(); if (j?.message) msg = j.message; } catch {}
+        let fallbackUrl: string | undefined;
+        try {
+          const j = await res.json();
+          if (j?.message) msg = j.message;
+          if (j?.fallbackUrl) fallbackUrl = j.fallbackUrl;
+        } catch {}
+        if (fallbackUrl) {
+          window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
         throw new Error(msg);
       }
       const blob = await res.blob();

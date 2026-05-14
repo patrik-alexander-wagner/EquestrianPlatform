@@ -1319,7 +1319,7 @@ export async function registerRoutes(
     return null;
   }
 
-  app.get("/api/reports/livery-report.pdf", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.get("/api/reports/livery-report.pdf", requireAuth, async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -1330,19 +1330,32 @@ export async function registerRoutes(
       const html = renderLiveryReportHtml(data, { autoPrint: false });
 
       const executablePath = await resolveChromiumExecutable();
+      const fallbackUrl = `/api/reports/livery-report-print?month=${encodeURIComponent(month)}&print=1`;
       if (!executablePath) {
-        console.error(
-          "livery-report.pdf: no Chromium executable found. Set REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE, " +
-          "PUPPETEER_EXECUTABLE_PATH, or CHROMIUM_EXECUTABLE_PATH; or install chromium/google-chrome on PATH."
+        console.warn(
+          "livery-report.pdf: no Chromium executable found — falling back to print HTML page. " +
+          "To enable direct PDF download in production set REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE."
         );
-        return res.status(500).json({ message: "PDF rendering not available: no Chromium executable found on this server" });
+        return res.status(503).json({
+          message: "PDF rendering not available on this server. Opening printable report instead.",
+          fallbackUrl,
+        });
       }
-      const puppeteer = await import("puppeteer-core");
-      const browser = await puppeteer.default.launch({
-        executablePath,
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--font-render-hinting=none"],
-      });
+      let browser: any;
+      try {
+        const puppeteer = await import("puppeteer-core");
+        browser = await puppeteer.default.launch({
+          executablePath,
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--font-render-hinting=none"],
+        });
+      } catch (launchErr: any) {
+        console.error("livery-report.pdf: chromium launch failed, falling back to print HTML:", launchErr?.message || launchErr);
+        return res.status(503).json({
+          message: "PDF rendering failed on this server. Opening printable report instead.",
+          fallbackUrl,
+        });
+      }
       try {
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: "networkidle0", timeout: 60000 });
