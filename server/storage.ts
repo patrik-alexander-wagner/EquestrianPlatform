@@ -1225,13 +1225,23 @@ export class DatabaseStorage implements IStorage {
       cur.horses += 1;
       customerContractAgg.set(a.customerId, cur);
     }
-    const topByContract: Array<{ name: string; horses: number; monthlyValue: number }> = [];
-    for (const [cid, agg] of customerContractAgg.entries()) {
-      const name = customerById.get(cid)?.fullname || "Unknown";
-      topByContract.push({ name, horses: agg.horses, monthlyValue: agg.value });
+    // Top 10 customers by GENERATED INVOICE AMOUNT for the selected month
+    const invoiceAmountByCustomer = new Map<string, number>();
+    for (const inv of allInvoicesRaw) {
+      if (adecCustomerIds.has(inv.customerId)) continue;
+      if (inv.billingMonth !== month) continue;
+      const amt = parseFloat(inv.totalAmount as any || "0");
+      if (Number.isNaN(amt)) continue;
+      invoiceAmountByCustomer.set(inv.customerId, (invoiceAmountByCustomer.get(inv.customerId) || 0) + amt);
     }
-    topByContract.sort((a, b) => b.monthlyValue - a.monthlyValue || a.name.localeCompare(b.name));
-    const topCustomersByContract = topByContract.slice(0, 10);
+    const topByInvoice: Array<{ name: string; horses: number; monthlyValue: number }> = [];
+    for (const [cid, value] of invoiceAmountByCustomer.entries()) {
+      const name = customerById.get(cid)?.fullname || "Unknown";
+      const horses = customerContractAgg.get(cid)?.horses ?? 0;
+      topByInvoice.push({ name, horses, monthlyValue: value });
+    }
+    topByInvoice.sort((a, b) => b.monthlyValue - a.monthlyValue || a.name.localeCompare(b.name));
+    const topCustomersByInvoice = topByInvoice.slice(0, 10);
 
     // Top customer by BIGGEST INVOICE for the selected month (single largest invoice total)
     let topCustomer: { name: string; horses: number; monthlyValue: number } | null = null;
@@ -1392,7 +1402,7 @@ export class DatabaseStorage implements IStorage {
         perMonth,
         topCustomers: topCustomersTrend,
         bottomCustomers: bottomCustomersTrend,
-        topByContract: topCustomersByContract,
+        topByContract: topCustomersByInvoice,
       },
       stables: stablesSummary,
       arrivals,

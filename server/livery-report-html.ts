@@ -673,8 +673,8 @@ export function renderLiveryReportHtml(d: ReportData, opts: { autoPrint?: boolea
     </div>
   </div>
   <div class="subhead">
-    <h3>Top 10 Customers · By Active Monthly Value</h3>
-    <span class="meta">Active monthly contract value</span>
+    <h3>Top 10 Customers · By Generated Invoice Amount</h3>
+    <span class="meta">Sum of invoices generated for the period</span>
   </div>
   ${renderTopList(d)}
   ${renderRunnerBottom(3, TOTAL_PAGES)}
@@ -698,11 +698,6 @@ export function renderLiveryReportHtml(d: ReportData, opts: { autoPrint?: boolea
     <span class="meta">${d.departures.length} check-out${d.departures.length === 1 ? "" : "s"}</span>
   </div>
   ${renderDepartures(d)}
-  <div class="subhead">
-    <h3>Stable Capacity &amp; Mix</h3>
-    <span class="meta">As of ${esc(generatedDate)}</span>
-  </div>
-  ${renderStableMix(d)}
   ${renderRunnerBottom(4, TOTAL_PAGES)}
 </section>
 
