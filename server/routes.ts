@@ -5,6 +5,9 @@ import passport from "passport";
 import rateLimit from "express-rate-limit";
 import OAuth from "oauth-1.0a";
 import crypto from "crypto";
+import { existsSync } from "fs";
+import { execSync } from "child_process";
+import type { ReportData } from "./livery-report-html";
 import {
   insertUserSchema, insertHorseSchema,
   insertStableSchema, insertBoxSchema, insertItemSchema,
@@ -1284,6 +1287,83 @@ export async function registerRoutes(
       const data = await storage.getLiveryReport(month);
       res.json(data);
     } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  let cachedChromiumPath: string | null | undefined;
+  async function resolveChromiumExecutable(): Promise<string | null> {
+    if (cachedChromiumPath !== undefined) return cachedChromiumPath;
+    const candidates = [
+      process.env.REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      process.env.CHROMIUM_EXECUTABLE_PATH,
+      process.env.CHROME_BIN,
+    ].filter((p): p is string => !!p && p.length > 0);
+    for (const p of candidates) {
+      if (existsSync(p)) {
+        cachedChromiumPath = p;
+        return p;
+      }
+    }
+    for (const cmd of ["chromium", "chromium-browser", "google-chrome", "chrome"]) {
+      try {
+        const out = execSync(`command -v ${cmd}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+        if (out && existsSync(out)) {
+          cachedChromiumPath = out;
+          return out;
+        }
+      } catch {}
+    }
+    cachedChromiumPath = null;
+    return null;
+  }
+
+  app.get("/api/reports/livery-report.pdf", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
+      }
+      const { renderLiveryReportHtml } = await import("./livery-report-html");
+      const data: ReportData = await storage.getLiveryReport(month);
+      const html = renderLiveryReportHtml(data, { autoPrint: false });
+
+      const executablePath = await resolveChromiumExecutable();
+      if (!executablePath) {
+        console.error(
+          "livery-report.pdf: no Chromium executable found. Set REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE, " +
+          "PUPPETEER_EXECUTABLE_PATH, or CHROMIUM_EXECUTABLE_PATH; or install chromium/google-chrome on PATH."
+        );
+        return res.status(500).json({ message: "PDF rendering not available: no Chromium executable found on this server" });
+      }
+      const puppeteer = await import("puppeteer-core");
+      const browser = await puppeteer.default.launch({
+        executablePath,
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--font-render-hinting=none"],
+      });
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0", timeout: 60000 });
+        await page.evaluateHandle("document.fonts.ready");
+        const pdf = await page.pdf({
+          format: "A4",
+          printBackground: true,
+          preferCSSPageSize: true,
+        });
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="livery-report-${month}.pdf"`
+        );
+        res.setHeader("Cache-Control", "no-store");
+        res.end(pdf);
+      } finally {
+        await browser.close().catch(() => {});
+      }
+    } catch (e: any) {
+      console.error("livery-report.pdf error:", e);
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });

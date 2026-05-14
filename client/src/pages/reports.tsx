@@ -258,11 +258,36 @@ export default function ReportsPage() {
     pdf.save(`livery-roster-${selectedMonth}.pdf`);
   }, [filteredRoster, selectedMonth, monthLabel]);
 
-  // Full report PDF — opens server-rendered print-ready HTML in a new tab
-  // and triggers the browser's native print dialog (Save as PDF).
+  // Full report PDF — server renders the print-ready HTML to PDF via headless
+  // Chromium and streams it back as a direct download (no print dialog).
   const downloadFullPdf = useCallback(async () => {
     if (!selectedMonth) return;
-    window.open(`/api/reports/livery-report-print?month=${encodeURIComponent(selectedMonth)}`, "_blank");
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch(
+        `/api/reports/livery-report.pdf?month=${encodeURIComponent(selectedMonth)}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) {
+        let msg = "Failed to generate PDF";
+        try { const j = await res.json(); if (j?.message) msg = j.message; } catch {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `livery-report-${selectedMonth}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF download failed:", err);
+      alert(err instanceof Error ? err.message : "Failed to generate PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
   }, [selectedMonth]);
 
   // Legacy jsPDF full report (no longer wired) — keep stub to satisfy imports

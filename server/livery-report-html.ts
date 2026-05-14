@@ -16,7 +16,7 @@ type Roster = {
   tags: string[];
 };
 
-type ReportData = {
+export type ReportData = {
   month: string;
   generatedAt: string;
   operational: {
