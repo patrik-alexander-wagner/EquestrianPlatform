@@ -1225,13 +1225,17 @@ export class DatabaseStorage implements IStorage {
       customerContractAgg.set(a.customerId, cur);
     }
     let topCustomer: { name: string; horses: number; monthlyValue: number } | null = null;
+    const topByContract: Array<{ name: string; horses: number; monthlyValue: number }> = [];
     for (const [cid, agg] of customerContractAgg.entries()) {
       const name = customerById.get(cid)?.fullname || "Unknown";
+      topByContract.push({ name, horses: agg.horses, monthlyValue: agg.value });
       if (!topCustomer || agg.value > topCustomer.monthlyValue ||
           (agg.value === topCustomer.monthlyValue && name.localeCompare(topCustomer.name) < 0)) {
         topCustomer = { name, horses: agg.horses, monthlyValue: agg.value };
       }
     }
+    topByContract.sort((a, b) => b.monthlyValue - a.monthlyValue || a.name.localeCompare(b.name));
+    const topCustomersByContract = topByContract.slice(0, 10);
 
     // Trends — perMonth last 12 ending with selected month
     const perMonth: Array<{ label: string; livery: number; service: number; mtd?: boolean }> = [];
@@ -1321,8 +1325,28 @@ export class DatabaseStorage implements IStorage {
     const departures = buildRoster(departuresAgreements, 1, "departure");
     const roster = buildRoster(activeAtMonthEnd);
 
-    // Distinct stable list (for roster filter chips)
-    const stableNames = Array.from(new Set(roster.map(r => r.stable).filter(s => s !== "—"))).sort();
+    // Per-stable capacity + occupied (capacity = active boxes; occupied = openMovements per stable)
+    const occupiedByStableId = new Map<string, number>();
+    for (const m of openMovements) {
+      const box = boxById.get(m.stableboxId);
+      if (!box) continue;
+      occupiedByStableId.set(box.stableId, (occupiedByStableId.get(box.stableId) || 0) + 1);
+    }
+    const capacityByStableId = new Map<string, number>();
+    for (const b of stableBoxes) {
+      capacityByStableId.set(b.stableId, (capacityByStableId.get(b.stableId) || 0) + 1);
+    }
+    const stablesSummary = Array.from(new Set([...capacityByStableId.keys(), ...occupiedByStableId.keys()]))
+      .map(sid => {
+        const s = stableById.get(sid);
+        return {
+          name: s?.name || "—",
+          occupied: occupiedByStableId.get(sid) || 0,
+          capacity: capacityByStableId.get(sid) || 0,
+        };
+      })
+      .filter(s => s.name !== "—" && s.capacity > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return {
       month,
@@ -1352,8 +1376,9 @@ export class DatabaseStorage implements IStorage {
         perMonth,
         topCustomers: topCustomersTrend,
         bottomCustomers: bottomCustomersTrend,
+        topByContract: topCustomersByContract,
       },
-      stables: stableNames,
+      stables: stablesSummary,
       arrivals,
       departures,
       roster,

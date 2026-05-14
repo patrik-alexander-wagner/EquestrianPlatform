@@ -1274,6 +1274,37 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/livery-report-print", requireAuth, async (req, res) => {
+    try {
+      const month = req.query.month as string;
+      if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        return res.status(400).send("month parameter required (YYYY-MM)");
+      }
+      const autoPrint = req.query.print !== "0";
+      const data = await storage.getLiveryReport(month);
+      const { renderLiveryReportHtml } = await import("./livery-report-html");
+      const html = renderLiveryReportHtml(data as any, { autoPrint });
+      // Override default CSP for this self-contained print page only:
+      // allows the inline chart + auto-print script and Google Fonts.
+      res.setHeader(
+        "Content-Security-Policy",
+        [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline'",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' data: https://fonts.gstatic.com",
+          "img-src 'self' data: blob:",
+          "connect-src 'self'",
+        ].join("; ")
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(html);
+    } catch (e: any) {
+      res.status(e.status || 500).send(e.message || "Server error");
+    }
+  });
+
   app.get("/api/dashboard/kpis", requireAuth, async (_req, res) => {
     try {
       const data = await storage.getDashboardKpis();

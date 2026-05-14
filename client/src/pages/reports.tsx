@@ -81,7 +81,7 @@ interface LiveryReport {
     topCustomers: Array<{ label: string; livery: number; service: number }>;
     bottomCustomers: Array<{ label: string; livery: number; service: number }>;
   };
-  stables: string[];
+  stables: Array<{ name: string; occupied: number; capacity: number }>;
   arrivals: Roster[];
   departures: Roster[];
   roster: Roster[];
@@ -296,8 +296,15 @@ export default function ReportsPage() {
     pdf.save(`livery-roster-${selectedMonth}.pdf`);
   }, [filteredRoster, selectedMonth, monthLabel]);
 
-  // Full report PDF
+  // Full report PDF — opens server-rendered print-ready HTML in a new tab
+  // and triggers the browser's native print dialog (Save as PDF).
   const downloadFullPdf = useCallback(async () => {
+    if (!selectedMonth) return;
+    window.open(`/api/reports/livery-report-print?month=${encodeURIComponent(selectedMonth)}`, "_blank");
+  }, [selectedMonth]);
+
+  // Legacy jsPDF full report (no longer wired) — keep stub to satisfy imports
+  const _legacyDownloadFullPdf = useCallback(async () => {
     if (!data) return;
     setDownloadingPdf(true);
     try {
@@ -850,12 +857,12 @@ export default function ReportsPage() {
                 </button>
                 {(data?.stables ?? []).map(s => (
                   <button
-                    key={s}
-                    onClick={() => setRosterFilter(s)}
-                    className={`px-3 py-1 text-[12px] rounded ${rosterFilter === s ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
-                    data-testid={`filter-stable-${s}`}
+                    key={s.name}
+                    onClick={() => setRosterFilter(s.name)}
+                    className={`px-3 py-1 text-[12px] rounded ${rosterFilter === s.name ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+                    data-testid={`filter-stable-${s.name}`}
                   >
-                    {s} ({stableTagCounts[s] || 0})
+                    {s.name} ({stableTagCounts[s.name] || 0})
                   </button>
                 ))}
                 <button
