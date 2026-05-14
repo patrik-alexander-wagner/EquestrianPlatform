@@ -79,7 +79,6 @@ const navGroups = [
   {
     label: "Reports",
     adminOnly: false,
-    liveryAdminOnly: true,
     items: [
       { title: "Livery Reports", url: "/reports/livery", icon: BarChart3 },
     ],

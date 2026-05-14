@@ -1278,7 +1278,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.get("/api/reports/livery-report", requireAuth, async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -1368,7 +1368,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report-print", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.get("/api/reports/livery-report-print", requireAuth, async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
