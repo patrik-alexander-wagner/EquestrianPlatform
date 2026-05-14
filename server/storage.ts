@@ -985,9 +985,10 @@ export class DatabaseStorage implements IStorage {
     const today = new Date().toISOString().split("T")[0];
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
-    const currentMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const priorMonth = `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}`;
+    const pastDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const compareDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const pastMonth = `${pastDate.getFullYear()}-${pad(pastDate.getMonth() + 1)}`;
+    const compareMonth = `${compareDate.getFullYear()}-${pad(compareDate.getMonth() + 1)}`;
 
     const [allMovements, allBoxes, allCustomers, allAgreements, allOwnership, allBillingElements] = await Promise.all([
       db.select().from(horseMovements),
@@ -1066,12 +1067,12 @@ export class DatabaseStorage implements IStorage {
       return { total, byCustomer };
     };
 
-    const cur = revenueForMonth(currentMonth, today);
-    const prv = revenueForMonth(priorMonth);
+    const past = revenueForMonth(pastMonth);
+    const compare = revenueForMonth(compareMonth);
 
     let topCustomerId: string | null = null;
     let topCustomerRevenue = 0;
-    for (const [cid, rev] of prv.byCustomer.entries()) {
+    for (const [cid, rev] of past.byCustomer.entries()) {
       if (rev > topCustomerRevenue) { topCustomerRevenue = rev; topCustomerId = cid; }
     }
     const topCustomer = topCustomerId
@@ -1085,11 +1086,11 @@ export class DatabaseStorage implements IStorage {
       totalBoxCapacity,
       activeCustomers,
       activeAgreements,
-      monthlyRevenue: cur.total,
-      priorMonthRevenue: prv.total,
+      monthlyRevenue: past.total,
+      priorMonthRevenue: compare.total,
       topCustomer,
-      currentMonth,
-      priorMonth,
+      currentMonth: pastMonth,
+      priorMonth: compareMonth,
     };
   }
 

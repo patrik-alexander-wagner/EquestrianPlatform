@@ -194,7 +194,7 @@ export default function DashboardPage() {
           <Card className="hover-elevate cursor-pointer transition-all h-full">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Monthly Revenue (MTD)
+                Monthly Revenue ({kpis ? formatMonthLabel(kpis.currentMonth) : "Past Month"})
               </CardTitle>
               <Wallet className="w-5 h-5 text-primary" />
             </CardHeader>
