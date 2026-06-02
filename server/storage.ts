@@ -973,7 +973,7 @@ export class DatabaseStorage implements IStorage {
     const monthBillingElements = allBillingElements.filter(el => {
       if (excludedCustomerIds.has(el.customerId)) return false;
       if (!el.invoiceId) return false;
-      return el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+      return (el.billingMonth || el.transactionDate?.substring(0, 7)) === month;
     });
 
     let liveryRevenue = 0;
@@ -1070,7 +1070,8 @@ export class DatabaseStorage implements IStorage {
       const monthEls = allBillingElements.filter(el => {
         if (adecCustomerIds.has(el.customerId)) return false;
         if (!el.invoiceId) return false;
-        const inMonth = el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+        const elementMonth = el.billingMonth || el.transactionDate?.substring(0, 7);
+        const inMonth = elementMonth === month;
         if (!inMonth) return false;
         if (maxDateInclusive && el.transactionDate && el.transactionDate > maxDateInclusive) return false;
         return true;
@@ -1219,7 +1220,8 @@ export class DatabaseStorage implements IStorage {
       for (const el of allBillingElements) {
         if (adecCustomerIds.has(el.customerId)) continue;
         if (!el.invoiceId) continue;
-        const inMonth = el.billingMonth === m || el.transactionDate?.substring(0, 7) === m;
+        const elementMonth = el.billingMonth || el.transactionDate?.substring(0, 7);
+        const inMonth = elementMonth === m;
         if (!inMonth) continue;
         const amt = parseFloat(el.price || "0");
         if (Number.isNaN(amt)) continue;
@@ -1299,7 +1301,8 @@ export class DatabaseStorage implements IStorage {
     for (const el of allBillingElements) {
       if (adecCustomerIds.has(el.customerId)) continue;
       if (!el.invoiceId) continue;
-      const inMonth = el.billingMonth === month || el.transactionDate?.substring(0, 7) === month;
+      const elementMonth = el.billingMonth || el.transactionDate?.substring(0, 7);
+      const inMonth = elementMonth === month;
       if (!inMonth) continue;
       const amt = parseFloat(el.price || "0");
       if (Number.isNaN(amt)) continue;
@@ -1470,7 +1473,7 @@ export class DatabaseStorage implements IStorage {
 
     let filtered = allBillingElements.filter(el => !!el.invoiceId);
     if (month && groupBy === "customer") {
-      filtered = filtered.filter(el => el.billingMonth === month || el.transactionDate?.substring(0, 7) === month);
+      filtered = filtered.filter(el => (el.billingMonth || el.transactionDate?.substring(0, 7)) === month);
     }
 
     const grouped: Record<string, any> = {};
