@@ -87,7 +87,7 @@ interface LiveryReport {
 }
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
-function getCurrentMonth() { const n = new Date(); return `${n.getFullYear()}-${pad(n.getMonth() + 1)}`; }
+function getCurrentMonth() { const n = new Date(); const p = new Date(n.getFullYear(), n.getMonth() - 1, 1); return `${p.getFullYear()}-${pad(p.getMonth() + 1)}`; }
 function generateMonthOptions() {
   const out: string[] = []; const now = new Date();
   for (let i = 0; i < 12; i++) {
