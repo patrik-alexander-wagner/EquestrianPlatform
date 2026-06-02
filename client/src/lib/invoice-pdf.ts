@@ -6,6 +6,7 @@ interface InvoiceLineItem {
   description?: string;
   horseName?: string;
   billDate?: string;
+  isLivery?: boolean;
   quantity?: number;
   unit?: string;
   unitPrice?: number;
@@ -101,7 +102,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   const safeItems = lineItems.map(li => ({
     description: li.description || "-",
     horseName: li.horseName || "-",
-    billDate: li.billDate || "",
+    billDate: li.isLivery ? "" : (li.billDate || ""),
     quantity: toNum(li.quantity),
     amount: toNum(li.amount),
   }));
@@ -212,7 +213,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
 
   autoTable(doc, {
     startY: y,
-    head: [["#", "Ln. Description", "Horse", "Bill Date", "Qty", "Amount", "Vat Amount", "Net Amount"]],
+    head: [["#", "Ln. Description", "Horse", "Transaction Date", "Qty", "Amount", "Vat Amount", "Net Amount"]],
     body: tableBody,
     theme: "grid",
     headStyles: {
