@@ -208,6 +208,29 @@ export default function InvoicesPage() {
     },
     { key: "customerName", label: "Customer" },
     {
+      key: "customerType",
+      label: "Type",
+      render: (item: any) => (
+        item.customerType === "livery" ? (
+          <Badge
+            variant="outline"
+            className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300 border-0"
+            data-testid={`badge-type-${item.id}`}
+          >
+            Livery
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300 border-0"
+            data-testid={`badge-type-${item.id}`}
+          >
+            External
+          </Badge>
+        )
+      ),
+    },
+    {
       key: "billingMonth",
       label: "Invoice Month",
       render: (item: any) => formatBillingMonth(item.billingMonth),

@@ -719,12 +719,30 @@ export class DatabaseStorage implements IStorage {
       .groupBy(billingElements.invoiceId);
     const countMap = new Map(counts.map(c => [c.invoiceId, Number(c.count)]));
 
+    const allAgreements = await db.select().from(liveryAgreements);
+
+    const customerHasLiveryForMonth = (customerId: string, billingMonth: string | null): boolean => {
+      if (!billingMonth) return false;
+      const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
+      if (!bmYear || !bmMonth) return false;
+      const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
+      const bmStartStr = `${bmYear}-${String(bmMonth).padStart(2, "0")}-01`;
+      const bmEndStr = `${bmYear}-${String(bmMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+      return allAgreements.some(a => {
+        if (a.customerId !== customerId) return false;
+        if (a.startDate && a.startDate > bmEndStr) return false;
+        if (a.endDate && a.endDate < bmStartStr) return false;
+        return true;
+      });
+    };
+
     return allInvoices.map(invoice => {
       const customer = allCustomers.find(c => c.id === invoice.customerId);
       return {
         ...invoice,
         customerName: customer ? customer.fullname : "Unknown",
         lineItemCount: countMap.get(invoice.id) || 0,
+        customerType: customerHasLiveryForMonth(invoice.customerId, invoice.billingMonth) ? "livery" : "external",
       };
     });
   }

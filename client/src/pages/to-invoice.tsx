@@ -444,6 +444,7 @@ export default function ToInvoicePage() {
       return { ...c, lineItems: filteredLineItems, total };
     }).filter(c => {
       if (c.lineItems.length === 0) return false;
+      if (c.customerName.trim().toUpperCase() === "ADEC") return false;
       if (!customerSearch) return true;
       return c.customerName.toLowerCase().includes(customerSearch.toLowerCase());
     });
