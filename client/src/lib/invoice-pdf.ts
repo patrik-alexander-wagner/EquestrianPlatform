@@ -94,8 +94,21 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text("PO Box 590, Abu Dhabi UAE", margin, addrY + 8);
   doc.text("TRN: 100259446100003", margin, addrY + 12);
 
-  let totalAmountNum = parseFloat(invoice.totalAmount);
-  if (!Number.isFinite(totalAmountNum)) totalAmountNum = 0;
+  const toNum = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const safeItems = lineItems.map(li => ({
+    description: li.description || "-",
+    horseName: li.horseName || "-",
+    billDate: li.billDate || "",
+    quantity: toNum(li.quantity),
+    amount: toNum(li.amount),
+  }));
+
+  const subtotal = safeItems.reduce((s, li) => s + li.amount, 0);
+  const vatAmount = subtotal * (VAT_PERCENT / 100);
+  const grandTotal = subtotal + vatAmount;
 
   doc.setFillColor(...GREY_BAND);
   doc.rect(pageWidth - margin - 70, 42, 70, 16, "F");
@@ -106,7 +119,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(15);
   doc.setFont("helvetica", "bold");
-  doc.text(`AED ${totalAmountNum.toFixed(2)}`, pageWidth - margin - 67, 55);
+  doc.text(`AED ${grandTotal.toFixed(2)}`, pageWidth - margin - 67, 55);
 
   let y = 66;
   const halfW = (pageWidth - margin * 2 - 6) / 2;
@@ -143,22 +156,6 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   doc.text("VAT Reg. Number:", margin, y);
 
   y += 10;
-
-  const toNum = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-  const safeItems = lineItems.map(li => ({
-    description: li.description || "-",
-    horseName: li.horseName || "-",
-    billDate: li.billDate || "",
-    quantity: toNum(li.quantity),
-    amount: toNum(li.amount),
-  }));
-
-  const subtotal = safeItems.reduce((s, li) => s + li.amount, 0);
-  const vatAmount = subtotal * (VAT_PERCENT / 100);
-  const grandTotal = subtotal + vatAmount;
 
   const tableBody = safeItems.length === 0
     ? [["", "No items linked to this invoice", "", "", "", "", "", ""]]
