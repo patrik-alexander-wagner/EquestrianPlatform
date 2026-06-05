@@ -533,11 +533,8 @@ export class DatabaseStorage implements IStorage {
     const allMovements = await db.select().from(horseMovements);
 
     return allAgreements.map(agreement => {
-      const agreementMovements = allMovements.filter(m => m.agreementId === agreement.id);
-      const chosenMovement = agreementMovements.find(m => !m.checkOut)
-        || [...agreementMovements].sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""))[0]
-        || null;
-      const horse = chosenMovement ? allHorses.find(h => h.id === chosenMovement.horseId) : null;
+      const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
+      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;
