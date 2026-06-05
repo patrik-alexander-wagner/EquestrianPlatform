@@ -534,7 +534,15 @@ export class DatabaseStorage implements IStorage {
 
     return allAgreements.map(agreement => {
       const activeMovement = allMovements.find(m => m.agreementId === agreement.id && !m.checkOut);
-      const horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
+      let horse = activeMovement ? allHorses.find(h => h.id === activeMovement.horseId) : null;
+      // Terminated agreement with no horse currently in the box: fall back to the
+      // last horse that occupied the box during the (shortened) agreement.
+      if (!horse && agreement.endDate) {
+        const lastMovement = allMovements
+          .filter(m => m.agreementId === agreement.id)
+          .sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""))[0];
+        horse = lastMovement ? allHorses.find(h => h.id === lastMovement.horseId) : null;
+      }
       const customer = allCustomers.find(c => c.id === agreement.customerId);
       const box = allBoxes.find(b => b.id === agreement.boxId);
       const stable = box ? allStables.find(s => s.id === box.stableId) : null;

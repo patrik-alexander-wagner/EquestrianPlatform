@@ -1059,7 +1059,16 @@ export async function registerRoutes(
           }
 
           const activeMovement = await storage.getActiveMovementByBoxId(agreement.boxId);
-          const trustedHorseId = activeMovement?.horseId ?? null;
+          let trustedHorseId = activeMovement?.horseId ?? null;
+          // Terminated agreement with no horse currently in the box: attribute the
+          // prorated livery line to the last horse that occupied the box during the
+          // (shortened) agreement.
+          if (!trustedHorseId && agreement.endDate) {
+            const agreementMovements = await storage.getHorseMovementsByAgreementId(agreement.id);
+            const lastMovement = agreementMovements
+              .sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""))[0];
+            trustedHorseId = lastMovement?.horseId ?? null;
+          }
 
           const monthlyAmount = parseFloat(agreement.monthlyAmount ?? "0");
           const overlapStart = agreement.startDate && agreement.startDate > periodStart ? agreement.startDate : periodStart;
