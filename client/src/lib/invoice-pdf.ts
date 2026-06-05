@@ -6,11 +6,19 @@ interface InvoiceLineItem {
   description?: string;
   horseName?: string;
   billDate?: string;
+  billStartDate?: string | null;
   isLivery?: boolean;
   quantity?: number;
   unit?: string;
   unitPrice?: number;
   amount?: number;
+}
+
+function formatDMY(iso?: string | null): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 interface InvoiceDetails {
@@ -99,13 +107,19 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
-  const safeItems = lineItems.map(li => ({
-    description: li.description || "-",
-    horseName: li.horseName || "-",
-    billDate: li.billDate || "",
-    quantity: toNum(li.quantity),
-    amount: toNum(li.amount),
-  }));
+  const safeItems = lineItems.map(li => {
+    let billDate = formatDMY(li.billDate);
+    if (li.isLivery && li.billStartDate && li.billDate) {
+      billDate = `${formatDMY(li.billStartDate)} - ${formatDMY(li.billDate)}`;
+    }
+    return {
+      description: li.description || "-",
+      horseName: li.horseName || "-",
+      billDate,
+      quantity: toNum(li.quantity),
+      amount: toNum(li.amount),
+    };
+  });
 
   const subtotal = safeItems.reduce((s, li) => s + li.amount, 0);
   const vatAmount = subtotal * (VAT_PERCENT / 100);

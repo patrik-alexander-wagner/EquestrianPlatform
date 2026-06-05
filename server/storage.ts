@@ -816,14 +816,27 @@ export class DatabaseStorage implements IStorage {
     const linkedElements = await db.select().from(billingElements).where(eq(billingElements.invoiceId, id));
     const allHorses = await db.select().from(horses);
     const allItems = await db.select().from(items);
+    const allAgreements = await db.select().from(liveryAgreements);
 
     const lineItems = linkedElements.map(el => {
       const horse = el.horseId ? allHorses.find(h => h.id === el.horseId) : null;
       const item = allItems.find(i => i.id === el.itemId);
+      let billStartDate: string | null = null;
+      if (el.agreementId) {
+        const agreement = allAgreements.find(a => a.id === el.agreementId);
+        const month = el.billingMonth || (el.transactionDate ? el.transactionDate.substring(0, 7) : null);
+        if (month) {
+          const firstOfMonth = `${month}-01`;
+          billStartDate = agreement?.startDate && agreement.startDate > firstOfMonth
+            ? agreement.startDate
+            : firstOfMonth;
+        }
+      }
       return {
         description: item?.name || "Unknown",
         horseName: horse ? formatHorseName(horse) : "—",
         billDate: el.transactionDate,
+        billStartDate,
         quantity: el.quantity,
         unit: item?.unitFactor ? `${item.unitFactor}` : "Each",
         unitPrice: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),

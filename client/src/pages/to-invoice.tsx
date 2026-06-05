@@ -50,6 +50,13 @@ type LineItem = {
   pieces?: number | null;
 };
 
+function formatDMY(iso?: string | null): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
 function getProRateFraction(agreement: any, billingMonth: string): { fraction: number; label: string } {
   const [bmYear, bmMonth] = billingMonth.split("-").map(Number);
   const daysInMonth = new Date(bmYear, bmMonth, 0).getDate();
@@ -387,7 +394,10 @@ export default function ToInvoicePage() {
         const [bmY, bmM] = billingMonth.split("-").map(Number);
         const dim = new Date(bmY, bmM, 0).getDate();
         const periodEndStr = `${bmY}-${String(bmM).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
-        const liveryDate = a.endDate && a.endDate < periodEndStr ? a.endDate : periodEndStr;
+        const firstOfMonth = `${bmY}-${String(bmM).padStart(2, "0")}-01`;
+        const liveryEnd = a.endDate && a.endDate < periodEndStr ? a.endDate : periodEndStr;
+        const liveryStart = a.startDate && a.startDate > firstOfMonth ? a.startDate : firstOfMonth;
+        const liveryDate = `${formatDMY(liveryStart)} - ${formatDMY(liveryEnd)}`;
 
         lineItems.push({
           key: `livery-${a.id}-${billingMonth}`,
@@ -421,7 +431,7 @@ export default function ToInvoicePage() {
           type: "billing",
           description: b.itemName,
           horseName: b.horseName,
-          date: b.transactionDate,
+          date: formatDMY(b.transactionDate),
           qty,
           unitPrice: qty > 0 ? totalPrice / qty : totalPrice,
           amount: totalPrice,
