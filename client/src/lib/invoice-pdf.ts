@@ -102,7 +102,7 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   const safeItems = lineItems.map(li => ({
     description: li.description || "-",
     horseName: li.horseName || "-",
-    billDate: li.isLivery ? "" : (li.billDate || ""),
+    billDate: li.billDate || "",
     quantity: toNum(li.quantity),
     amount: toNum(li.amount),
   }));

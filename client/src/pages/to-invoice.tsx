@@ -384,12 +384,17 @@ export default function ToInvoicePage() {
 
         const amount = monthlyAmount * fraction;
 
+        const [bmY, bmM] = billingMonth.split("-").map(Number);
+        const dim = new Date(bmY, bmM, 0).getDate();
+        const periodEndStr = `${bmY}-${String(bmM).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
+        const liveryDate = a.endDate && a.endDate < periodEndStr ? a.endDate : periodEndStr;
+
         lineItems.push({
           key: `livery-${a.id}-${billingMonth}`,
           type: "livery",
           description: a.itemName + (label ? ` (${label})` : ""),
           horseName: a.horseName,
-          date: billingMonthLabel,
+          date: liveryDate,
           qty: 1,
           unitPrice: monthlyAmount,
           amount,

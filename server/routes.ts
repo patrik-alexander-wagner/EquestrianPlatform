@@ -1089,7 +1089,7 @@ export async function registerRoutes(
               agreementId: item.agreementId,
               quantity: "1",
               price: proratedPrice,
-              transactionDate: periodEnd,
+              transactionDate: overlapEnd,
               billingMonth,
               billed: true,
               userId: invoiceUser?.id || null,
