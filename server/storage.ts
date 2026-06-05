@@ -822,14 +822,21 @@ export class DatabaseStorage implements IStorage {
       const horse = el.horseId ? allHorses.find(h => h.id === el.horseId) : null;
       const item = allItems.find(i => i.id === el.itemId);
       let billStartDate: string | null = null;
+      let billEndDate: string | null = null;
       if (el.agreementId) {
         const agreement = allAgreements.find(a => a.id === el.agreementId);
         const month = el.billingMonth || (el.transactionDate ? el.transactionDate.substring(0, 7) : null);
         if (month) {
+          const [my, mm] = month.split("-").map(Number);
           const firstOfMonth = `${month}-01`;
+          const lastDay = new Date(my, mm, 0).getDate();
+          const periodEnd = `${month}-${String(lastDay).padStart(2, "0")}`;
           billStartDate = agreement?.startDate && agreement.startDate > firstOfMonth
             ? agreement.startDate
             : firstOfMonth;
+          billEndDate = agreement?.endDate && agreement.endDate >= firstOfMonth && agreement.endDate < periodEnd
+            ? agreement.endDate
+            : periodEnd;
         }
       }
       return {
@@ -837,6 +844,7 @@ export class DatabaseStorage implements IStorage {
         horseName: horse ? formatHorseName(horse) : "—",
         billDate: el.transactionDate,
         billStartDate,
+        billEndDate,
         quantity: el.quantity,
         unit: item?.unitFactor ? `${item.unitFactor}` : "Each",
         unitPrice: (el.quantity || 1) > 0 ? parseFloat(el.price || "0") / (el.quantity || 1) : parseFloat(el.price || "0"),

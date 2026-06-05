@@ -7,6 +7,7 @@ interface InvoiceLineItem {
   horseName?: string;
   billDate?: string;
   billStartDate?: string | null;
+  billEndDate?: string | null;
   isLivery?: boolean;
   quantity?: number;
   unit?: string;
@@ -109,8 +110,9 @@ export async function generateInvoicePDF(invoice: InvoiceDetails): Promise<jsPDF
   };
   const safeItems = lineItems.map(li => {
     let billDate = formatDMY(li.billDate);
-    if (li.isLivery && li.billStartDate && li.billDate) {
-      billDate = `${formatDMY(li.billStartDate)} - ${formatDMY(li.billDate)}`;
+    if (li.isLivery && li.billStartDate) {
+      const end = li.billEndDate || li.billDate;
+      billDate = `${formatDMY(li.billStartDate)} - ${formatDMY(end)}`;
     }
     return {
       description: li.description || "-",
