@@ -1058,8 +1058,13 @@ export async function registerRoutes(
             return res.status(400).json({ message: `Livery line item ${i + 1} agreement ended before billing month ${billingMonth}.` });
           }
 
-          const activeMovement = await storage.getActiveMovementByBoxId(agreement.boxId);
-          const trustedHorseId = activeMovement?.horseId ?? null;
+          const agreementMovements = await storage.getHorseMovementsByAgreementId(item.agreementId);
+          const byRecent = [...agreementMovements].sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""));
+          const overlappingMovement = byRecent.find(m =>
+            m.checkIn <= periodEnd && (!m.checkOut || m.checkOut >= periodStart)
+          );
+          const chosenMovement = overlappingMovement || byRecent[0];
+          const trustedHorseId = chosenMovement?.horseId ?? null;
 
           const monthlyAmount = parseFloat(agreement.monthlyAmount ?? "0");
           const overlapStart = agreement.startDate && agreement.startDate > periodStart ? agreement.startDate : periodStart;
