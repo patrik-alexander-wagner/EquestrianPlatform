@@ -1141,8 +1141,10 @@ export async function registerRoutes(
           adhocIds,
         );
       } catch (err: any) {
-        if (err.code === "23505") {
-          if (err.constraint === "billing_elements_agreement_month_unique") {
+        const pgCode = err?.code ?? err?.cause?.code;
+        const pgConstraint = err?.constraint ?? err?.cause?.constraint;
+        if (pgCode === "23505") {
+          if (pgConstraint === "billing_elements_agreement_month_unique") {
             return res.status(409).json({ message: "This livery agreement was already billed for this month (concurrent request) — invoice not created. Please refresh and retry." });
           }
           return res.status(400).json({ message: "Duplicate PO number — please retry" });

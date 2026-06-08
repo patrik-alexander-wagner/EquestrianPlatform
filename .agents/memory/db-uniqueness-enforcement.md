@@ -26,3 +26,10 @@ truncate unrelated tables (e.g. users for a missing sso_id unique) — never tru
 prefer targeted direct SQL (`ALTER TABLE ... DROP CONSTRAINT` / `DROP INDEX`) for
 surgical schema changes, and mirror them in shared/schema.ts so push stays the source
 of truth.
+
+## Startup migrations can resurrect dropped indexes
+`server/migrate.ts` runs on every boot (`server/index.ts`). It used `CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_customer_billing_month`. A manual `DROP INDEX` against the dev DB was therefore undone on the next `restart_workflow`, so a fix "verified" right after the drop regressed on the next restart.
+**Lesson:** when removing a DB-level rule, also remove/invert the statement in the startup migration runner (make it DROP the obsolete index + CREATE the replacement). Direct SQL alone is not durable here.
+
+## Drizzle nests the pg error code under `.cause`
+A `23505` from a Drizzle query surfaces as `err.message = "Failed query: insert into ..."`, and the pg code/constraint live on `err.cause.code` / `err.cause.constraint`, NOT `err.code`. A handler checking only `err.code === "23505"` falls through and leaks the raw SQL to the user. Read both: `err?.code ?? err?.cause?.code`.

@@ -59,9 +59,18 @@ export async function runMigration() {
       console.log("Migration: monthly_billing_approvals table created");
     }
 
+    // Multiple invoices per customer per billing month are now allowed, so the
+    // old customer+month uniqueness must NOT exist. Drop it if a previous
+    // migration created it.
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_customer_billing_month
-      ON invoices(customer_id, billing_month)
+      DROP INDEX IF EXISTS idx_invoices_customer_billing_month
+    `);
+
+    // Prevent the same livery agreement being billed twice for one month.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS billing_elements_agreement_month_unique
+      ON billing_elements(agreement_id, billing_month)
+      WHERE agreement_id IS NOT NULL
     `);
 
     const userIdColCheck = await client.query(`
