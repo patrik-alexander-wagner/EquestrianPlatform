@@ -74,7 +74,7 @@ export default function InvoicesPage() {
   });
 
   const [customerFilter, setCustomerFilter] = useState<string>("all");
-  const [netsuiteFilter, setNetsuiteFilter] = useState<string>("all");
+  const [netsuiteFilter, setNetsuiteFilter] = useState<string>("not_sent");
 
   const customerOptions = Array.from(
     new Set(invoices.map((inv) => inv.customerName).filter(Boolean) as string[]),
