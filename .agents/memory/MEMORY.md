@@ -1,0 +1,1 @@
+- [DB uniqueness can hide in indexes, not just constraints](db-uniqueness-enforcement.md) — to drop a uniqueness rule, check pg_indexes for UNIQUE indexes too; pg_constraint (contype='u') alone misses unique indexes.

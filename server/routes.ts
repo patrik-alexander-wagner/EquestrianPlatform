@@ -1004,11 +1004,6 @@ export async function registerRoutes(
         }
       }
 
-      const hasDuplicate = await storage.hasInvoiceForCustomerMonth(customerId, billingMonth);
-      if (hasDuplicate) {
-        return res.status(400).json({ message: "An invoice already exists for this customer and billing month" });
-      }
-
       const approvals = await storage.getMonthlyBillingApprovals(billingMonth, customerId);
       const vetApproved = approvals.some((a: any) => a.step === "VET" && a.approved);
       const storesApproved = approvals.some((a: any) => a.step === "STORES" && a.approved);
@@ -1027,6 +1022,8 @@ export async function registerRoutes(
 
       if (liveryItems && Array.isArray(liveryItems) && liveryItems.length > 0) {
         const seenAgreementIds = new Set<string>();
+        const liveryAgreementIds = liveryItems.map((li: any) => li.agreementId).filter(Boolean);
+        const billedMonthsByAgreement = await storage.getBilledMonthsForAgreements(liveryAgreementIds);
         for (let i = 0; i < liveryItems.length; i++) {
           const item = liveryItems[i];
 
@@ -1056,6 +1053,10 @@ export async function registerRoutes(
           }
           if (agreement.endDate && agreement.endDate < periodStart) {
             return res.status(400).json({ message: `Livery line item ${i + 1} agreement ended before billing month ${billingMonth}.` });
+          }
+
+          if (billedMonthsByAgreement[item.agreementId]?.includes(billingMonth)) {
+            return res.status(400).json({ message: `Livery line item ${i + 1} — this agreement's livery package has already been billed for ${billingMonth}.` });
           }
 
           const activeMovement = await storage.getActiveMovementByBoxId(agreement.boxId);
@@ -1141,7 +1142,10 @@ export async function registerRoutes(
         );
       } catch (err: any) {
         if (err.code === "23505") {
-          return res.status(400).json({ message: "An invoice already exists for this customer and billing month" });
+          if (err.constraint === "billing_elements_agreement_month_unique") {
+            return res.status(409).json({ message: "This livery agreement was already billed for this month (concurrent request) — invoice not created. Please refresh and retry." });
+          }
+          return res.status(400).json({ message: "Duplicate PO number — please retry" });
         }
         return res.status(400).json({ message: err.message || "Failed to create invoice — rolled back" });
       }

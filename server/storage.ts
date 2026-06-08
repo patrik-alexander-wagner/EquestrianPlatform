@@ -880,7 +880,7 @@ export class DatabaseStorage implements IStorage {
     const allBilled = await db.select().from(billingElements)
       .where(and(
         eq(billingElements.billed, true),
-        sql`${billingElements.agreementId} IS NOT NULL`
+        inArray(billingElements.agreementId, agreementIds)
       ));
     const result: Record<string, string[]> = {};
     for (const el of allBilled) {

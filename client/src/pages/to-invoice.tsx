@@ -588,7 +588,7 @@ export default function ToInvoicePage() {
                     </div>
                     <Button
                       onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
-                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved || locked}
+                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
                       data-testid={`button-generate-invoice-${c.customerId}`}
                     >
                       <FileText className="w-4 h-4 mr-2" />
@@ -634,19 +634,14 @@ export default function ToInvoicePage() {
                         by {storesApproval.username}
                       </span>
                     )}
-                    {locked && (
-                      <Badge variant="outline" className="text-gray-500 border-gray-300 dark:text-gray-400 dark:border-gray-700 ml-auto">
-                        Invoice exists — locked
-                      </Badge>
-                    )}
-                    {!locked && !bothApproved && (
+                    {!bothApproved && (
                       <Badge variant="outline" className="text-orange-600 border-orange-300 dark:text-orange-400 dark:border-orange-700 ml-auto">
                         Awaiting sign-off
                       </Badge>
                     )}
-                    {!locked && bothApproved && (
+                    {bothApproved && (
                       <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400 dark:border-green-700 ml-auto">
-                        Ready to invoice
+                        {locked ? "Signed off — additional invoice allowed" : "Ready to invoice"}
                       </Badge>
                     )}
                   </div>

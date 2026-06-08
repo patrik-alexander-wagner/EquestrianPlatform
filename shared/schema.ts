@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -144,7 +144,11 @@ export const billingElements = pgTable("billing_elements", {
   invoiceId: uuid("invoice_id"),
   userId: uuid("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  uniqueLiveryAgreementMonth: uniqueIndex("billing_elements_agreement_month_unique")
+    .on(table.agreementId, table.billingMonth)
+    .where(sql`${table.agreementId} IS NOT NULL`),
+}));
 
 export const insertBillingElementSchema = createInsertSchema(billingElements).omit({ id: true, createdAt: true });
 export type InsertBillingElement = z.infer<typeof insertBillingElementSchema>;
@@ -163,7 +167,6 @@ export const invoices = pgTable("invoices", {
   poNumber: text("po_number"),
   netsuiteJson: text("netsuite_json"),
 }, (table) => ({
-  uniqueCustomerMonth: unique("invoices_customer_month_unique").on(table.customerId, table.billingMonth),
   uniquePoNumber: unique("invoices_po_number_unique").on(table.poNumber),
 }));
 
