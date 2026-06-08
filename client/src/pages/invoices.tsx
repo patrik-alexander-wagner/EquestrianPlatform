@@ -22,6 +22,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function formatBillingMonth(billingMonth: string | null | undefined): string {
   if (!billingMonth) return "-";
@@ -64,6 +71,20 @@ export default function InvoicesPage() {
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
+  });
+
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [netsuiteFilter, setNetsuiteFilter] = useState<string>("all");
+
+  const customerOptions = Array.from(
+    new Set(invoices.map((inv) => inv.customerName).filter(Boolean) as string[]),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredInvoices = invoices.filter((inv) => {
+    if (customerFilter !== "all" && inv.customerName !== customerFilter) return false;
+    if (netsuiteFilter === "sent" && !inv.sentToNetsuite) return false;
+    if (netsuiteFilter === "not_sent" && inv.sentToNetsuite) return false;
+    return true;
   });
 
   const { data: validationHistory = [] } = useQuery<any[]>({
@@ -269,11 +290,41 @@ export default function InvoicesPage() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-end gap-4 mb-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Customer</Label>
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="w-56" data-testid="select-filter-customer">
+              <SelectValue placeholder="All customers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All customers</SelectItem>
+              {customerOptions.map((name) => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">NetSuite Status</Label>
+          <Select value={netsuiteFilter} onValueChange={setNetsuiteFilter}>
+            <SelectTrigger className="w-56" data-testid="select-filter-netsuite">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="sent">Sent to NetSuite</SelectItem>
+              <SelectItem value="not_sent">Not sent to NetSuite</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <DataTable
         columns={columns}
-        data={invoices}
+        data={filteredInvoices}
         isLoading={isLoading}
-        emptyMessage="No invoices yet"
+        emptyMessage="No invoices match the selected filters"
         actions={(item) => (
           <div className="flex items-center gap-1">
             <DropdownMenu>
