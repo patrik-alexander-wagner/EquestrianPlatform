@@ -14,24 +14,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/use-user-role";
+import { useCanEdit } from "@/hooks/use-can-edit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, MoreVertical, ChevronsUpDown, Check } from "lucide-react";
+import { MoreVertical, ChevronsUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function HorsesPage() {
-  const userRole = useUserRole();
-  const isAdmin = userRole === "ADMIN" || userRole === "LIVERY_ADMIN";
+  const canEdit = useCanEdit();
   const [search, setSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableBoxSearch, setStableBoxSearch] = useState("");
   const [displayInactives, setDisplayInactives] = useState(false);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingHorse, setEditingHorse] = useState<any>(null);
-  const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
-  const [ownerComboOpen, setOwnerComboOpen] = useState(false);
-  const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
   const [editOwnerId, setEditOwnerId] = useState<string>("");
   const [editOwnerComboOpen, setEditOwnerComboOpen] = useState(false);
   const [editOwnerSearchTerm, setEditOwnerSearchTerm] = useState("");
@@ -40,13 +35,6 @@ export default function HorsesPage() {
   const { data: allCustomers = [] } = useQuery<any[]>({
     queryKey: ["/api/customers"],
   });
-
-  const filteredCustomers = useMemo(() => {
-    if (!ownerSearchTerm) return allCustomers;
-    return allCustomers.filter((c: any) =>
-      c.fullname.toLowerCase().includes(ownerSearchTerm.toLowerCase())
-    );
-  }, [allCustomers, ownerSearchTerm]);
 
   const filteredEditCustomers = useMemo(() => {
     if (!editOwnerSearchTerm) return allCustomers;
@@ -69,20 +57,6 @@ export default function HorsesPage() {
     () => (displayInactives ? horses : horses.filter((h: any) => (h.status || "active") !== "inactive")),
     [horses, displayInactives],
   );
-
-  const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/horses", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/horses"] });
-      setShowCreateDialog(false);
-      setSelectedOwnerId("");
-      setOwnerSearchTerm("");
-      toast({ title: "Horse created successfully" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Failed to create horse", description: error.message, variant: "destructive" });
-    },
-  });
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("PATCH", `/api/horses/${data.id}`, data),
@@ -114,12 +88,6 @@ export default function HorsesPage() {
       <PageHeader
         title="Horses"
         description="Manage horses used in livery agreements"
-        actions={isAdmin ? (
-          <Button onClick={() => setShowCreateDialog(true)} data-testid="button-new-horse">
-            <Plus className="w-4 h-4 mr-2" />
-            New Horse
-          </Button>
-        ) : undefined}
       />
 
       <div className="flex gap-3 mb-4 flex-wrap items-center">
@@ -141,7 +109,7 @@ export default function HorsesPage() {
         columns={columns}
         data={visibleHorses}
         isLoading={isLoading}
-        actions={(item) => (
+        actions={canEdit ? ((item) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" data-testid={`button-actions-${item.id}`}>
@@ -157,123 +125,8 @@ export default function HorsesPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
+        )) : undefined}
       />
-
-      <Dialog open={showCreateDialog} onOpenChange={(open) => {
-        setShowCreateDialog(open);
-        if (!open) { setSelectedOwnerId(""); setOwnerSearchTerm(""); }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Horse</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!selectedOwnerId) {
-                toast({ title: "Owner is required", variant: "destructive" });
-                return;
-              }
-              const fd = new FormData(e.currentTarget);
-              createMutation.mutate({
-                horseName: fd.get("horseName"),
-                passportName: fd.get("passportName") || null,
-                breed: fd.get("breed") || null,
-                dateOfBirth: fd.get("dateOfBirth") || null,
-                sex: fd.get("sex") || null,
-                color: fd.get("color") || null,
-                passportNumber: fd.get("passportNumber") || null,
-                status: "active",
-                ownerId: selectedOwnerId,
-              });
-            }}
-          >
-            <div className="space-y-4">
-              <div>
-                <Label>Owner <span className="text-destructive">*</span></Label>
-                <Popover open={ownerComboOpen} onOpenChange={setOwnerComboOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={ownerComboOpen}
-                      className="w-full justify-between font-normal"
-                      data-testid="select-owner"
-                    >
-                      {selectedOwnerId
-                        ? allCustomers.find((c: any) => c.id === selectedOwnerId)?.fullname || "Select owner..."
-                        : "Select owner..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0" align="start">
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder="Search customers..."
-                        value={ownerSearchTerm}
-                        onValueChange={setOwnerSearchTerm}
-                        data-testid="input-owner-search"
-                      />
-                      <CommandList>
-                        <CommandEmpty>No customer found.</CommandEmpty>
-                        <CommandGroup>
-                          {filteredCustomers.map((c: any) => (
-                            <CommandItem
-                              key={c.id}
-                              value={c.id}
-                              onSelect={() => {
-                                setSelectedOwnerId(c.id);
-                                setOwnerComboOpen(false);
-                                setOwnerSearchTerm("");
-                              }}
-                              data-testid={`option-owner-${c.id}`}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", selectedOwnerId === c.id ? "opacity-100" : "opacity-0")} />
-                              {c.fullname}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div>
-                <Label>Stable Name</Label>
-                <Input name="horseName" required data-testid="input-horse-name" />
-              </div>
-              <div>
-                <Label>Passport Name</Label>
-                <Input name="passportName" data-testid="input-passport-name" />
-              </div>
-              <div>
-                <Label>Breed</Label>
-                <Input name="breed" data-testid="input-breed" />
-              </div>
-              <div>
-                <Label>Date of Birth</Label>
-                <Input name="dateOfBirth" type="date" data-testid="input-dob" />
-              </div>
-              <div>
-                <Label>Sex</Label>
-                <Input name="sex" data-testid="input-sex" />
-              </div>
-              <div>
-                <Label>Color</Label>
-                <Input name="color" data-testid="input-color" />
-              </div>
-              <div>
-                <Label>Passport Number</Label>
-                <Input name="passportNumber" maxLength={40} data-testid="input-passport-number" />
-              </div>
-            </div>
-            <DialogFooter className="mt-4">
-              <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-horse">Create Horse</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showEditDialog} onOpenChange={(open) => {
         setShowEditDialog(open);

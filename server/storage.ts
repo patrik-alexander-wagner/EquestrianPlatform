@@ -62,8 +62,6 @@ export interface IStorage {
 
   getHorses(search?: string, customerSearch?: string, stableBoxSearch?: string): Promise<any[]>;
   getHorse(id: string): Promise<Horse | undefined>;
-  createHorse(horse: InsertHorse): Promise<Horse>;
-  createHorseWithOwner(horse: InsertHorse, ownerId: string): Promise<Horse>;
   updateHorse(id: string, horse: Partial<InsertHorse>): Promise<Horse | undefined>;
 
   getStables(): Promise<Stable[]>;
@@ -323,19 +321,6 @@ export class DatabaseStorage implements IStorage {
   async getHorse(id: string): Promise<Horse | undefined> {
     const [horse] = await db.select().from(horses).where(eq(horses.id, id));
     return horse;
-  }
-
-  async createHorse(horse: InsertHorse): Promise<Horse> {
-    const [created] = await db.insert(horses).values(horse).returning();
-    return created;
-  }
-
-  async createHorseWithOwner(horse: InsertHorse, ownerId: string): Promise<Horse> {
-    return await db.transaction(async (tx) => {
-      const [created] = await tx.insert(horses).values(horse).returning();
-      await tx.insert(horseOwnership).values({ horseId: created.id, customerId: ownerId });
-      return created;
-    });
   }
 
   async updateHorse(id: string, horse: Partial<InsertHorse>): Promise<Horse | undefined> {
