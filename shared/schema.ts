@@ -3,7 +3,7 @@ import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uui
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const userRoleEnum = pgEnum("user_role", ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE"]);
+export const userRoleEnum = pgEnum("user_role", ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"]);
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "DRAFT", "VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION",
@@ -260,7 +260,7 @@ export const insertHorseMovementSchema = createInsertSchema(horseMovements).omit
 export type InsertHorseMovement = z.infer<typeof insertHorseMovementSchema>;
 export type HorseMovement = typeof horseMovements.$inferSelect;
 
-export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE"] as const;
+export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"] as const;
 export type UserRole = typeof VALID_ROLES[number];
 
 export const INVOICE_STATUSES = [

@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Undo2 } from "lucide-react";
+import { useCanEdit } from "@/hooks/use-can-edit";
 
 export default function AgreementHistoryPage() {
+  const canEdit = useCanEdit();
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelAgreement, setCancelAgreement] = useState<any>(null);
   const { toast } = useToast();
@@ -87,7 +89,7 @@ export default function AgreementHistoryPage() {
         data={historicalAgreements}
         isLoading={isLoading}
         emptyMessage="No historical agreements found"
-        actions={(item) => (
+        actions={canEdit ? (item) => (
           <Button
             variant="outline"
             size="sm"
@@ -97,7 +99,7 @@ export default function AgreementHistoryPage() {
             <Undo2 className="w-4 h-4 mr-1" />
             Cancel Checkout
           </Button>
-        )}
+        ) : undefined}
       />
 
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>

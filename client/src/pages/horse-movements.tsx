@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoveRight, X, Search, LogOut } from "lucide-react";
+import { useCanEdit } from "@/hooks/use-can-edit";
 
 interface BoxGridItem {
   id: string;
@@ -58,6 +59,7 @@ interface HorseEntry {
 }
 
 export default function HorseMovementsPage() {
+  const canEdit = useCanEdit();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [selectedBox, setSelectedBox] = useState<BoxGridItem | null>(null);
@@ -438,29 +440,31 @@ export default function HorseMovementsPage() {
                 )}
               </div>
 
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setMoveDialogOpen(true)}
-                    disabled={customerMoveTargets.length === 0}
-                    data-testid="button-move-horse"
-                  >
-                    <MoveRight className="w-4 h-4 mr-2" />
-                    Move to another box
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setCheckoutDialogOpen(true)}
-                    disabled={!selectedBox.movementId}
-                    data-testid="button-checkout-horse"
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Check out horse
-                  </Button>
+              {canEdit && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-3">Actions</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setMoveDialogOpen(true)}
+                      disabled={customerMoveTargets.length === 0}
+                      data-testid="button-move-horse"
+                    >
+                      <MoveRight className="w-4 h-4 mr-2" />
+                      Move to another box
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCheckoutDialogOpen(true)}
+                      disabled={!selectedBox.movementId}
+                      data-testid="button-checkout-horse"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Check out horse
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : selectedBox?.hasAgreement ? (
             <div className="space-y-4">
@@ -481,27 +485,31 @@ export default function HorseMovementsPage() {
                 )}
               </div>
               <p className="text-sm text-amber-600 dark:text-amber-400">This box has an active agreement but no horse is currently checked in.</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setCheckinDialogOpen(true)}
-                  data-testid="button-checkin-horse"
-                >
-                  <MoveRight className="w-4 h-4 mr-2" />
-                  Check in a horse
-                </Button>
-              </div>
+              {canEdit && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCheckinDialogOpen(true)}
+                    data-testid="button-checkin-horse"
+                  >
+                    <MoveRight className="w-4 h-4 mr-2" />
+                    Check in a horse
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div>
               <p className="text-sm text-muted-foreground mb-3">This box has no horse assigned.</p>
-              <Button
-                variant="outline"
-                onClick={() => navigate("/agreements/new")}
-                data-testid="button-create-agreement"
-              >
-                Create new agreement
-              </Button>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/agreements/new")}
+                  data-testid="button-create-agreement"
+                >
+                  Create new agreement
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

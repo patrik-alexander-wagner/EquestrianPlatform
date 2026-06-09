@@ -10,8 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Customer } from "@shared/schema";
+import { useCanEdit } from "@/hooks/use-can-edit";
 
 export default function CustomersPage() {
+  const canEdit = useCanEdit();
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
@@ -77,15 +79,17 @@ export default function CustomersPage() {
         title="Customers"
         description="View customers synced from NetSuite"
         actions={
-          <Button
-            variant="outline"
-            onClick={startSync}
-            disabled={syncNetsuiteMutation.isPending}
-            data-testid="button-sync-netsuite"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
-            {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
-          </Button>
+          canEdit ? (
+            <Button
+              variant="outline"
+              onClick={startSync}
+              disabled={syncNetsuiteMutation.isPending}
+              data-testid="button-sync-netsuite"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
+              {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
+            </Button>
+          ) : undefined
         }
       />
 

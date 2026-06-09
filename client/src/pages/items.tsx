@@ -11,8 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Item } from "@shared/schema";
+import { useCanEdit } from "@/hooks/use-can-edit";
 
 export default function ItemsPage() {
+  const canEdit = useCanEdit();
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
@@ -105,15 +107,17 @@ export default function ItemsPage() {
         title="Items"
         description="Items and service items. Unit Factor = quantity unit for pricing, Price = price for that unit factor."
         actions={
-          <Button
-            variant="outline"
-            onClick={startSync}
-            disabled={syncNetsuiteMutation.isPending}
-            data-testid="button-sync-netsuite"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
-            {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
-          </Button>
+          canEdit ? (
+            <Button
+              variant="outline"
+              onClick={startSync}
+              disabled={syncNetsuiteMutation.isPending}
+              data-testid="button-sync-netsuite"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncNetsuiteMutation.isPending ? "animate-spin" : ""}`} />
+              {syncNetsuiteMutation.isPending ? "Syncing..." : "Sync with NetSuite"}
+            </Button>
+          ) : undefined
         }
       />
 

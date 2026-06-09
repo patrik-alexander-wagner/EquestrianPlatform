@@ -586,49 +586,55 @@ export default function ToInvoicePage() {
                       />
                       <CardTitle className="text-lg">{c.customerName}</CardTitle>
                     </div>
-                    <Button
-                      onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
-                      disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
-                      data-testid={`button-generate-invoice-${c.customerId}`}
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      {preCheckLoading ? "Checking..." : "Generate Invoice"}
-                    </Button>
+                    {userRole !== "VIEWER" && (
+                      <Button
+                        onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
+                        disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
+                        data-testid={`button-generate-invoice-${c.customerId}`}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        {preCheckLoading ? "Checking..." : "Generate Invoice"}
+                      </Button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant={vetApproved ? "default" : "outline"}
-                      className={vetApproved
-                        ? "bg-green-600 hover:bg-green-700 text-white"
-                        : "border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950"
-                      }
-                      disabled={approvalMutation.isPending || !canToggleApproval("VET") || locked}
-                      onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "VET", approved: !vetApproved })}
-                      data-testid={`button-vet-approval-${c.customerId}`}
-                    >
-                      <ShieldCheck className="w-4 h-4 mr-1" />
-                      {vetApproved ? "Vet Approved" : "Vet Validation Pending"}
-                    </Button>
+                    {userRole !== "VIEWER" && (
+                      <Button
+                        size="sm"
+                        variant={vetApproved ? "default" : "outline"}
+                        className={vetApproved
+                          ? "bg-green-600 hover:bg-green-700 text-white"
+                          : "border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950"
+                        }
+                        disabled={approvalMutation.isPending || !canToggleApproval("VET") || locked}
+                        onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "VET", approved: !vetApproved })}
+                        data-testid={`button-vet-approval-${c.customerId}`}
+                      >
+                        <ShieldCheck className="w-4 h-4 mr-1" />
+                        {vetApproved ? "Vet Approved" : "Vet Validation Pending"}
+                      </Button>
+                    )}
                     {vetApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-vet-approver-${c.customerId}`}>
                         by {vetApproval.username}
                       </span>
                     )}
-                    <Button
-                      size="sm"
-                      variant={storesApproved ? "default" : "outline"}
-                      className={storesApproved
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
-                      }
-                      disabled={approvalMutation.isPending || !canToggleApproval("STORES") || locked}
-                      onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "STORES", approved: !storesApproved })}
-                      data-testid={`button-stores-approval-${c.customerId}`}
-                    >
-                      <Package className="w-4 h-4 mr-1" />
-                      {storesApproved ? "Store Approved" : "Store Validation Pending"}
-                    </Button>
+                    {userRole !== "VIEWER" && (
+                      <Button
+                        size="sm"
+                        variant={storesApproved ? "default" : "outline"}
+                        className={storesApproved
+                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                        }
+                        disabled={approvalMutation.isPending || !canToggleApproval("STORES") || locked}
+                        onClick={() => approvalMutation.mutate({ customerId: c.customerId, billingMonth, step: "STORES", approved: !storesApproved })}
+                        data-testid={`button-stores-approval-${c.customerId}`}
+                      >
+                        <Package className="w-4 h-4 mr-1" />
+                        {storesApproved ? "Store Approved" : "Store Validation Pending"}
+                      </Button>
+                    )}
                     {storesApproval && (
                       <span className="text-xs text-muted-foreground" data-testid={`text-stores-approver-${c.customerId}`}>
                         by {storesApproval.username}
@@ -686,7 +692,7 @@ export default function ToInvoicePage() {
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
                           <TableCell>
-                            {li.type === "billing" && li.billingElementId && (
+                            {li.type === "billing" && li.billingElementId && userRole !== "VIEWER" && (
                               <div className="flex gap-1">
                                 <Button
                                   variant="ghost"

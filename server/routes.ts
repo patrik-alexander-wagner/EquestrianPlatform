@@ -117,7 +117,7 @@ export async function registerRoutes(
       const ssoRoleMap: Record<string, string> = {
         "superadmin": "ADMIN", "admin": "ADMIN",
         "livery_admin": "LIVERY_ADMIN", "veterinary": "VETERINARY",
-        "stores": "STORES", "finance": "FINANCE",
+        "stores": "STORES", "finance": "FINANCE", "viewer": "VIEWER",
       };
       const incomingRole = userData.role?.toLowerCase();
       const mappedRole = incomingRole ? ssoRoleMap[incomingRole] : undefined;
@@ -203,6 +203,18 @@ export async function registerRoutes(
     const publicPaths = ["/login", "/logout", "/me"];
     if (publicPaths.includes(req.path)) return next();
     requireAuth(req, res, next);
+  });
+
+  // VIEWER role is strictly read-only: block every state-changing request.
+  app.use("/api", (req, res, next) => {
+    const method = req.method.toUpperCase();
+    if (method === "GET" || method === "HEAD" || method === "OPTIONS") return next();
+    if (req.path === "/login" || req.path === "/logout") return next();
+    const user = req.user as any;
+    if (req.isAuthenticated() && user?.role === "VIEWER") {
+      return res.status(403).json({ message: "Your account has read-only (Viewer) access and cannot perform this action." });
+    }
+    next();
   });
 
   // Users

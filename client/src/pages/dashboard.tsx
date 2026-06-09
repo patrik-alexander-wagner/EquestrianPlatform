@@ -38,13 +38,20 @@ const COLOR_LIVERY = "#1F9D55";
 const COLOR_SERVICE = "#1E3A5F";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
-function getCurrentMonth() {
+// Match the Livery Report period logic: report on the previous (completed) month.
+function getReportMonth() {
   const n = new Date();
-  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}`;
+  const p = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+  return `${p.getFullYear()}-${pad(p.getMonth() + 1)}`;
+}
+function formatMonthLabel(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleString("en-US", { month: "long", year: "numeric" });
 }
 
 export default function DashboardPage() {
-  const month = getCurrentMonth();
+  const month = getReportMonth();
+  const monthLabel = formatMonthLabel(month);
   const { data, isLoading } = useQuery<DashboardSummary>({
     queryKey: ["/api/reports/dashboard-summary", `?month=${month}`],
   });
@@ -58,7 +65,18 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-8">
-      <PageHeader title="Dashboard" description="Welcome to StableMaster" />
+      <PageHeader
+        title="Dashboard"
+        description={`Showing figures for the ${monthLabel} billing period`}
+        actions={
+          <span
+            className="inline-flex items-center rounded-md bg-primary/10 text-primary px-3 py-1.5 text-sm font-semibold"
+            data-testid="text-dashboard-period"
+          >
+            {monthLabel}
+          </span>
+        }
+      />
 
       {/* Operational Overview */}
       <section className="space-y-3">
@@ -117,7 +135,7 @@ export default function DashboardPage() {
               <>
                 <BigNumber value={op?.customerHorses ?? 0} testId="text-customer-horses" />
                 <div className="mt-3 text-[12.5px] text-muted-foreground">
-                  {op?.arrivalsThisMonth ?? 0} new arrival{(op?.arrivalsThisMonth ?? 0) === 1 ? "" : "s"} this month
+                  {op?.arrivalsThisMonth ?? 0} new arrival{(op?.arrivalsThisMonth ?? 0) === 1 ? "" : "s"} in {monthLabel}
                 </div>
               </>
             )}
@@ -174,7 +192,7 @@ export default function DashboardPage() {
           </KpiCard>
 
           <KpiCard
-            label="Monthly Revenue (MTD)"
+            label="Monthly Revenue"
             icon={<CircleDollarSign className="w-5 h-5" />}
             iconColor="text-purple-700"
             iconBg="bg-purple-50"
@@ -198,7 +216,7 @@ export default function DashboardPage() {
           </KpiCard>
 
           <KpiCard
-            label="Top Customer (This Month)"
+            label={`Top Customer (${monthLabel})`}
             icon={<Trophy className="w-5 h-5" />}
             iconColor="text-orange-700"
             iconBg="bg-orange-50"

@@ -20,6 +20,7 @@ const ROLE_LABELS: Record<string, string> = {
   VETERINARY: "Veterinary",
   STORES: "Stores",
   FINANCE: "Finance",
+  VIEWER: "Viewer",
 };
 
 export default function AdminUsersPage() {

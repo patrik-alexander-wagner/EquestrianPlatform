@@ -313,13 +313,15 @@ export default function CurrentAgreementsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => openEditDialog(item)}
-                  data-testid={`button-edit-${item.id}`}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
+                {userRole !== "VIEWER" && (
+                  <DropdownMenuItem
+                    onClick={() => openEditDialog(item)}
+                    data-testid={`button-edit-${item.id}`}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
                 {canViewDocuments && (
                   <DropdownMenuItem
                     onClick={() => { setDocumentsAgreement(item); setShowDocumentsDialog(true); }}
@@ -329,7 +331,7 @@ export default function CurrentAgreementsPage() {
                     Documents
                   </DropdownMenuItem>
                 )}
-                {!item.endDate && (
+                {!item.endDate && userRole !== "VIEWER" && (
                   <DropdownMenuItem
                     onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
                     data-testid={`button-terminate-${item.id}`}
