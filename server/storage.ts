@@ -1157,9 +1157,18 @@ export class DatabaseStorage implements IStorage {
         db.select().from(invoices),
       ]);
 
+    // Occupancy/horse counts are scoped to these stables only
+    const OCCUPANCY_STABLE_NAMES = new Set(["maha", "damess", "al anood"]);
+    const occupancyStableIds = new Set(
+      allStables
+        .filter(s => OCCUPANCY_STABLE_NAMES.has((s.name || "").trim().toLowerCase()))
+        .map(s => s.id)
+    );
+
     // Stable boxes
     const stableBoxes = allBoxes.filter(b => {
       if (b.status !== "active") return false;
+      if (!occupancyStableIds.has(b.stableId)) return false;
       const t = (b.type || "").toLowerCase();
       return t === "box" || t === "boxes";
     });
