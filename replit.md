@@ -23,7 +23,7 @@ client/src/
     login.tsx                - Login page (username/password)
     dashboard.tsx            - Home dashboard with stats
     customers.tsx            - Customer list (read-only)
-    horses.tsx               - Horse management (edit only; data sourced from NetSuite)
+    horses.tsx               - Horse management (create + edit; data also synced from NetSuite). New Horse available to ADMIN/LIVERY_ADMIN/VETERINARY
     stables.tsx              - Stable management (CRUD)
     boxes.tsx                - Box management (CRUD + import)
     items.tsx                - Items list (read-only; sync from NetSuite)

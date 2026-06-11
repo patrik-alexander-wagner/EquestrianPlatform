@@ -156,6 +156,9 @@ export default function DashboardPage() {
                   <div className="mt-2 text-[12.5px] text-muted-foreground">
                     {op?.totalCheckedIn ?? 0} / {op?.totalCapacity ?? 0} boxes occupied
                   </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground" data-testid="text-occupancy-scope">
+                    (Maha, Damess, Al Anood only)
+                  </div>
                 </div>
               </>
             )}
