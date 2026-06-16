@@ -14,15 +14,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useCanEdit, useUserRole } from "@/hooks/use-can-edit";
+import { useCan } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MoreVertical, ChevronsUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function HorsesPage() {
-  const canEdit = useCanEdit();
-  const userRole = useUserRole();
-  const canCreate = userRole === "ADMIN" || userRole === "LIVERY_ADMIN" || userRole === "VETERINARY";
+  const canEdit = useCan("horses.edit");
+  const canCreate = useCan("horses.create");
   const [search, setSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [stableBoxSearch, setStableBoxSearch] = useState("");

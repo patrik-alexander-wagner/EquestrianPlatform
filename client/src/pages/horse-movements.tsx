@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoveRight, X, Search, LogOut } from "lucide-react";
-import { useCanEdit } from "@/hooks/use-can-edit";
+import { useCan } from "@/hooks/use-permissions";
 
 interface BoxGridItem {
   id: string;
@@ -59,7 +59,7 @@ interface HorseEntry {
 }
 
 export default function HorseMovementsPage() {
-  const canEdit = useCanEdit();
+  const canEdit = useCan("movements.manage");
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [selectedBox, setSelectedBox] = useState<BoxGridItem | null>(null);

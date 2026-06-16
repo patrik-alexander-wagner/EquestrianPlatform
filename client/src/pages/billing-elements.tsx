@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, DollarSign, Trash2 } from "lucide-react";
 import { AlertTriangle } from "lucide-react";
 import type { Item } from "@shared/schema";
+import { useCan } from "@/hooks/use-permissions";
 
 function getTodayString() {
   const now = new Date();
@@ -39,7 +40,7 @@ export default function BillingElementsPage() {
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
     queryKey: ["/api/me"],
   });
-  const isLiveryAdmin = !!me?.role;
+  const isLiveryAdmin = useCan("billing_elements.manage");
 
   const [horseSearch, setHorseSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");

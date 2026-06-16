@@ -1,6 +1,21 @@
 import { storage } from "./storage";
 import { db } from "./db";
 import { customers, horses, stables, boxes, items, liveryAgreements, horseOwnership, horseMovements } from "@shared/schema";
+import { SYSTEM_ROLES, DEFAULT_ROLE_PERMISSIONS } from "@shared/permissions";
+
+async function seedRolesAndPermissions() {
+  for (const def of SYSTEM_ROLES) {
+    const existing = await storage.getRole(def.key);
+    if (!existing) {
+      await storage.createRole({ key: def.key, name: def.name, isSystem: true, isAdmin: def.isAdmin });
+      // Only seed default permissions for brand-new roles (don't clobber admin edits).
+      if (!def.isAdmin) {
+        await storage.setRolePermissions(def.key, DEFAULT_ROLE_PERMISSIONS[def.key] || []);
+      }
+    }
+  }
+  console.log("Roles and permissions seeded");
+}
 
 async function ensureAdminUser() {
   const existing = await storage.getUserByUsername("admin");
@@ -32,6 +47,7 @@ async function ensureAdminUser() {
 
 export async function seedDatabase() {
   await ensureAdminUser();
+  await seedRolesAndPermissions();
 
   const existingCustomers = await storage.getCustomers();
   if (existingCustomers.length > 0) return;

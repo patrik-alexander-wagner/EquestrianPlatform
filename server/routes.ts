@@ -13,10 +13,14 @@ import {
   insertStableSchema, insertBoxSchema, insertItemSchema,
   insertLiveryAgreementSchema, insertBillingElementSchema, insertInvoiceSchema,
   insertAgreementDocumentSchema, insertHorseOwnershipSchema, insertHorseMovementSchema,
-  VALID_ROLES,
 } from "@shared/schema";
 import type { UserRole, InvoiceStatus } from "@shared/schema";
 import { z, ZodError } from "zod";
+import { ACTIONS, ACTION_KEYS, isValidActionKey } from "@shared/permissions";
+import {
+  requirePermission, loadPermissions, ensureLoaded,
+  isAdminRole, can, permissionsForRole,
+} from "./permissions";
 
 function validateBody(schema: any, body: any) {
   const result = schema.safeParse(body);
@@ -29,22 +33,6 @@ function validateBody(schema: any, body: any) {
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: "Authentication required" });
-}
-
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
-  const user = req.user as any;
-  if (user?.role !== "ADMIN") return res.status(403).json({ message: "Admin access required" });
-  next();
-}
-
-function requireRoles(...roles: string[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
-    const user = req.user as any;
-    if (user?.role === "ADMIN" || roles.includes(user?.role)) return next();
-    res.status(403).json({ message: "Insufficient permissions" });
-  };
 }
 
 function auditLog(req: Request, action: string, entityType?: string, entityId?: string, details?: string) {
@@ -189,10 +177,17 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/me", (req, res) => {
+  app.get("/api/me", async (req, res) => {
     if (req.isAuthenticated()) {
+      await ensureLoaded();
       const user = req.user as any;
-      res.json({ id: user.id, username: user.username, role: user.role });
+      res.json({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        isAdmin: isAdminRole(user.role),
+        permissions: permissionsForRole(user.role),
+      });
     } else {
       res.status(401).json({ message: "Not authenticated" });
     }
@@ -205,20 +200,8 @@ export async function registerRoutes(
     requireAuth(req, res, next);
   });
 
-  // VIEWER role is strictly read-only: block every state-changing request.
-  app.use("/api", (req, res, next) => {
-    const method = req.method.toUpperCase();
-    if (method === "GET" || method === "HEAD" || method === "OPTIONS") return next();
-    if (req.path === "/login" || req.path === "/logout") return next();
-    const user = req.user as any;
-    if (req.isAuthenticated() && user?.role === "VIEWER") {
-      return res.status(403).json({ message: "Your account has read-only (Viewer) access and cannot perform this action." });
-    }
-    next();
-  });
-
   // Users
-  app.get("/api/users", requireAdmin, async (_req, res) => {
+  app.get("/api/users", requirePermission("admin.users"), async (_req, res) => {
     try {
       const users = await storage.getUsers();
       res.json(users);
@@ -227,11 +210,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/users", requireAdmin, async (req, res) => {
+  app.post("/api/users", requirePermission("admin.users"), async (req, res) => {
     try {
       const data = validateBody(insertUserSchema, req.body);
-      if (!VALID_ROLES.includes(data.role)) {
-        return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+      if (!(await storage.getRole(data.role))) {
+        return res.status(400).json({ message: `Invalid role: ${data.role}` });
       }
       const user = await storage.createUser(data);
       auditLog(req, "create_user", "user", user.id, `Created user: ${user.username} (role: ${user.role})`);
@@ -241,11 +224,11 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/users/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/users/:id", requirePermission("admin.users"), async (req, res) => {
     try {
       const { role, password } = req.body;
-      if (role && !VALID_ROLES.includes(role)) {
-        return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+      if (role && !(await storage.getRole(role))) {
+        return res.status(400).json({ message: `Invalid role: ${role}` });
       }
       if (password !== undefined && password !== null && password !== "") {
         if (typeof password !== "string" || password.length < 6) {
@@ -270,7 +253,7 @@ export async function registerRoutes(
   });
 
   // Customers
-  app.get("/api/customers", async (req, res) => {
+  app.get("/api/customers", requirePermission("customers.view"), async (req, res) => {
     try {
       const search = req.query.search as string | undefined;
       const customers = await storage.getCustomers(search);
@@ -280,7 +263,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/customers/:id", async (req, res) => {
+  app.get("/api/customers/:id", requirePermission("customers.view"), async (req, res) => {
     try {
       const customer = await storage.getCustomer(req.params.id);
       if (!customer) return res.status(404).json({ message: "Customer not found" });
@@ -291,7 +274,7 @@ export async function registerRoutes(
   });
 
   // Horses
-  app.get("/api/horses", async (req, res) => {
+  app.get("/api/horses", requirePermission("horses.view"), async (req, res) => {
     try {
       const search = req.query.search as string | undefined;
       const customerSearch = req.query.customerSearch as string | undefined;
@@ -312,7 +295,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/horses/:id", async (req, res) => {
+  app.get("/api/horses/:id", requirePermission("horses.view"), async (req, res) => {
     try {
       const horse = await storage.getHorse(req.params.id);
       if (!horse) return res.status(404).json({ message: "Horse not found" });
@@ -330,7 +313,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horses", requireRoles("LIVERY_ADMIN", "VETERINARY"), async (req, res) => {
+  app.post("/api/horses", requirePermission("horses.create"), async (req, res) => {
     try {
       const { ownerId, ...horseData } = req.body;
       if (!ownerId) {
@@ -345,7 +328,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/horses/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.patch("/api/horses/:id", requirePermission("horses.edit"), async (req, res) => {
     try {
       const { ownerId, ...rest } = req.body;
       const data = validateBody(insertHorseSchema.partial(), rest);
@@ -369,7 +352,7 @@ export async function registerRoutes(
   });
 
   // Stables
-  app.get("/api/stables", async (_req, res) => {
+  app.get("/api/stables", requirePermission("stables.view"), async (_req, res) => {
     try {
       const stables = await storage.getStables();
       res.json(stables);
@@ -378,7 +361,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stables", requireAdmin, async (req, res) => {
+  app.post("/api/stables", requirePermission("stables.manage"), async (req, res) => {
     try {
       const data = validateBody(insertStableSchema, req.body);
       const stable = await storage.createStable(data);
@@ -388,7 +371,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/stables/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/stables/:id", requirePermission("stables.manage"), async (req, res) => {
     try {
       const data = validateBody(insertStableSchema.partial(), req.body);
       const stable = await storage.updateStable(req.params.id, data);
@@ -399,7 +382,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/stables/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/stables/:id", requirePermission("stables.manage"), async (req, res) => {
     try {
       const existing = await storage.getStable(req.params.id);
       if (!existing) return res.status(404).json({ message: "Stable not found" });
@@ -412,7 +395,7 @@ export async function registerRoutes(
   });
 
   // Boxes
-  app.get("/api/boxes", async (req, res) => {
+  app.get("/api/boxes", requirePermission("boxes.view"), async (req, res) => {
     try {
       const stableSearch = req.query.stableSearch as string | undefined;
       const boxSearch = req.query.boxSearch as string | undefined;
@@ -423,7 +406,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/boxes", requireAdmin, async (req, res) => {
+  app.post("/api/boxes", requirePermission("boxes.manage"), async (req, res) => {
     try {
       const data = validateBody(insertBoxSchema, req.body);
       const box = await storage.createBox(data);
@@ -433,7 +416,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/boxes/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/boxes/:id", requirePermission("boxes.manage"), async (req, res) => {
     try {
       const data = validateBody(insertBoxSchema.partial(), req.body);
       const box = await storage.updateBox(req.params.id, data);
@@ -444,7 +427,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/boxes/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/boxes/:id", requirePermission("boxes.manage"), async (req, res) => {
     try {
       const existing = await storage.getBox(req.params.id);
       if (!existing) return res.status(404).json({ message: "Box not found" });
@@ -456,7 +439,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/boxes/import", requireAdmin, async (req, res) => {
+  app.post("/api/boxes/import", requirePermission("boxes.manage"), async (req, res) => {
     try {
       const { boxes: data } = req.body;
       if (!Array.isArray(data)) throw { status: 400, message: "boxes must be an array" };
@@ -473,7 +456,7 @@ export async function registerRoutes(
   });
 
   // Items
-  app.get("/api/items", async (req, res) => {
+  app.get("/api/items", requirePermission("items.view"), async (req, res) => {
     try {
       const search = req.query.search as string | undefined;
       const items = await storage.getItems(search);
@@ -502,7 +485,7 @@ export async function registerRoutes(
   });
 
   let netsuiteCustomerSyncInProgress = false;
-  app.post("/api/customers/sync-netsuite", requireAuth, async (_req, res) => {
+  app.post("/api/customers/sync-netsuite", requirePermission("customers.sync"), async (_req, res) => {
     if (netsuiteCustomerSyncInProgress) {
       return res.status(409).json({ message: "A NetSuite customer sync is already in progress. Please wait for it to finish." });
     }
@@ -580,7 +563,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/items/sync-netsuite/debug", requireAdmin, async (_req, res) => {
+  app.get("/api/items/sync-netsuite/debug", requirePermission("items.sync"), async (_req, res) => {
     try {
       const restletUrl = "https://5834136.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=2163&deploy=1";
       const consumerKey = process.env.NETSUITE_CONSUMER_KEY!;
@@ -621,7 +604,7 @@ export async function registerRoutes(
   });
 
   let netsuiteSyncInProgress = false;
-  app.post("/api/items/sync-netsuite", requireAuth, async (_req, res) => {
+  app.post("/api/items/sync-netsuite", requirePermission("items.sync"), async (_req, res) => {
     if (netsuiteSyncInProgress) {
       return res.status(409).json({ message: "A NetSuite sync is already in progress. Please wait for it to finish." });
     }
@@ -696,7 +679,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/items/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.patch("/api/items/:id", requirePermission("items.edit"), async (req, res) => {
     try {
       const data = validateBody(insertItemSchema.partial(), req.body);
       const item = await storage.updateItem(req.params.id, data);
@@ -707,7 +690,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/items/:id/price-history", async (req, res) => {
+  app.get("/api/items/:id/price-history", requirePermission("items.view"), async (req, res) => {
     try {
       const item = await storage.getItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -718,7 +701,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/items/:id/change-price", requireAuth, async (req, res) => {
+  app.post("/api/items/:id/change-price", requirePermission("items.edit"), async (req, res) => {
     try {
       const item = await storage.getItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -734,7 +717,7 @@ export async function registerRoutes(
   });
 
   // Livery Agreements
-  app.get("/api/livery-agreements", async (req, res) => {
+  app.get("/api/livery-agreements", requirePermission("agreements.view"), async (req, res) => {
     try {
       const status = req.query.status as string | undefined;
       const agreements = await storage.getLiveryAgreements(status);
@@ -744,7 +727,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/livery-agreements", requirePermission("agreements.create"), async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema, req.body);
       const agreement = await storage.createLiveryAgreement(data);
@@ -755,7 +738,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/livery-agreements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.patch("/api/livery-agreements/:id", requirePermission("agreements.edit"), async (req, res) => {
     try {
       const data = validateBody(insertLiveryAgreementSchema.partial(), req.body);
       const existing = await storage.getLiveryAgreement(req.params.id);
@@ -782,7 +765,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements/:id/cancel-checkout", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/livery-agreements/:id/cancel-checkout", requirePermission("agreements.cancel_checkout"), async (req, res) => {
     try {
       const agreement = await storage.getLiveryAgreement(req.params.id);
       if (!agreement) return res.status(404).json({ message: "Agreement not found" });
@@ -817,7 +800,7 @@ export async function registerRoutes(
   });
 
   // Billing Elements
-  app.get("/api/billing-elements", async (req, res) => {
+  app.get("/api/billing-elements", requirePermission("billing_elements.view"), async (req, res) => {
     try {
       const billed = req.query.billed !== undefined ? req.query.billed === "true" : undefined;
       const elements = await storage.getBillingElements(billed);
@@ -827,7 +810,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing-elements", requireAuth, async (req, res) => {
+  app.post("/api/billing-elements", requirePermission("billing_elements.manage"), async (req, res) => {
     try {
       if (req.body.transactionDate && !req.body.billingMonth) {
         req.body.billingMonth = req.body.transactionDate.substring(0, 7);
@@ -850,7 +833,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/billing-elements/:id", requireAuth, async (req, res) => {
+  app.patch("/api/billing-elements/:id", requirePermission("billing_elements.manage"), async (req, res) => {
     try {
       const existing = await storage.getBillingElement(req.params.id);
       if (!existing) return res.status(404).json({ message: "Billing element not found" });
@@ -887,7 +870,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/billing-elements/:id", requireAuth, async (req, res) => {
+  app.delete("/api/billing-elements/:id", requirePermission("billing_elements.manage"), async (req, res) => {
     try {
       const deleted = await storage.deleteBillingElement(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Billing element not found" });
@@ -943,9 +926,10 @@ export async function registerRoutes(
       if (!["VET", "STORES"].includes(step)) {
         return res.status(400).json({ message: "step must be VET or STORES" });
       }
-      const roleMap: Record<string, string> = { VET: "VETERINARY", STORES: "STORES" };
-      if (user.role !== "ADMIN" && user.role !== roleMap[step]) {
-        return res.status(403).json({ message: `Only ${roleMap[step]} or ADMIN can manage ${step} approvals` });
+      await ensureLoaded();
+      const requiredAction = step === "VET" ? "approvals.vet" : "approvals.stores";
+      if (!isAdminRole(user.role) && !can(user.role, requiredAction)) {
+        return res.status(403).json({ message: `You do not have permission to manage ${step} approvals` });
       }
 
       const hasInvoice = await storage.hasInvoiceForCustomerMonth(customerId, billingMonth);
@@ -969,7 +953,7 @@ export async function registerRoutes(
   });
 
   // Invoices
-  app.get("/api/invoices", async (req, res) => {
+  app.get("/api/invoices", requirePermission("invoices.view"), async (req, res) => {
     try {
       const invoices = await storage.getInvoices();
       const user = req.user as any;
@@ -979,7 +963,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/invoices/:id/details", async (req, res) => {
+  app.get("/api/invoices/:id/details", requirePermission("invoices.view"), async (req, res) => {
     try {
       const details = await storage.getInvoiceDetails(req.params.id);
       if (!details) return res.status(404).json({ message: "Invoice not found" });
@@ -999,7 +983,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/invoices", requirePermission("invoices.generate"), async (req, res) => {
     try {
       const { customerId, invoiceDate, billingMonth, billingElementIds, liveryItems } = req.body;
       if (!customerId || !invoiceDate) throw { status: 400, message: "Missing required fields: customerId, invoiceDate" };
@@ -1172,7 +1156,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/invoices/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/invoices/:id", requirePermission("invoices.delete"), async (req, res) => {
     try {
       await storage.deleteInvoice(req.params.id);
       auditLog(req, "delete_invoice", "invoice", req.params.id);
@@ -1182,7 +1166,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices/:id/rollback", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/invoices/:id/rollback", requirePermission("invoices.rollback"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
@@ -1216,7 +1200,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/invoices/:id/generate-so", requireRoles("FINANCE"), async (req, res) => {
+  app.post("/api/invoices/:id/generate-so", requirePermission("erp.generate_so"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
@@ -1306,7 +1290,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report", requireAuth, async (req, res) => {
+  app.get("/api/reports/livery-report", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -1347,7 +1331,7 @@ export async function registerRoutes(
     return null;
   }
 
-  app.get("/api/reports/livery-report.pdf", requireAuth, async (req, res) => {
+  app.get("/api/reports/livery-report.pdf", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -1409,7 +1393,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-report-print", requireAuth, async (req, res) => {
+  app.get("/api/reports/livery-report-print", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -1450,7 +1434,7 @@ export async function registerRoutes(
   });
 
   // Reports
-  app.get("/api/reports/kpis", async (req, res) => {
+  app.get("/api/reports/kpis", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
@@ -1461,7 +1445,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/all-customers", async (_req, res) => {
+  app.get("/api/reports/all-customers", requirePermission("reports.view"), async (_req, res) => {
     try {
       const data = await storage.getAllCustomersReport();
       res.json(data);
@@ -1470,7 +1454,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery", async (req, res) => {
+  app.get("/api/reports/livery", requirePermission("reports.view"), async (req, res) => {
     try {
       const groupBy = (req.query.groupBy as string) || "month";
       const month = req.query.month as string | undefined;
@@ -1481,7 +1465,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/new-livery-horses", async (req, res) => {
+  app.get("/api/reports/new-livery-horses", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
@@ -1492,7 +1476,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/departed-livery-horses", async (req, res) => {
+  app.get("/api/reports/departed-livery-horses", requirePermission("reports.view"), async (req, res) => {
     try {
       const month = req.query.month as string;
       if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: "month parameter required (YYYY-MM)" });
@@ -1503,7 +1487,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/reports/livery-customers-info", async (_req, res) => {
+  app.get("/api/reports/livery-customers-info", requirePermission("reports.view"), async (_req, res) => {
     try {
       const data = await storage.getLiveryCustomersInfo();
       res.json(data);
@@ -1513,7 +1497,7 @@ export async function registerRoutes(
   });
 
   // Send invoice to NetSuite via RESTlet (OAuth 1.0 TBA)
-  app.post("/api/invoices/:id/send-to-netsuite", requireRoles("FINANCE"), async (req, res) => {
+  app.post("/api/invoices/:id/send-to-netsuite", requirePermission("erp.send_to_netsuite"), async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ message: "Invoice not found" });
@@ -1596,7 +1580,7 @@ export async function registerRoutes(
   });
 
   // Settings - N8N Webhook URL
-  app.get("/api/settings/n8n-webhook", requireAdmin, async (_req, res) => {
+  app.get("/api/settings/n8n-webhook", requirePermission("admin.settings"), async (_req, res) => {
     try {
       const url = await storage.getSetting("n8n_webhook_url");
       res.json({ url: url || "" });
@@ -1605,7 +1589,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/n8n-webhook", requireAdmin, async (req, res) => {
+  app.post("/api/settings/n8n-webhook", requirePermission("admin.settings"), async (req, res) => {
     try {
       const { url } = req.body;
       if (typeof url !== "string") return res.status(400).json({ message: "URL must be a string" });
@@ -1621,7 +1605,7 @@ export async function registerRoutes(
   });
 
   // Settings - Livery Package Configuration
-  app.post("/api/settings/livery-packages", requireAdmin, async (req, res) => {
+  app.post("/api/settings/livery-packages", requirePermission("admin.settings"), async (req, res) => {
     try {
       const { itemIds } = req.body;
       if (!Array.isArray(itemIds)) throw { status: 400, message: "itemIds must be an array" };
@@ -1640,7 +1624,7 @@ export async function registerRoutes(
   });
 
   // Agreement Documents
-  app.get("/api/livery-agreements/:id/documents", requireAuth, async (req, res) => {
+  app.get("/api/livery-agreements/:id/documents", requirePermission("agreements.view"), async (req, res) => {
     try {
       const docs = await storage.getAgreementDocuments(req.params.id);
       res.json(docs.map(d => ({ id: d.id, agreementId: d.agreementId, filename: d.filename, uploadedAt: d.uploadedAt })));
@@ -1649,7 +1633,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/livery-agreements/:id/documents", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/livery-agreements/:id/documents", requirePermission("agreements.documents"), async (req, res) => {
     try {
       const { filename, fileData } = req.body;
       if (!filename || !fileData) throw { status: 400, message: "filename and fileData are required" };
@@ -1675,7 +1659,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/agreement-documents/:id/download", requireAuth, async (req, res) => {
+  app.get("/api/agreement-documents/:id/download", requirePermission("agreements.view"), async (req, res) => {
     try {
       const doc = await storage.getAgreementDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
@@ -1688,7 +1672,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/agreement-documents/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.delete("/api/agreement-documents/:id", requirePermission("agreements.documents"), async (req, res) => {
     try {
       const deleted = await storage.deleteAgreementDocument(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Document not found" });
@@ -1699,7 +1683,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/audit-logs", requireAdmin, async (req, res) => {
+  app.get("/api/audit-logs", requirePermission("admin.audit_logs"), async (req, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -1729,7 +1713,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-ownership", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/horse-ownership", requirePermission("ownership.manage"), async (req, res) => {
     try {
       const data = validateBody(insertHorseOwnershipSchema, req.body);
       const ownership = await storage.createHorseOwnership(data);
@@ -1739,7 +1723,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/horse-movements", async (_req, res) => {
+  app.get("/api/horse-movements", requirePermission("movements.view"), async (_req, res) => {
     try {
       const movements = await storage.getHorseMovements();
       res.json(movements);
@@ -1766,7 +1750,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/horse-movements", requirePermission("movements.manage"), async (req, res) => {
     try {
       const data = validateBody(insertHorseMovementSchema, req.body);
       const allMovements = await storage.getHorseMovements();
@@ -1800,7 +1784,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/horse-movements/:id", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.patch("/api/horse-movements/:id", requirePermission("movements.manage"), async (req, res) => {
     try {
       const { checkOut } = req.body;
       if (!checkOut || typeof checkOut !== "string") {
@@ -1846,7 +1830,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/horse-movements/enriched", async (_req, res) => {
+  app.get("/api/horse-movements/enriched", requirePermission("movements.view"), async (_req, res) => {
     try {
       const movements = await storage.getEnrichedHorseMovements();
       res.json(movements);
@@ -1855,7 +1839,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/box-grid", async (_req, res) => {
+  app.get("/api/box-grid", requirePermission("movements.view"), async (_req, res) => {
     try {
       const grid = await storage.getBoxGridWithOccupants();
       res.json(grid);
@@ -1864,7 +1848,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements/move", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/horse-movements/move", requirePermission("movements.manage"), async (req, res) => {
     try {
       const schema = z.object({ movementId: z.string().uuid(), newBoxId: z.string().uuid() });
       const data = validateBody(schema, req.body);
@@ -1876,7 +1860,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/horse-movements/swap", requireRoles("LIVERY_ADMIN"), async (req, res) => {
+  app.post("/api/horse-movements/swap", requirePermission("movements.manage"), async (req, res) => {
     try {
       const schema = z.object({
         movementId: z.string().uuid(),
@@ -1891,5 +1875,97 @@ export async function registerRoutes(
     }
   });
 
+  // ---- Roles & Permissions management ----
+  app.get("/api/permissions/actions", requirePermission("admin.roles"), async (_req, res) => {
+    res.json(ACTIONS);
+  });
+
+  app.get("/api/roles", requirePermission("admin.roles", "admin.users"), async (_req, res) => {
+    try {
+      const roles = await storage.getRoles();
+      const permMap = await storage.getAllRolePermissions();
+      const withCounts = await Promise.all(roles.map(async (r) => ({
+        ...r,
+        permissions: r.isAdmin ? ACTION_KEYS : (permMap[r.key] || []),
+        userCount: await storage.countUsersByRole(r.key),
+      })));
+      res.json(withCounts);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.post("/api/roles", requirePermission("admin.roles"), async (req, res) => {
+    try {
+      const name = (req.body?.name ?? "").toString().trim();
+      if (!name) return res.status(400).json({ message: "Role name is required" });
+      const permissions: string[] = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
+      const invalid = permissions.filter((p) => !isValidActionKey(p));
+      if (invalid.length) return res.status(400).json({ message: `Unknown permission(s): ${invalid.join(", ")}` });
+
+      // Derive a stable uppercase key from the name; ensure uniqueness.
+      const baseKey = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "ROLE";
+      let key = baseKey;
+      let n = 1;
+      while (await storage.getRole(key)) { key = `${baseKey}_${++n}`; }
+
+      const role = await storage.createRole({ key, name, isSystem: false, isAdmin: false });
+      await storage.setRolePermissions(key, permissions);
+      await loadPermissions();
+      auditLog(req, "create_role", "role", role.id, `Created role: ${name} (${key})`);
+      res.json(role);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.patch("/api/roles/:key", requirePermission("admin.roles"), async (req, res) => {
+    try {
+      const role = await storage.getRole(req.params.key);
+      if (!role) return res.status(404).json({ message: "Role not found" });
+
+      if (req.body?.name !== undefined) {
+        const name = req.body.name.toString().trim();
+        if (!name) return res.status(400).json({ message: "Role name cannot be empty" });
+        await storage.updateRole(role.key, { name });
+      }
+
+      if (req.body?.permissions !== undefined) {
+        if (role.isAdmin) {
+          return res.status(400).json({ message: "The Administrator role always has every permission and cannot be edited." });
+        }
+        const permissions: string[] = Array.isArray(req.body.permissions) ? req.body.permissions : [];
+        const invalid = permissions.filter((p) => !isValidActionKey(p));
+        if (invalid.length) return res.status(400).json({ message: `Unknown permission(s): ${invalid.join(", ")}` });
+        await storage.setRolePermissions(role.key, permissions);
+      }
+
+      await loadPermissions();
+      auditLog(req, "update_role", "role", role.id, `Updated role: ${role.key}`);
+      res.json(await storage.getRole(role.key));
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.delete("/api/roles/:key", requirePermission("admin.roles"), async (req, res) => {
+    try {
+      const role = await storage.getRole(req.params.key);
+      if (!role) return res.status(404).json({ message: "Role not found" });
+      if (role.isSystem) return res.status(400).json({ message: "Built-in roles cannot be deleted." });
+      const userCount = await storage.countUsersByRole(role.key);
+      if (userCount > 0) {
+        return res.status(400).json({ message: `Cannot delete: ${userCount} user(s) still have this role. Reassign them first.` });
+      }
+      await storage.deleteRole(role.key);
+      await loadPermissions();
+      auditLog(req, "delete_role", "role", role.id, `Deleted role: ${role.key}`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  await loadPermissions();
   return httpServer;
 }

@@ -10,10 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Customer } from "@shared/schema";
-import { useCanEdit } from "@/hooks/use-can-edit";
+import { useCan } from "@/hooks/use-permissions";
 
 export default function CustomersPage() {
-  const canEdit = useCanEdit();
+  const canEdit = useCan("customers.sync");
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 

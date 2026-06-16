@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCan } from "@/hooks/use-permissions";
 import {
   Table,
   TableBody,
@@ -146,7 +147,10 @@ export default function ToInvoicePage() {
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
     queryKey: ["/api/me"],
   });
-  const userRole = me?.role || "LIVERY_ADMIN";
+  const canVet = useCan("approvals.vet");
+  const canStores = useCan("approvals.stores");
+  const canGenerate = useCan("invoices.generate");
+  const canManageBilling = useCan("billing_elements.manage");
 
   const { data: approvals = [] } = useQuery<any[]>({
     queryKey: ["/api/monthly-billing-approvals", billingMonth],
@@ -486,11 +490,10 @@ export default function ToInvoicePage() {
   }, [approvals]);
 
   const canToggleApproval = useCallback((step: string) => {
-    if (userRole === "ADMIN") return true;
-    if (step === "VET" && userRole === "VETERINARY") return true;
-    if (step === "STORES" && userRole === "STORES") return true;
+    if (step === "VET") return canVet;
+    if (step === "STORES") return canStores;
     return false;
-  }, [userRole]);
+  }, [canVet, canStores]);
 
   const toggleItem = useCallback((key: string) => {
     setSelectedItems(prev => {
@@ -586,7 +589,7 @@ export default function ToInvoicePage() {
                       />
                       <CardTitle className="text-lg">{c.customerName}</CardTitle>
                     </div>
-                    {userRole !== "VIEWER" && (
+                    {canGenerate && (
                       <Button
                         onClick={() => handleGenerateClick(c.customerId, c.lineItems)}
                         disabled={generateMutation.isPending || preCheckLoading || !someSelected || !bothApproved}
@@ -598,7 +601,7 @@ export default function ToInvoicePage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    {userRole !== "VIEWER" && (
+                    {canVet && (
                       <Button
                         size="sm"
                         variant={vetApproved ? "default" : "outline"}
@@ -619,7 +622,7 @@ export default function ToInvoicePage() {
                         by {vetApproval.username}
                       </span>
                     )}
-                    {userRole !== "VIEWER" && (
+                    {canStores && (
                       <Button
                         size="sm"
                         variant={storesApproved ? "default" : "outline"}
@@ -692,7 +695,7 @@ export default function ToInvoicePage() {
                           <TableCell className="text-right">AED {li.unitPrice.toFixed(2)}</TableCell>
                           <TableCell className="text-right">AED {li.amount.toFixed(2)}</TableCell>
                           <TableCell>
-                            {li.type === "billing" && li.billingElementId && userRole !== "VIEWER" && (
+                            {li.type === "billing" && li.billingElementId && canManageBilling && (
                               <div className="flex gap-1">
                                 <Button
                                   variant="ghost"

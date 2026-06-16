@@ -25,6 +25,30 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const roles = pgTable("roles", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  isAdmin: boolean("is_admin").notNull().default(false),
+});
+
+export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+
+export const rolePermissions = pgTable("role_permissions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  roleKey: text("role_key").notNull(),
+  actionKey: text("action_key").notNull(),
+}, (t) => ({
+  uniqRolePermission: unique("role_permissions_role_action_unique").on(t.roleKey, t.actionKey),
+}));
+
+export const insertRolePermissionSchema = createInsertSchema(rolePermissions).omit({ id: true });
+export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+export type RolePermission = typeof rolePermissions.$inferSelect;
+
 export const customers = pgTable("customers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   netsuiteId: text("netsuite_id"),

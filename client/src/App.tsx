@@ -25,34 +25,38 @@ import AdminUsersPage from "@/pages/admin-users";
 import AdminSettingsPage from "@/pages/admin-settings";
 import AdminAuditLogsPage from "@/pages/admin-audit-logs";
 import HorseMovementsPage from "@/pages/horse-movements";
+import AdminRolesPage from "@/pages/admin-roles";
+import { usePermissions, useCan } from "@/hooks/use-permissions";
 
-function AdminRoute({ component: Component, userRole }: { component: React.ComponentType; userRole: string }) {
-  if (userRole !== "ADMIN") {
-    return <Redirect to="/" />;
-  }
+function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string }) {
+  const { isLoading } = usePermissions();
+  const allowed = useCan(action);
+  if (isLoading) return null;
+  if (!allowed) return <Redirect to="/" />;
   return <Component />;
 }
 
-function Router({ userRole }: { userRole: string }) {
+function Router() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
-      <Route path="/customers" component={CustomersPage} />
-      <Route path="/horses" component={HorsesPage} />
-      <Route path="/stables" component={StablesPage} />
-      <Route path="/boxes" component={BoxesPage} />
-      <Route path="/items" component={ItemsPage} />
-      <Route path="/agreements/current" component={CurrentAgreementsPage} />
-      <Route path="/agreements/new" component={NewAgreementPage} />
-      <Route path="/agreements/history" component={AgreementHistoryPage} />
-      <Route path="/billing-elements" component={BillingElementsPage} />
-      <Route path="/billing/to-invoice" component={ToInvoicePage} />
-      <Route path="/billing/invoices" component={InvoicesPage} />
-      <Route path="/reports/livery" component={ReportsPage} />
-      <Route path="/stable-management/horse-movements" component={HorseMovementsPage} />
-      <Route path="/admin/users">{() => <AdminRoute component={AdminUsersPage} userRole={userRole} />}</Route>
-      <Route path="/admin/settings">{() => <AdminRoute component={AdminSettingsPage} userRole={userRole} />}</Route>
-      <Route path="/admin/audit-logs">{() => <AdminRoute component={AdminAuditLogsPage} userRole={userRole} />}</Route>
+      <Route path="/customers">{() => <PermissionRoute component={CustomersPage} action="customers.view" />}</Route>
+      <Route path="/horses">{() => <PermissionRoute component={HorsesPage} action="horses.view" />}</Route>
+      <Route path="/stables">{() => <PermissionRoute component={StablesPage} action="stables.view" />}</Route>
+      <Route path="/boxes">{() => <PermissionRoute component={BoxesPage} action="boxes.view" />}</Route>
+      <Route path="/items">{() => <PermissionRoute component={ItemsPage} action="items.view" />}</Route>
+      <Route path="/agreements/current">{() => <PermissionRoute component={CurrentAgreementsPage} action="agreements.view" />}</Route>
+      <Route path="/agreements/new">{() => <PermissionRoute component={NewAgreementPage} action="agreements.view" />}</Route>
+      <Route path="/agreements/history">{() => <PermissionRoute component={AgreementHistoryPage} action="agreements.view" />}</Route>
+      <Route path="/billing-elements">{() => <PermissionRoute component={BillingElementsPage} action="billing_elements.view" />}</Route>
+      <Route path="/billing/to-invoice">{() => <PermissionRoute component={ToInvoicePage} action="to_invoice.view" />}</Route>
+      <Route path="/billing/invoices">{() => <PermissionRoute component={InvoicesPage} action="invoices.view" />}</Route>
+      <Route path="/reports/livery">{() => <PermissionRoute component={ReportsPage} action="reports.view" />}</Route>
+      <Route path="/stable-management/horse-movements">{() => <PermissionRoute component={HorseMovementsPage} action="movements.view" />}</Route>
+      <Route path="/admin/users">{() => <PermissionRoute component={AdminUsersPage} action="admin.users" />}</Route>
+      <Route path="/admin/settings">{() => <PermissionRoute component={AdminSettingsPage} action="admin.settings" />}</Route>
+      <Route path="/admin/audit-logs">{() => <PermissionRoute component={AdminAuditLogsPage} action="admin.audit_logs" />}</Route>
+      <Route path="/admin/roles">{() => <PermissionRoute component={AdminRolesPage} action="admin.roles" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -134,7 +138,7 @@ function App() {
       <TooltipProvider>
         <SidebarProvider style={style as React.CSSProperties}>
           <div className="flex h-screen w-full">
-            <AppSidebar onLogout={handleLogout} userRole={userRole} />
+            <AppSidebar onLogout={handleLogout} />
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center gap-2 p-2 border-b shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
@@ -147,7 +151,7 @@ function App() {
                 </div>
               </header>
               <main className="flex-1 overflow-auto">
-                <Router userRole={userRole} />
+                <Router />
               </main>
             </div>
           </div>

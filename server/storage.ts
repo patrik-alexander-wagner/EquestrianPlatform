@@ -5,6 +5,9 @@ import {
   users, customers, horses, stables, boxes, items, itemPrices,
   liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs, invoiceValidations,
   horseOwnership, horseMovements, monthlyBillingApprovals,
+  roles, rolePermissions,
+  type Role, type InsertRole,
+  type RolePermission,
   type User, type InsertUser,
   type Customer, type InsertCustomer,
   type Horse, type InsertHorse,
@@ -54,6 +57,16 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUserPassword(id: string, password: string, role?: string): Promise<void>;
   getUsers(): Promise<Omit<User, "password">[]>;
+
+  getRoles(): Promise<Role[]>;
+  getRole(key: string): Promise<Role | undefined>;
+  createRole(role: InsertRole): Promise<Role>;
+  updateRole(key: string, data: Partial<{ name: string }>): Promise<Role | undefined>;
+  deleteRole(key: string): Promise<boolean>;
+  countUsersByRole(roleKey: string): Promise<number>;
+  getRolePermissions(roleKey: string): Promise<string[]>;
+  getAllRolePermissions(): Promise<Record<string, string[]>>;
+  setRolePermissions(roleKey: string, actionKeys: string[]): Promise<void>;
 
   getCustomers(search?: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
@@ -193,6 +206,60 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<Omit<User, "password">[]> {
     return await db.select({ id: users.id, username: users.username, role: users.role }).from(users);
+  }
+
+  async getRoles(): Promise<Role[]> {
+    return await db.select().from(roles).orderBy(desc(roles.isSystem), roles.name);
+  }
+
+  async getRole(key: string): Promise<Role | undefined> {
+    const [role] = await db.select().from(roles).where(eq(roles.key, key));
+    return role;
+  }
+
+  async createRole(role: InsertRole): Promise<Role> {
+    const [created] = await db.insert(roles).values(role).returning();
+    return created;
+  }
+
+  async updateRole(key: string, data: Partial<{ name: string }>): Promise<Role | undefined> {
+    const [updated] = await db.update(roles).set(data).where(eq(roles.key, key)).returning();
+    return updated;
+  }
+
+  async deleteRole(key: string): Promise<boolean> {
+    await db.delete(rolePermissions).where(eq(rolePermissions.roleKey, key));
+    const result = await db.delete(roles).where(eq(roles.key, key));
+    return (result as any).rowCount > 0;
+  }
+
+  async countUsersByRole(roleKey: string): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.role, roleKey));
+    return row?.count ?? 0;
+  }
+
+  async getRolePermissions(roleKey: string): Promise<string[]> {
+    const rows = await db.select().from(rolePermissions).where(eq(rolePermissions.roleKey, roleKey));
+    return rows.map(r => r.actionKey);
+  }
+
+  async getAllRolePermissions(): Promise<Record<string, string[]>> {
+    const rows = await db.select().from(rolePermissions);
+    const map: Record<string, string[]> = {};
+    for (const r of rows) {
+      (map[r.roleKey] ||= []).push(r.actionKey);
+    }
+    return map;
+  }
+
+  async setRolePermissions(roleKey: string, actionKeys: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(rolePermissions).where(eq(rolePermissions.roleKey, roleKey));
+      const unique = Array.from(new Set(actionKeys));
+      if (unique.length > 0) {
+        await tx.insert(rolePermissions).values(unique.map(actionKey => ({ roleKey, actionKey })));
+      }
+    });
   }
 
   async getCustomers(search?: string): Promise<Customer[]> {

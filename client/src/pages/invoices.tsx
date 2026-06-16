@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { viewInvoicePDF, downloadInvoicePDF } from "@/lib/invoice-pdf";
+import { useCan } from "@/hooks/use-permissions";
 import {
   Trash2, Eye, Download, FileJson, Send, CheckCircle,
   ShieldCheck, XCircle, Clock, MessageSquare, MoreVertical, RotateCcw,
@@ -67,7 +68,10 @@ export default function InvoicesPage() {
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
     queryKey: ["/api/me"],
   });
-  const userRole = me?.role || "LIVERY_ADMIN";
+  const canDelete = useCan("invoices.delete");
+  const canRollback = useCan("invoices.rollback");
+  const canGenerateSO = useCan("erp.generate_so");
+  const canSendNetsuite = useCan("erp.send_to_netsuite");
 
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
@@ -284,7 +288,7 @@ export default function InvoicesPage() {
         description="View and manage generated invoices"
       />
 
-      {userRole === "ADMIN" && (
+      {canDelete && (
         <div className="mb-4 p-3 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 text-sm text-orange-800 dark:text-orange-300" data-testid="text-temp-delete-notice">
           Temporary feature: Invoice deletion is enabled for testing purposes and will be removed in a future release.
         </div>
@@ -378,18 +382,20 @@ export default function InvoicesPage() {
 
                 <DropdownMenuSeparator />
 
-                {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (userRole === "ADMIN" || userRole === "FINANCE") && (
+                {(item.status === "APPROVED" || item.status === "PUSHED_TO_ERP") && (canGenerateSO || canSendNetsuite) && (
                   <>
-                    <DropdownMenuItem
-                      onClick={() => handleGenerateSO(item.id)}
-                      disabled={generatingSo === item.id}
-                      data-testid={`button-generate-so-${item.id}`}
-                    >
-                      <FileJson className="w-4 h-4 mr-2" />
-                      {item.soGenerated ? "Regenerate SO" : "Generate SO"}
-                    </DropdownMenuItem>
+                    {canGenerateSO && (
+                      <DropdownMenuItem
+                        onClick={() => handleGenerateSO(item.id)}
+                        disabled={generatingSo === item.id}
+                        data-testid={`button-generate-so-${item.id}`}
+                      >
+                        <FileJson className="w-4 h-4 mr-2" />
+                        {item.soGenerated ? "Regenerate SO" : "Generate SO"}
+                      </DropdownMenuItem>
+                    )}
 
-                    {item.soGenerated && (
+                    {item.soGenerated && canSendNetsuite && (
                       <DropdownMenuItem
                         onClick={() => handleSendToNetsuite(item.id)}
                         disabled={sendingToNetsuite === item.id}
@@ -402,7 +408,7 @@ export default function InvoicesPage() {
                   </>
                 )}
 
-                {item.status !== "PUSHED_TO_ERP" && (userRole === "ADMIN" || userRole === "LIVERY_ADMIN") && (
+                {item.status !== "PUSHED_TO_ERP" && canRollback && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -421,7 +427,7 @@ export default function InvoicesPage() {
                   </>
                 )}
 
-                {userRole === "ADMIN" && (
+                {canDelete && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

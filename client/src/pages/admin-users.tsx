@@ -12,16 +12,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Pencil } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import type { User } from "@shared/schema";
-import { VALID_ROLES } from "@shared/schema";
 
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "Admin",
-  LIVERY_ADMIN: "Livery Admin",
-  VETERINARY: "Veterinary",
-  STORES: "Stores",
-  FINANCE: "Finance",
-  VIEWER: "Viewer",
-};
+interface RoleOption {
+  key: string;
+  name: string;
+}
 
 export default function AdminUsersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -31,6 +26,14 @@ export default function AdminUsersPage() {
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
+
+  const { data: roles = [] } = useQuery<RoleOption[]>({
+    queryKey: ["/api/roles"],
+  });
+
+  const roleLabels: Record<string, string> = Object.fromEntries(
+    roles.map((r) => [r.key, r.name])
+  );
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/users", data),
@@ -66,7 +69,7 @@ export default function AdminUsersPage() {
       key: "role",
       label: "Role",
       render: (item: any) => (
-        <StatusBadge status={ROLE_LABELS[item.role] || item.role} />
+        <StatusBadge status={roleLabels[item.role] || item.role} />
       ),
     },
     { key: "id", label: "User ID", render: (item: User) => item.id.substring(0, 8) + "..." },
@@ -129,8 +132,8 @@ export default function AdminUsersPage() {
               <div>
                 <Label>Role</Label>
                 <select name="role" defaultValue="LIVERY_ADMIN" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-new-role">
-                  {VALID_ROLES.map(role => (
-                    <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                  {roles.map(role => (
+                    <option key={role.key} value={role.key}>{role.name}</option>
                   ))}
                 </select>
               </div>
@@ -170,8 +173,8 @@ export default function AdminUsersPage() {
                 <div>
                   <Label>Role</Label>
                   <select name="role" defaultValue={editingUser.role} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-edit-role">
-                    {VALID_ROLES.map(role => (
-                      <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                    {roles.map(role => (
+                      <option key={role.key} value={role.key}>{role.name}</option>
                     ))}
                   </select>
                 </div>

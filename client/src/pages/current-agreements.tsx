@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LogOut, FileText, Upload, Download, Trash2, Pencil, MoveRight, MoreVertical } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
+import { useCan } from "@/hooks/use-permissions";
 
 export default function CurrentAgreementsPage() {
   const [filterHorse, setFilterHorse] = useState("");
@@ -49,9 +50,10 @@ export default function CurrentAgreementsPage() {
   const { data: me } = useQuery<{ id: string; username: string; role: string }>({
     queryKey: ["/api/me"],
   });
-  const userRole = me?.role || "";
-  const canManageDocuments = userRole === "ADMIN" || userRole === "LIVERY_ADMIN";
-  const canViewDocuments = !!userRole;
+  const canManageDocuments = useCan("agreements.documents");
+  const canEditAgreement = useCan("agreements.edit");
+  const canCheckout = useCan("agreements.edit");
+  const canViewDocuments = true;
 
   const { data: agreements = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/livery-agreements", "?status=active"],
@@ -313,7 +315,7 @@ export default function CurrentAgreementsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {userRole !== "VIEWER" && (
+                {canEditAgreement && (
                   <DropdownMenuItem
                     onClick={() => openEditDialog(item)}
                     data-testid={`button-edit-${item.id}`}
@@ -331,7 +333,7 @@ export default function CurrentAgreementsPage() {
                     Documents
                   </DropdownMenuItem>
                 )}
-                {!item.endDate && userRole !== "VIEWER" && (
+                {!item.endDate && canCheckout && (
                   <DropdownMenuItem
                     onClick={() => { setCheckoutAgreement(item); setShowCheckoutDialog(true); }}
                     data-testid={`button-terminate-${item.id}`}

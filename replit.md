@@ -68,17 +68,20 @@ shared/
 - Login page shown when unauthenticated; sidebar hidden
 - Default credentials: admin / admin123 (set via SEED_ADMIN_PASSWORD env var)
 - GET /api/users never returns password field (returns id, username, role)
-- RBAC with 5 roles: ADMIN, LIVERY_ADMIN, VETERINARY, STORES, FINANCE
-  - ADMIN: full access, can perform any action including all sign-offs
-  - LIVERY_ADMIN: create/edit billing elements, generate invoices (after sign-off)
-  - VETERINARY: toggle VET sign-off on To Invoice page (pre-generation approval)
-  - STORES: toggle STORES sign-off on To Invoice page (pre-generation approval)
-  - FINANCE: ERP operations (generate SO, send to NetSuite)
-- Admin-only routes: GET/POST/PATCH /api/users, DELETE /api/stables/:id, DELETE /api/boxes/:id, DELETE /api/invoices/:id, POST /api/settings/*, GET /api/audit-logs
-- ERP routes (generate-so, send-to-netsuite) restricted to FINANCE + ADMIN via requireRoles middleware
-- Frontend: Administration sidebar section hidden for non-ADMIN users; admin routes redirect non-admins to dashboard
-- /api/me returns { id, username, role }
-- Users page (admin-only): create users with role, edit user roles
+- DYNAMIC, data-driven RBAC (replaces the old hardcoded 5-role system):
+  - Permission "actions" are a static catalog in `shared/permissions.ts`: ~36 ACTIONS each with { key, label, group, type } where type is "view" (can see a page) or "action" (can do something). Grouped by ACTION_GROUPS. Adding a new gated capability = add an action key here and reference it in routes + UI.
+  - `roles` table (key, name, isSystem, isAdmin) + `role_permissions` table (roleKey, actionKey; presence = granted; unique on roleKey+actionKey). users.role stores the role KEY.
+  - Admins create/rename/delete roles and toggle each action on/off from the new Roles page (/admin/roles, gated by admin.roles). isAdmin roles bypass all checks and their permission set is not editable; isSystem roles cannot be deleted; a role cannot be deleted while users are still assigned to it.
+  - 6 seeded system roles (idempotent seed in server/seed.ts via DEFAULT_ROLE_PERMISSIONS): ADMIN (isAdmin, all), LIVERY_ADMIN, VETERINARY, STORES, FINANCE, VIEWER (read-only — all *.view perms only). Defaults replicate the previous hardcoded behavior. Every non-admin system role gets all *.view perms by default.
+  - Backend enforcement: server/permissions.ts holds an in-memory cache (loadPermissions reloads on every role/permission mutation). `requirePermission(...keys)` middleware allows if the user's role isAdmin OR has ANY of the given keys, else 403. `can(role, action)`. Used on every gated route in server/routes.ts.
+  - Read endpoints are permission-gated too (defense in depth): primary page-data reads (customers, horses, stables, boxes, items, livery-agreements, billing-elements, invoices, horse-movements/box-grid, reports/*, agreement document read+download) require their *.view key. Shared lookup/helper endpoints (e.g. horses/available, boxes-with-status, horses-with-owners, horse-ownership, monthly-billing-approvals, dashboard-summary/kpis) stay auth-only so cross-page data and the home dashboard work for any authenticated user.
+  - /api/me returns { id, username, role, isAdmin, permissions: string[] }.
+  - Roles API: GET /api/roles (admin.roles OR admin.users — so user managers can list assignable roles; returns userCount per role), GET /api/permissions/actions (admin.roles), POST/PATCH/DELETE /api/roles/:key (admin.roles). New role keys are auto-derived from the name (uppercased/underscored).
+  - Frontend: usePermissions()/useCan(actionKey) hook in client/src/hooks/use-permissions.ts (isAdmin implicitly grants everything). App.tsx wraps routes in PermissionRoute (redirects to dashboard if the view perm is missing); sidebar items filtered by their view perm. Per-page action buttons gated via useCan. admin-users.tsx fetches assignable roles dynamically from /api/roles.
+  - NOTE: the item "Change Price" control is folded into items.edit (same key as edit item), slightly narrowing who could change prices vs. the old behavior (previously available to more roles). Grant items.edit to any role that should change item prices.
+- ERP routes (generate-so, send-to-netsuite) gated by erp.generate_so / erp.send_to_netsuite (defaults: FINANCE + ADMIN)
+- /api/me returns { id, username, role, isAdmin, permissions }
+- Users page (admin.users): create users with role, edit user roles (roles loaded dynamically from /api/roles)
 - SSO via Unified Portal: GET /sso?token=xxx → server verifies token with POST to aksportal.com/api/sso/verify-token → finds/creates local user by username → establishes Passport session → redirects to /
   - Role mapping: "superadmin"/"admin" → "ADMIN", "livery_admin" → "LIVERY_ADMIN", "veterinary" → "VETERINARY", "stores" → "STORES", "finance" → "FINANCE", unknown → "LIVERY_ADMIN"
   - SSO errors redirect to /login?error=missing_token|invalid_token|sso_failed
@@ -162,7 +165,7 @@ shared/
 - Audit logging: critical actions logged to audit_logs table (user, action, entity, details, timestamp)
   - Actions logged: create/delete user, create/checkout agreement, create/delete invoice, create/delete billing element, upload/delete document, update settings
   - Audit logs viewable at /admin/audit-logs (admin-only)
-- RBAC on operational mutations (LIVERY_ADMIN/ADMIN only): livery agreement create/patch/cancel-checkout, horse movement create/patch/move/swap
+- RBAC on operational mutations via requirePermission(...): livery agreement create/patch/cancel-checkout → agreements.create/edit/cancel_checkout; horse movement create/patch/move/swap → movements.manage (defaults grant these to LIVERY_ADMIN + ADMIN)
 - Invoice integrity:
   - Server-side proration of livery line items (matches UI getProRateFraction): partial-month agreements are billed daysOverlap/daysInMonth × monthlyAmount; total accumulated raw, rounded once at end
   - Cross-month ad-hoc charges blocked: POST /api/invoices rejects billing elements whose billing_month (or transaction_date prefix) doesn't match invoice billing_month

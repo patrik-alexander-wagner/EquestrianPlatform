@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Undo2 } from "lucide-react";
-import { useCanEdit } from "@/hooks/use-can-edit";
+import { useCan } from "@/hooks/use-permissions";
 
 export default function AgreementHistoryPage() {
-  const canEdit = useCanEdit();
+  const canEdit = useCan("agreements.cancel_checkout");
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelAgreement, setCancelAgreement] = useState<any>(null);
   const { toast } = useToast();

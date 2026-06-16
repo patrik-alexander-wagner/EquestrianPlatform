@@ -14,10 +14,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus } from "lucide-react";
 import type { Customer, Item } from "@shared/schema";
-import { useCanEdit } from "@/hooks/use-can-edit";
+import { useCan } from "@/hooks/use-permissions";
 
 export default function NewAgreementPage() {
-  const canEdit = useCanEdit();
+  const canEdit = useCan("agreements.create");
   const [stableSearch, setStableSearch] = useState("");
   const [boxSearch, setBoxSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);

@@ -1,2 +1,1 @@
-- [DB uniqueness can hide in indexes, not just constraints](db-uniqueness-enforcement.md) — to drop a uniqueness rule, check pg_indexes for UNIQUE indexes too; pg_constraint (contype='u') alone misses unique indexes.
-- [Express mounted-router relative req.path](express-mounted-path.md) — req.path is relative to mount point in app.use("/api",...); match "/logout" not "/api/logout".
+- [Dynamic RBAC permission model](dynamic-rbac.md) — what reads are gated vs auth-only and why; restart workflow after route-guard edits; ADMIN uses isAdmin bypass (no perm rows); no DELETE /api/users.

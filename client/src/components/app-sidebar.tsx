@@ -27,80 +27,78 @@ import {
   UserCog,
   LogOut,
   Shield,
+  ShieldCheck,
   History,
   ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
+import { usePermissions } from "@/hooks/use-permissions";
 
 const navGroups = [
   {
     label: "Billing Element",
-    adminOnly: false,
     items: [
-      { title: "Billing Elements", url: "/billing-elements", icon: Receipt },
+      { title: "Billing Elements", url: "/billing-elements", icon: Receipt, view: "billing_elements.view" },
     ],
   },
   {
     label: "Livery Agreements",
-    adminOnly: false,
     items: [
-      { title: "Current Agreements", url: "/agreements/current", icon: FileText },
-      { title: "New Agreement", url: "/agreements/new", icon: FilePlus },
-      { title: "History", url: "/agreements/history", icon: History },
+      { title: "Current Agreements", url: "/agreements/current", icon: FileText, view: "agreements.view" },
+      { title: "New Agreement", url: "/agreements/new", icon: FilePlus, view: "agreements.view" },
+      { title: "History", url: "/agreements/history", icon: History, view: "agreements.view" },
     ],
   },
   {
     label: "Master Data",
-    adminOnly: false,
     items: [
-      { title: "Customers", url: "/customers", icon: Users },
-      { title: "Horses", url: "/horses", icon: Horseshoe },
-      { title: "Stables", url: "/stables", icon: Building2 },
-      { title: "Boxes", url: "/boxes", icon: Box },
-      { title: "Items", url: "/items", icon: Package },
+      { title: "Customers", url: "/customers", icon: Users, view: "customers.view" },
+      { title: "Horses", url: "/horses", icon: Horseshoe, view: "horses.view" },
+      { title: "Stables", url: "/stables", icon: Building2, view: "stables.view" },
+      { title: "Boxes", url: "/boxes", icon: Box, view: "boxes.view" },
+      { title: "Items", url: "/items", icon: Package, view: "items.view" },
     ],
   },
   {
     label: "Stable Management",
-    adminOnly: false,
     items: [
-      { title: "Horse Movements", url: "/stable-management/horse-movements", icon: ArrowRightLeft },
+      { title: "Horse Movements", url: "/stable-management/horse-movements", icon: ArrowRightLeft, view: "movements.view" },
     ],
   },
   {
     label: "Billing",
-    adminOnly: false,
     items: [
-      { title: "To Invoice", url: "/billing/to-invoice", icon: ClipboardList },
-      { title: "Invoices", url: "/billing/invoices", icon: CreditCard },
+      { title: "To Invoice", url: "/billing/to-invoice", icon: ClipboardList, view: "to_invoice.view" },
+      { title: "Invoices", url: "/billing/invoices", icon: CreditCard, view: "invoices.view" },
     ],
   },
   {
     label: "Reports",
-    adminOnly: false,
     items: [
-      { title: "Livery Reports", url: "/reports/livery", icon: BarChart3 },
+      { title: "Livery Reports", url: "/reports/livery", icon: BarChart3, view: "reports.view" },
     ],
   },
   {
     label: "Administration",
-    adminOnly: true,
     items: [
-      { title: "Users", url: "/admin/users", icon: UserCog },
-      { title: "Settings", url: "/admin/settings", icon: Settings },
-      { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield },
+      { title: "Users", url: "/admin/users", icon: UserCog, view: "admin.users" },
+      { title: "Roles", url: "/admin/roles", icon: ShieldCheck, view: "admin.roles" },
+      { title: "Settings", url: "/admin/settings", icon: Settings, view: "admin.settings" },
+      { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield, view: "admin.audit_logs" },
     ],
   },
 ];
 
 interface AppSidebarProps {
   onLogout: () => void;
-  userRole: string;
 }
 
-export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
+export function AppSidebar({ onLogout }: AppSidebarProps) {
   const [location] = useLocation();
+  const { isAdmin, permissions } = usePermissions();
+
+  const canView = (key: string) => isAdmin || permissions.includes(key);
 
   return (
     <Sidebar>
@@ -118,11 +116,10 @@ export function AppSidebar({ onLogout, userRole }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.filter(group => {
-          if (group.adminOnly && userRole !== "ADMIN") return false;
-          if (group.liveryAdminOnly && userRole !== "ADMIN" && userRole !== "LIVERY_ADMIN") return false;
-          return true;
-        }).map((group) => (
+        {navGroups
+          .map((group) => ({ ...group, items: group.items.filter((item) => canView(item.view)) }))
+          .filter((group) => group.items.length > 0)
+          .map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

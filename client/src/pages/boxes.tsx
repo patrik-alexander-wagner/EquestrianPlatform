@@ -13,14 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/use-user-role";
+import { useCan } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MoreVertical, Trash2, Upload } from "lucide-react";
 import type { Stable } from "@shared/schema";
 
 export default function BoxesPage() {
-  const userRole = useUserRole();
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = useCan("boxes.manage");
   const [stableSearch, setStableSearch] = useState("");
   const [boxSearch, setBoxSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
