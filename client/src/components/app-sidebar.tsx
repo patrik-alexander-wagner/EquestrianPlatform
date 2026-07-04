@@ -30,6 +30,9 @@ import {
   ShieldCheck,
   History,
   ArrowRightLeft,
+  LandPlot,
+  GraduationCap,
+  Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
@@ -86,6 +89,16 @@ const navGroups = [
       { title: "Roles", url: "/admin/roles", icon: ShieldCheck, view: "admin.roles" },
       { title: "Settings", url: "/admin/settings", icon: Settings, view: "admin.settings" },
       { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield, view: "admin.audit_logs" },
+    ],
+  },
+  {
+    // Temporary home for these links — Milestone 4 replaces this with a full
+    // Riding School / Stable Management mode toggle and dedicated sidebar.
+    label: "Riding School (Shared Resources)",
+    items: [
+      { title: "Arenas", url: "/riding-school/arenas", icon: LandPlot, view: "shared_resources.view" },
+      { title: "Instructors", url: "/riding-school/instructors", icon: GraduationCap, view: "shared_resources.view" },
+      { title: "Rider Levels", url: "/riding-school/rider-levels", icon: Tags, view: "riding_school.settings.manage" },
     ],
   },
 ];

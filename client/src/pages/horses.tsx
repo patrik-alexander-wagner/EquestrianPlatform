@@ -18,6 +18,62 @@ import { useCan } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MoreVertical, ChevronsUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { HorseWellbeingStatus } from "@shared/schema";
+
+function HorseWellbeingSection({ horseId }: { horseId: string }) {
+  const canManage = useCan("shared_resources.horse_wellbeing.manage");
+  const { toast } = useToast();
+
+  const { data: history = [] } = useQuery<HorseWellbeingStatus[]>({
+    queryKey: [`/api/horses/${horseId}/wellbeing-status`],
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/horses/${horseId}/wellbeing-status`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/horses/${horseId}/wellbeing-status`] });
+      toast({ title: "Wellbeing status recorded" });
+    },
+  });
+
+  return (
+    <div className="pt-2 border-t">
+      <Label className="text-sm font-medium">Wellbeing Status</Label>
+      {history.length === 0 ? (
+        <p className="text-sm text-muted-foreground mt-1">No status recorded yet.</p>
+      ) : (
+        <ul className="mt-1 space-y-1 max-h-32 overflow-auto text-sm">
+          {history.map((entry) => (
+            <li key={entry.id} className="flex justify-between gap-2 text-muted-foreground">
+              <span>
+                <span className="font-medium text-foreground">{entry.statusTag}</span>
+                {entry.note ? ` — ${entry.note}` : ""}
+              </span>
+              <span className="shrink-0">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canManage && (
+        <form
+          className="flex gap-2 mt-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            const statusTag = fd.get("statusTag") as string;
+            if (!statusTag) return;
+            addMutation.mutate({ statusTag, note: fd.get("note") || null });
+            e.currentTarget.reset();
+          }}
+        >
+          <Input name="statusTag" placeholder="e.g. Fit, Light Work, Rest" required data-testid="input-wellbeing-status-tag" className="flex-1" />
+          <Input name="note" placeholder="Note (optional)" data-testid="input-wellbeing-note" className="flex-1" />
+          <Button type="submit" size="sm" disabled={addMutation.isPending} data-testid="button-submit-wellbeing">Add</Button>
+        </form>
+      )}
+    </div>
+  );
+}
 
 export default function HorsesPage() {
   const canEdit = useCan("horses.edit");
@@ -398,6 +454,7 @@ export default function HorsesPage() {
               </DialogFooter>
             </form>
           )}
+          {editingHorse && <HorseWellbeingSection horseId={editingHorse.id} />}
         </DialogContent>
       </Dialog>
     </div>

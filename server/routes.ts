@@ -21,31 +21,8 @@ import {
   requirePermission, loadPermissions, ensureLoaded,
   isAdminRole, can, permissionsForRole,
 } from "./permissions";
-
-function validateBody(schema: any, body: any) {
-  const result = schema.safeParse(body);
-  if (!result.success) {
-    throw { status: 400, message: result.error.errors.map((e: any) => e.message).join(", ") };
-  }
-  return result.data;
-}
-
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated()) return next();
-  res.status(401).json({ message: "Authentication required" });
-}
-
-function auditLog(req: Request, action: string, entityType?: string, entityId?: string, details?: string) {
-  const user = req.user as any;
-  storage.createAuditLog({
-    userId: user?.id || null,
-    username: user?.username || null,
-    action,
-    entityType: entityType || null,
-    entityId: entityId || null,
-    details: details || null,
-  }).catch(err => console.error("Audit log error:", err));
-}
+import { validateBody, requireAuth, auditLog } from "./route-helpers";
+import { registerSharedResourcesRoutes } from "./modules/shared-resources/routes";
 
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -1965,6 +1942,8 @@ export async function registerRoutes(
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });
+
+  registerSharedResourcesRoutes(app);
 
   await loadPermissions();
   return httpServer;

@@ -26,6 +26,9 @@ import AdminSettingsPage from "@/pages/admin-settings";
 import AdminAuditLogsPage from "@/pages/admin-audit-logs";
 import HorseMovementsPage from "@/pages/horse-movements";
 import AdminRolesPage from "@/pages/admin-roles";
+import ArenasPage from "@/pages/riding-school/arenas";
+import InstructorsPage from "@/pages/riding-school/instructors";
+import RiderLevelsPage from "@/pages/riding-school/rider-levels";
 import { usePermissions, useCan } from "@/hooks/use-permissions";
 
 function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string }) {
@@ -57,6 +60,9 @@ function Router() {
       <Route path="/admin/settings">{() => <PermissionRoute component={AdminSettingsPage} action="admin.settings" />}</Route>
       <Route path="/admin/audit-logs">{() => <PermissionRoute component={AdminAuditLogsPage} action="admin.audit_logs" />}</Route>
       <Route path="/admin/roles">{() => <PermissionRoute component={AdminRolesPage} action="admin.roles" />}</Route>
+      <Route path="/riding-school/arenas">{() => <PermissionRoute component={ArenasPage} action="shared_resources.view" />}</Route>
+      <Route path="/riding-school/instructors">{() => <PermissionRoute component={InstructorsPage} action="shared_resources.view" />}</Route>
+      <Route path="/riding-school/rider-levels">{() => <PermissionRoute component={RiderLevelsPage} action="riding_school.settings.manage" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
