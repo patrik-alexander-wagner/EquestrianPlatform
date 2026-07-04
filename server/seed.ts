@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { customers, horses, stables, boxes, items, liveryAgreements, horseOwnership, horseMovements } from "@shared/schema";
+import { customers, horses, stables, boxes, items, liveryAgreements, horseOwnership, horseMovements, riderLevels, rsCancellationPolicy, arenas, instructors } from "@shared/schema";
 import { SYSTEM_ROLES, DEFAULT_ROLE_PERMISSIONS } from "@shared/permissions";
 
 async function seedRolesAndPermissions() {
@@ -15,6 +15,28 @@ async function seedRolesAndPermissions() {
     }
   }
   console.log("Roles and permissions seeded");
+}
+
+async function seedRidingSchoolReferenceData() {
+  const existingLevels = await db.select().from(riderLevels).limit(1);
+  if (existingLevels.length === 0) {
+    await db.insert(riderLevels).values([
+      { name: "Beginner", sortOrder: 1 },
+      { name: "Intermediate", sortOrder: 2 },
+      { name: "Advanced", sortOrder: 3 },
+    ]);
+    console.log("Riding school rider levels seeded");
+  }
+
+  const existingPolicy = await db.select().from(rsCancellationPolicy).limit(1);
+  if (existingPolicy.length === 0) {
+    await db.insert(rsCancellationPolicy).values([
+      { thresholdHours: 24, creditPercent: 0 },
+      { thresholdHours: 48, creditPercent: 50 },
+      { thresholdHours: 72, creditPercent: 100 },
+    ]);
+    console.log("Riding school cancellation policy defaults seeded");
+  }
 }
 
 async function ensureAdminUser() {
@@ -48,6 +70,7 @@ async function ensureAdminUser() {
 export async function seedDatabase() {
   await ensureAdminUser();
   await seedRolesAndPermissions();
+  await seedRidingSchoolReferenceData();
 
   const existingCustomers = await storage.getCustomers();
   if (existingCustomers.length > 0) return;
@@ -145,6 +168,18 @@ export async function seedDatabase() {
     { agreementId: createdAgreements[0].id, horseId: createdHorses[0].id, stableboxId: boxTypeBoxes[0].id, checkIn: "2025-01-15" },
     { agreementId: createdAgreements[1].id, horseId: createdHorses[1].id, stableboxId: boxTypeBoxes[1].id, checkIn: "2025-02-01" },
     { agreementId: createdAgreements[2].id, horseId: createdHorses[2].id, stableboxId: boxTypeBoxes[2].id, checkIn: "2025-01-20", checkOut: "2025-06-20" },
+  ]);
+
+  // Dev-only sample data for the Riding School domain, gated by the same
+  // "database is empty" check above so production boots never get these.
+  await db.insert(arenas).values([
+    { name: "Main Arena", status: "active" },
+    { name: "Indoor Arena", status: "active" },
+  ]);
+
+  await db.insert(instructors).values([
+    { name: "Sarah Thompson", status: "active" },
+    { name: "Ahmed Al Mazrouei", status: "active" },
   ]);
 
   console.log("Database seeded successfully");

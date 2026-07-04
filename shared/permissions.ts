@@ -20,6 +20,8 @@ export const ACTION_GROUPS = [
   "ERP",
   "Reports",
   "Administration",
+  "Riding School",
+  "Shared Resources",
 ] as const;
 
 export const ACTIONS: ActionDef[] = [
@@ -74,6 +76,20 @@ export const ACTIONS: ActionDef[] = [
   { key: "admin.settings", label: "Manage settings", group: "Administration", type: "view" },
   { key: "admin.audit_logs", label: "View audit logs", group: "Administration", type: "view" },
   { key: "admin.roles", label: "Manage roles & permissions", group: "Administration", type: "view" },
+
+  // Riding School
+  { key: "riding_school.view", label: "View Riding School mode", group: "Riding School", type: "view" },
+  { key: "riding_school.calendar.manage", label: "Schedule / edit / cancel lessons", group: "Riding School", type: "action" },
+  { key: "riding_school.templates.manage", label: "Manage lesson templates", group: "Riding School", type: "action" },
+  { key: "riding_school.packages.manage", label: "Manage riding packages", group: "Riding School", type: "action" },
+  { key: "riding_school.settings.manage", label: "Manage riding school settings", group: "Riding School", type: "action" },
+  { key: "riding_school.bookings.manage", label: "Manage bookings on behalf of customers", group: "Riding School", type: "action" },
+
+  // Shared Resources
+  { key: "shared_resources.view", label: "View Arenas / Instructors pages", group: "Shared Resources", type: "view" },
+  { key: "shared_resources.instructors.manage", label: "Add / edit instructors", group: "Shared Resources", type: "action" },
+  { key: "shared_resources.arenas.manage", label: "Add / edit arenas", group: "Shared Resources", type: "action" },
+  { key: "shared_resources.horse_wellbeing.manage", label: "Record horse wellbeing status", group: "Shared Resources", type: "action" },
 ];
 
 export const ACTION_KEYS = ACTIONS.map((a) => a.key);
@@ -95,6 +111,7 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
   { key: "STORES", name: "Stores", isAdmin: false },
   { key: "FINANCE", name: "Finance", isAdmin: false },
   { key: "VIEWER", name: "Viewer (read-only)", isAdmin: false },
+  { key: "RIDING_SCHOOL_ADMIN", name: "Riding School Admin", isAdmin: false },
 ];
 
 // View actions that every non-admin operational role gets by default.
@@ -157,5 +174,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   VIEWER: [
     ...ALL_OPERATIONAL_VIEWS,
+  ],
+  RIDING_SCHOOL_ADMIN: [
+    "riding_school.view",
+    "riding_school.calendar.manage",
+    "riding_school.templates.manage",
+    "riding_school.packages.manage",
+    "riding_school.settings.manage",
+    "riding_school.bookings.manage",
+    "shared_resources.view",
+    "shared_resources.instructors.manage",
+    "shared_resources.arenas.manage",
+    "shared_resources.horse_wellbeing.manage",
   ],
 };

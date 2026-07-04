@@ -19,6 +19,13 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   role: text("role").notNull().default("LIVERY_ADMIN"),
   ssoId: text("sso_id").unique(),
+  // "STAFF" | "CUSTOMER" — CUSTOMER users are gated by accountType checks in portal
+  // routes, not by the staff role/permission catalog below.
+  accountType: text("account_type").notNull().default("STAFF"),
+  // The CUSTOMER user's own billing/master account (riding-school portal identity).
+  customerId: uuid("customer_id").references(() => customers.id),
+  // Set on a STAFF user who is also a member, to power "switch to Customer Portal".
+  linkedCustomerId: uuid("linked_customer_id").references(() => customers.id),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -283,6 +290,204 @@ export const horseMovements = pgTable("horse_movements", {
 export const insertHorseMovementSchema = createInsertSchema(horseMovements).omit({ id: true, createdAt: true });
 export type InsertHorseMovement = z.infer<typeof insertHorseMovementSchema>;
 export type HorseMovement = typeof horseMovements.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Shared resources (used by both Livery and Riding School)
+// ---------------------------------------------------------------------------
+
+export const arenas = pgTable("arenas", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("active"),
+});
+
+export const insertArenaSchema = createInsertSchema(arenas).omit({ id: true });
+export type InsertArena = z.infer<typeof insertArenaSchema>;
+export type Arena = typeof arenas.$inferSelect;
+
+export const instructors = pgTable("instructors", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("active"),
+  userId: uuid("user_id").references(() => users.id),
+});
+
+export const insertInstructorSchema = createInsertSchema(instructors).omit({ id: true });
+export type InsertInstructor = z.infer<typeof insertInstructorSchema>;
+export type Instructor = typeof instructors.$inferSelect;
+
+export const riderLevels = pgTable("rider_levels", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const insertRiderLevelSchema = createInsertSchema(riderLevels).omit({ id: true });
+export type InsertRiderLevel = z.infer<typeof insertRiderLevelSchema>;
+export type RiderLevel = typeof riderLevels.$inferSelect;
+
+// Append-only history; no update/delete — always insert a new row to change status.
+export const horseWellbeingStatus = pgTable("horse_wellbeing_status", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  statusTag: text("status_tag").notNull(),
+  note: text("note"),
+  setBy: uuid("set_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertHorseWellbeingStatusSchema = createInsertSchema(horseWellbeingStatus).omit({ id: true, createdAt: true });
+export type InsertHorseWellbeingStatus = z.infer<typeof insertHorseWellbeingStatusSchema>;
+export type HorseWellbeingStatus = typeof horseWellbeingStatus.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Riding School — customer/rider identity
+// ---------------------------------------------------------------------------
+
+// A person who rides — either the billing/master account holder themselves,
+// or a child/family member managed (booked, cancelled) by the master account.
+export const riders = pgTable("riders", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  fullName: text("full_name").notNull(),
+  dateOfBirth: date("date_of_birth"),
+  riderLevelId: uuid("rider_level_id").references(() => riderLevels.id),
+  isAccountHolder: boolean("is_account_holder").notNull().default(false),
+});
+
+export const insertRiderSchema = createInsertSchema(riders).omit({ id: true });
+export type InsertRider = z.infer<typeof insertRiderSchema>;
+export type Rider = typeof riders.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Riding School — lessons, scheduling, bookings
+// ---------------------------------------------------------------------------
+
+export const lessonTemplates = pgTable("lesson_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  minAge: integer("min_age"),
+  maxAge: integer("max_age"),
+  riderLevelId: uuid("rider_level_id").references(() => riderLevels.id),
+  minRiders: integer("min_riders").notNull().default(1),
+  maxRiders: integer("max_riders").notNull().default(1),
+  durationMinutes: integer("duration_minutes").notNull(),
+  price: numeric("price").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertLessonTemplateSchema = createInsertSchema(lessonTemplates).omit({ id: true });
+export type InsertLessonTemplate = z.infer<typeof insertLessonTemplateSchema>;
+export type LessonTemplate = typeof lessonTemplates.$inferSelect;
+
+export const rsLessonRecurrences = pgTable("rs_lesson_recurrences", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: uuid("template_id").notNull().references(() => lessonTemplates.id),
+  instructorId: uuid("instructor_id").notNull().references(() => instructors.id),
+  arenaId: uuid("arena_id").notNull().references(() => arenas.id),
+  // Comma-separated day-of-week ints (0=Sun..6=Sat), e.g. "1,3,5".
+  daysOfWeek: text("days_of_week").notNull(),
+  startTime: text("start_time").notNull(), // "HH:mm"
+  until: date("until").notNull(), // capped at 12 months out, enforced at write time
+  isPublic: boolean("is_public").notNull().default(true),
+});
+
+export const insertRsLessonRecurrenceSchema = createInsertSchema(rsLessonRecurrences).omit({ id: true });
+export type InsertRsLessonRecurrence = z.infer<typeof insertRsLessonRecurrenceSchema>;
+export type RsLessonRecurrence = typeof rsLessonRecurrences.$inferSelect;
+
+export const rsScheduledLessons = pgTable("rs_scheduled_lessons", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: uuid("template_id").notNull().references(() => lessonTemplates.id),
+  recurrenceId: uuid("recurrence_id").references(() => rsLessonRecurrences.id),
+  instructorId: uuid("instructor_id").notNull().references(() => instructors.id),
+  arenaId: uuid("arena_id").notNull().references(() => arenas.id),
+  startDatetime: timestamp("start_datetime").notNull(),
+  endDatetime: timestamp("end_datetime").notNull(),
+  capacity: integer("capacity").notNull(),
+  isPublic: boolean("is_public").notNull().default(true),
+  // True once this instance has been edited independently of its recurrence
+  // ("this event" in the Outlook-style edit prompt) — future series edits
+  // and regeneration must skip exception rows.
+  isException: boolean("is_exception").notNull().default(false),
+  status: text("status").notNull().default("scheduled"),
+});
+
+export const insertRsScheduledLessonSchema = createInsertSchema(rsScheduledLessons).omit({ id: true });
+export type InsertRsScheduledLesson = z.infer<typeof insertRsScheduledLessonSchema>;
+export type RsScheduledLesson = typeof rsScheduledLessons.$inferSelect;
+
+export const rsBookings = pgTable("rs_bookings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduledLessonId: uuid("scheduled_lesson_id").notNull().references(() => rsScheduledLessons.id),
+  riderId: uuid("rider_id").notNull().references(() => riders.id),
+  bookedByUserId: uuid("booked_by_user_id").notNull().references(() => users.id),
+  horseId: uuid("horse_id").references(() => horses.id),
+  status: text("status").notNull().default("confirmed"),
+  packagePurchaseId: uuid("package_purchase_id").references(() => rsPackagePurchases.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRsBookingSchema = createInsertSchema(rsBookings).omit({ id: true, createdAt: true });
+export type InsertRsBooking = z.infer<typeof insertRsBookingSchema>;
+export type RsBooking = typeof rsBookings.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Riding School — packages, cancellation policy, credit vouchers
+// ---------------------------------------------------------------------------
+
+export const rsRidingPackages = pgTable("rs_riding_packages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  lessonTemplateCategory: text("lesson_template_category").notNull(),
+  numberOfLessons: integer("number_of_lessons").notNull(),
+  validityDays: integer("validity_days").notNull(),
+  price: numeric("price").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertRsRidingPackageSchema = createInsertSchema(rsRidingPackages).omit({ id: true });
+export type InsertRsRidingPackage = z.infer<typeof insertRsRidingPackageSchema>;
+export type RsRidingPackage = typeof rsRidingPackages.$inferSelect;
+
+export const rsPackagePurchases = pgTable("rs_package_purchases", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  packageId: uuid("package_id").notNull().references(() => rsRidingPackages.id),
+  lessonsRemaining: integer("lessons_remaining").notNull(),
+  validUntil: date("valid_until").notNull(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id),
+  status: text("status").notNull().default("active"),
+  purchasedAt: timestamp("purchased_at").defaultNow(),
+});
+
+export const insertRsPackagePurchaseSchema = createInsertSchema(rsPackagePurchases).omit({ id: true, purchasedAt: true });
+export type InsertRsPackagePurchase = z.infer<typeof insertRsPackagePurchaseSchema>;
+export type RsPackagePurchase = typeof rsPackagePurchases.$inferSelect;
+
+export const rsCancellationPolicy = pgTable("rs_cancellation_policy", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  thresholdHours: integer("threshold_hours").notNull(),
+  creditPercent: integer("credit_percent").notNull().default(100),
+});
+
+export const insertRsCancellationPolicySchema = createInsertSchema(rsCancellationPolicy).omit({ id: true });
+export type InsertRsCancellationPolicy = z.infer<typeof insertRsCancellationPolicySchema>;
+export type RsCancellationPolicy = typeof rsCancellationPolicy.$inferSelect;
+
+export const rsCreditVouchers = pgTable("rs_credit_vouchers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  lessonTemplateCategory: text("lesson_template_category").notNull(),
+  sourceBookingId: uuid("source_booking_id").references(() => rsBookings.id),
+  status: text("status").notNull().default("active"),
+  expiresAt: date("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRsCreditVoucherSchema = createInsertSchema(rsCreditVouchers).omit({ id: true, createdAt: true });
+export type InsertRsCreditVoucher = z.infer<typeof insertRsCreditVoucherSchema>;
+export type RsCreditVoucher = typeof rsCreditVouchers.$inferSelect;
 
 export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"] as const;
 export type UserRole = typeof VALID_ROLES[number];

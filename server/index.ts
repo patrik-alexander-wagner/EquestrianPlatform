@@ -139,6 +139,9 @@ app.use((req, res, next) => {
   const { runMigration } = await import("./migrate");
   await runMigration();
 
+  const { runRidingSchoolMigration } = await import("./migrations/riding-school");
+  await runRidingSchoolMigration();
+
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
 
