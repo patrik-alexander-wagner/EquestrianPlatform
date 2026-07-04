@@ -23,6 +23,7 @@ import {
 } from "./permissions";
 import { validateBody, requireAuth, auditLog } from "./route-helpers";
 import { registerSharedResourcesRoutes } from "./modules/shared-resources/routes";
+import { registerRidingSchoolRoutes } from "./modules/riding-school/routes";
 
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -1944,6 +1945,7 @@ export async function registerRoutes(
   });
 
   registerSharedResourcesRoutes(app);
+  registerRidingSchoolRoutes(app);
 
   await loadPermissions();
   return httpServer;
