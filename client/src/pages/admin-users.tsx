@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Pencil } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import type { User } from "@shared/schema";
+import type { User, Customer } from "@shared/schema";
 
 interface RoleOption {
   key: string;
@@ -21,6 +21,7 @@ interface RoleOption {
 export default function AdminUsersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [newAccountType, setNewAccountType] = useState<"STAFF" | "CUSTOMER">("STAFF");
   const { toast } = useToast();
 
   const { data: users = [], isLoading } = useQuery<User[]>({
@@ -29,6 +30,10 @@ export default function AdminUsersPage() {
 
   const { data: roles = [] } = useQuery<RoleOption[]>({
     queryKey: ["/api/roles"],
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
   });
 
   const roleLabels: Record<string, string> = Object.fromEntries(
@@ -40,6 +45,7 @@ export default function AdminUsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setShowCreateDialog(false);
+      setNewAccountType("STAFF");
       toast({ title: "User created successfully" });
     },
     onError: (error: any) => {
@@ -71,6 +77,11 @@ export default function AdminUsersPage() {
       render: (item: any) => (
         <StatusBadge status={roleLabels[item.role] || item.role} />
       ),
+    },
+    {
+      key: "accountType",
+      label: "Account Type",
+      render: (item: any) => item.accountType === "CUSTOMER" ? "Customer" : "Staff",
     },
     { key: "id", label: "User ID", render: (item: User) => item.id.substring(0, 8) + "..." },
   ];
@@ -116,7 +127,9 @@ export default function AdminUsersPage() {
               createMutation.mutate({
                 username: fd.get("username"),
                 password: fd.get("password"),
-                role: fd.get("role"),
+                role: newAccountType === "CUSTOMER" ? "VIEWER" : fd.get("role"),
+                accountType: newAccountType,
+                customerId: newAccountType === "CUSTOMER" ? fd.get("customerId") : undefined,
               });
             }}
           >
@@ -130,13 +143,37 @@ export default function AdminUsersPage() {
                 <Input name="password" type="password" required data-testid="input-new-password" />
               </div>
               <div>
-                <Label>Role</Label>
-                <select name="role" defaultValue="LIVERY_ADMIN" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-new-role">
-                  {roles.map(role => (
-                    <option key={role.key} value={role.key}>{role.name}</option>
-                  ))}
+                <Label>Account Type</Label>
+                <select
+                  value={newAccountType}
+                  onChange={(e) => setNewAccountType(e.target.value as "STAFF" | "CUSTOMER")}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  data-testid="select-new-account-type"
+                >
+                  <option value="STAFF">Staff</option>
+                  <option value="CUSTOMER">Customer (portal login)</option>
                 </select>
               </div>
+              {newAccountType === "STAFF" ? (
+                <div>
+                  <Label>Role</Label>
+                  <select name="role" defaultValue="LIVERY_ADMIN" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-new-role">
+                    {roles.map(role => (
+                      <option key={role.key} value={role.key}>{role.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Linked Customer</Label>
+                  <select name="customerId" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-new-customer">
+                    <option value="">Select a customer...</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>{c.fullname}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <DialogFooter className="mt-4">
               <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-user">

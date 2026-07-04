@@ -88,7 +88,10 @@ passport.use(
       if (!user) return done(null, false, { message: "Invalid username or password" });
       const valid = await verifyPassword(password, user.password);
       if (!valid) return done(null, false, { message: "Invalid username or password" });
-      return done(null, { id: user.id, username: user.username, role: user.role });
+      return done(null, {
+        id: user.id, username: user.username, role: user.role,
+        accountType: user.accountType, customerId: user.customerId, linkedCustomerId: user.linkedCustomerId,
+      });
     } catch (err) {
       return done(err);
     }
@@ -103,7 +106,10 @@ passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await storage.getUser(id);
     if (!user) return done(null, false);
-    done(null, { id: user.id, username: user.username, role: user.role });
+    done(null, {
+      id: user.id, username: user.username, role: user.role,
+      accountType: user.accountType, customerId: user.customerId, linkedCustomerId: user.linkedCustomerId,
+    });
   } catch (err) {
     done(err);
   }

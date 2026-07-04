@@ -19,6 +19,26 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Authentication required" });
 }
 
+// Gate for the Customer Portal — customer identity is orthogonal to the
+// staff role/permission catalog (shared/permissions.ts), so portal routes
+// check accountType directly rather than going through requirePermission.
+//
+// Two kinds of session can reach the portal: a real CUSTOMER account (its
+// own customerId), or a STAFF account that also has a linkedCustomerId (a
+// staff member who is also a member, using the "switch to Customer Portal"
+// option). Either way, this resolves one unambiguous effectiveCustomerId so
+// route handlers never have to re-derive which field to trust.
+export function requireCustomer(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
+  const user = req.user as any;
+  const effectiveCustomerId = user.accountType === "CUSTOMER" ? user.customerId : user.linkedCustomerId;
+  if (!effectiveCustomerId) {
+    return res.status(403).json({ message: "Customer account required" });
+  }
+  (req as any).effectiveCustomerId = effectiveCustomerId;
+  next();
+}
+
 export function auditLog(req: Request, action: string, entityType?: string, entityId?: string, details?: string) {
   const user = req.user as any;
   storage.createAuditLog({

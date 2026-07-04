@@ -205,7 +205,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<Omit<User, "password">[]> {
-    return await db.select({ id: users.id, username: users.username, role: users.role }).from(users);
+    return await db.select({
+      id: users.id, username: users.username, role: users.role,
+      accountType: users.accountType, customerId: users.customerId, linkedCustomerId: users.linkedCustomerId,
+    }).from(users);
   }
 
   async getRoles(): Promise<Role[]> {

@@ -24,6 +24,7 @@ import {
 import { validateBody, requireAuth, auditLog } from "./route-helpers";
 import { registerSharedResourcesRoutes } from "./modules/shared-resources/routes";
 import { registerRidingSchoolRoutes } from "./modules/riding-school/routes";
+import { registerCustomerPortalRoutes } from "./modules/customer-portal/routes";
 
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -121,7 +122,10 @@ export async function registerRoutes(
         localUser = updated;
       }
 
-      const sessionUser = { id: localUser.id, username: localUser.username, role: localUser.role };
+      const sessionUser = {
+        id: localUser.id, username: localUser.username, role: localUser.role,
+        accountType: localUser.accountType, customerId: localUser.customerId, linkedCustomerId: localUser.linkedCustomerId,
+      };
       req.logIn(sessionUser, (err) => {
         if (err) {
           console.error("SSO login error:", err);
@@ -165,6 +169,9 @@ export async function registerRoutes(
         role: user.role,
         isAdmin: isAdminRole(user.role),
         permissions: permissionsForRole(user.role),
+        accountType: user.accountType || "STAFF",
+        customerId: user.customerId || null,
+        linkedCustomerId: user.linkedCustomerId || null,
       });
     } else {
       res.status(401).json({ message: "Not authenticated" });
@@ -1946,6 +1953,7 @@ export async function registerRoutes(
 
   registerSharedResourcesRoutes(app);
   registerRidingSchoolRoutes(app);
+  registerCustomerPortalRoutes(app);
 
   await loadPermissions();
   return httpServer;

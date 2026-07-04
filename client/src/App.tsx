@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { PortalSidebar } from "@/components/portal-sidebar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { LogOut, ArrowLeftRight } from "lucide-react";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import DashboardPage from "@/pages/dashboard";
@@ -34,6 +37,11 @@ import RidingSchoolCalendarPage from "@/pages/riding-school/calendar";
 import HorseManagementPage from "@/pages/riding-school/horse-management";
 import RidingSchoolReportsPage from "@/pages/riding-school/reports";
 import RidingSchoolSettingsPage from "@/pages/riding-school/settings";
+import PortalDashboardPage from "@/pages/portal/dashboard";
+import PortalCalendarPage from "@/pages/portal/calendar";
+import MyRidersPage from "@/pages/portal/my-riders";
+import PortalPackagesPage from "@/pages/portal/packages";
+import MyHorsesPage from "@/pages/portal/my-horses";
 import { usePermissions, useCan } from "@/hooks/use-permissions";
 
 function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string }) {
@@ -78,6 +86,20 @@ function Router() {
   );
 }
 
+function PortalRouter() {
+  return (
+    <Switch>
+      <Route path="/">{() => <Redirect to="/portal" />}</Route>
+      <Route path="/portal" component={PortalDashboardPage} />
+      <Route path="/portal/calendar" component={PortalCalendarPage} />
+      <Route path="/portal/my-riders" component={MyRidersPage} />
+      <Route path="/portal/packages" component={PortalPackagesPage} />
+      <Route path="/portal/my-horses" component={MyHorsesPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function getInitials(username: string): string {
   if (!username) return "?";
   const local = username.split("@")[0];
@@ -88,9 +110,16 @@ function getInitials(username: string): string {
 }
 
 function App() {
+  const [, navigate] = useLocation();
   const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const [userRole, setUserRole] = useState<string>("user");
   const [username, setUsername] = useState<string>("");
+  const [accountType, setAccountType] = useState<string>("STAFF");
+  const [linkedCustomerId, setLinkedCustomerId] = useState<string | null>(null);
+  // Only meaningful for STAFF users with linkedCustomerId set (a staff member
+  // who is also a member). CUSTOMER accountType always renders the portal —
+  // there is no admin identity to switch back to.
+  const [viewMode, setViewMode] = useState<"admin" | "portal">("admin");
 
   const checkAuth = async () => {
     try {
@@ -99,6 +128,9 @@ function App() {
         const data = await res.json();
         setUserRole(data.role || "user");
         setUsername(data.username || "");
+        setAccountType(data.accountType || "STAFF");
+        setLinkedCustomerId(data.linkedCustomerId || null);
+        setViewMode(data.accountType === "CUSTOMER" ? "portal" : "admin");
         setAuthState("authenticated");
       } else {
         setAuthState("unauthenticated");
@@ -115,6 +147,11 @@ function App() {
   const handleLogin = async () => {
     await checkAuth();
     queryClient.clear();
+    // The browser URL may still hold a path from a previous session (e.g. a
+    // portal path if the last user was a customer). "/" is always valid:
+    // Router renders the staff dashboard directly, PortalRouter redirects
+    // "/" to "/portal" for customer sessions.
+    navigate("/");
   };
 
   const handleLogout = async () => {
@@ -122,6 +159,10 @@ function App() {
     setAuthState("unauthenticated");
     setUserRole("user");
     setUsername("");
+    setAccountType("STAFF");
+    setLinkedCustomerId(null);
+    setViewMode("admin");
+    navigate("/");
     queryClient.clear();
   };
 
@@ -149,25 +190,52 @@ function App() {
     "--sidebar-width-icon": "3rem",
   };
 
+  const showPortal = viewMode === "portal";
+  const canSwitchPortal = accountType === "STAFF" && !!linkedCustomerId;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <SidebarProvider style={style as React.CSSProperties}>
           <div className="flex h-screen w-full">
-            <AppSidebar onLogout={handleLogout} />
+            {showPortal ? <PortalSidebar onLogout={handleLogout} /> : <AppSidebar onLogout={handleLogout} />}
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center gap-2 p-2 border-b shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <div
-                  className="ml-auto mr-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold cursor-default"
-                  title={username}
-                  data-testid="avatar-initials"
-                >
-                  {getInitials(username)}
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="ml-auto mr-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold"
+                      title={username}
+                      data-testid="avatar-initials"
+                    >
+                      {getInitials(username)}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {canSwitchPortal && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const next = showPortal ? "admin" : "portal";
+                          setViewMode(next);
+                          navigate(next === "portal" ? "/portal" : "/");
+                        }}
+                        data-testid="menu-item-switch-portal"
+                      >
+                        <ArrowLeftRight className="w-4 h-4 mr-2" />
+                        Switch to {showPortal ? "Admin Portal" : "Customer Portal"}
+                      </DropdownMenuItem>
+                    )}
+                    {canSwitchPortal && <DropdownMenuSeparator />}
+                    <DropdownMenuItem onClick={handleLogout} data-testid="menu-item-logout">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </header>
               <main className="flex-1 overflow-auto">
-                <Router />
+                {showPortal ? <PortalRouter /> : <Router />}
               </main>
             </div>
           </div>
