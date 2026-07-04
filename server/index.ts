@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -168,7 +169,9 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
+      // SO_REUSEPORT isn't supported on Windows (ENOTSUP); it's only needed
+      // for multi-process clustering on Linux deployments anyway.
+      ...(process.platform !== "win32" ? { reusePort: true } : {}),
     },
     () => {
       log(`serving on port ${port}`);
