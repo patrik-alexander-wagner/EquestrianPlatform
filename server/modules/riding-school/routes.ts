@@ -286,4 +286,11 @@ export function registerRidingSchoolRoutes(app: Express) {
   app.get("/api/riding-school/cancellation-policy", requireAuth, async (_req, res) => {
     res.json(await ridingSchoolStorage.getCancellationPolicies());
   });
+
+  // --- Reports ---
+  app.get("/api/riding-school/reports/summary", requirePermission("riding_school.view"), async (req, res) => {
+    const from = req.query.from ? new Date(req.query.from as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const to = req.query.to ? new Date(req.query.to as string) : new Date(new Date().setDate(new Date().getDate() + 30));
+    res.json(await ridingSchoolStorage.getReportSummary(from, to));
+  });
 }

@@ -182,4 +182,26 @@ export const ridingSchoolStorage = {
     const [row] = await db.update(rsCreditVouchers).set({ status: "redeemed" }).where(eq(rsCreditVouchers.id, id)).returning();
     return row;
   },
+
+  // --- Reporting aggregates ---
+  async getReportSummary(fromDate: Date, toDate: Date) {
+    const [lessonsInRange] = await db.select({ count: sql<number>`count(*)::int` }).from(rsScheduledLessons)
+      .where(and(gte(rsScheduledLessons.startDatetime, fromDate), lte(rsScheduledLessons.startDatetime, toDate)));
+    const [confirmedBookings] = await db.select({ count: sql<number>`count(*)::int` }).from(rsBookings)
+      .where(eq(rsBookings.status, "confirmed"));
+    const [cancelledBookings] = await db.select({ count: sql<number>`count(*)::int` }).from(rsBookings)
+      .where(eq(rsBookings.status, "cancelled"));
+    const [activePackagePurchases] = await db.select({ count: sql<number>`count(*)::int` }).from(rsPackagePurchases)
+      .where(eq(rsPackagePurchases.status, "active"));
+    const [activeVouchers] = await db.select({ count: sql<number>`count(*)::int` }).from(rsCreditVouchers)
+      .where(eq(rsCreditVouchers.status, "active"));
+
+    return {
+      lessonsInRange: lessonsInRange.count,
+      confirmedBookings: confirmedBookings.count,
+      cancelledBookings: cancelledBookings.count,
+      activePackagePurchases: activePackagePurchases.count,
+      activeVouchers: activeVouchers.count,
+    };
+  },
 };

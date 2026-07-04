@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, numeric, boolean, date, timestamp, uuid, pgEnum, unique, uniqueIndex } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createSchemaFactory } from "drizzle-zod";
 import { z } from "zod";
+
+// Coerce date/timestamp columns (accepts both real Date objects and ISO
+// strings) rather than the drizzle-zod default of requiring an actual Date
+// instance — request bodies over JSON can only ever carry strings, so
+// without this every date/timestamp field rejects normal API input.
+const { createInsertSchema } = createSchemaFactory({ coerce: { date: true } });
 
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"]);
 

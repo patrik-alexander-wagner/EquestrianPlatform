@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -33,12 +34,15 @@ import {
   LandPlot,
   GraduationCap,
   Tags,
+  LayoutDashboard,
+  CalendarRange,
+  HeartPulse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
 import { usePermissions } from "@/hooks/use-permissions";
 
-const navGroups = [
+const stableManagementNavGroups = [
   {
     label: "Billing Element",
     items: [
@@ -91,14 +95,21 @@ const navGroups = [
       { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield, view: "admin.audit_logs" },
     ],
   },
+];
+
+const ridingSchoolNavGroups = [
   {
-    // Temporary home for these links — Milestone 4 replaces this with a full
-    // Riding School / Stable Management mode toggle and dedicated sidebar.
-    label: "Riding School (Shared Resources)",
+    label: "Riding School",
     items: [
+      { title: "Overview", url: "/riding-school/overview", icon: LayoutDashboard, view: "riding_school.view" },
+      { title: "Calendar", url: "/riding-school/calendar", icon: CalendarRange, view: "riding_school.view" },
+      { title: "Horse Management", url: "/riding-school/horse-management", icon: HeartPulse, view: "riding_school.view" },
       { title: "Arenas", url: "/riding-school/arenas", icon: LandPlot, view: "shared_resources.view" },
       { title: "Instructors", url: "/riding-school/instructors", icon: GraduationCap, view: "shared_resources.view" },
+      { title: "Customers", url: "/customers", icon: Users, view: "customers.view" },
+      { title: "Reports", url: "/riding-school/reports", icon: BarChart3, view: "riding_school.view" },
       { title: "Rider Levels", url: "/riding-school/rider-levels", icon: Tags, view: "riding_school.settings.manage" },
+      { title: "Settings", url: "/riding-school/settings", icon: Settings, view: "riding_school.settings.manage" },
     ],
   },
 ];
@@ -107,11 +118,25 @@ interface AppSidebarProps {
   onLogout: () => void;
 }
 
+const MODE_STORAGE_KEY = "stablemaster.sidebarMode";
+
 export function AppSidebar({ onLogout }: AppSidebarProps) {
   const [location] = useLocation();
   const { isAdmin, permissions } = usePermissions();
+  const [mode, setMode] = useState<"stable" | "riding-school">(() => {
+    if (typeof window === "undefined") return "stable";
+    return (localStorage.getItem(MODE_STORAGE_KEY) as "stable" | "riding-school") || "stable";
+  });
 
   const canView = (key: string) => isAdmin || permissions.includes(key);
+  const canViewRidingSchool = isAdmin || permissions.includes("riding_school.view") || permissions.includes("shared_resources.view");
+
+  const setModeAndPersist = (next: "stable" | "riding-school") => {
+    setMode(next);
+    localStorage.setItem(MODE_STORAGE_KEY, next);
+  };
+
+  const activeNavGroups = mode === "riding-school" ? ridingSchoolNavGroups : stableManagementNavGroups;
 
   return (
     <Sidebar>
@@ -123,13 +148,33 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
             </div>
             <div>
               <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">StableMaster</h1>
-              <p className="text-xs text-muted-foreground">Stable Management</p>
+              <p className="text-xs text-muted-foreground">{mode === "riding-school" ? "Riding School" : "Stable Management"}</p>
             </div>
           </div>
         </Link>
+        {canViewRidingSchool && (
+          <div className="flex mt-3 rounded-md border p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setModeAndPersist("stable")}
+              data-testid="button-mode-stable"
+              className={`flex-1 rounded px-2 py-1 ${mode === "stable" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+            >
+              Stable Mgmt
+            </button>
+            <button
+              type="button"
+              onClick={() => setModeAndPersist("riding-school")}
+              data-testid="button-mode-riding-school"
+              className={`flex-1 rounded px-2 py-1 ${mode === "riding-school" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+            >
+              Riding School
+            </button>
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
-        {navGroups
+        {activeNavGroups
           .map((group) => ({ ...group, items: group.items.filter((item) => canView(item.view)) }))
           .filter((group) => group.items.length > 0)
           .map((group) => (

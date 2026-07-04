@@ -6,12 +6,18 @@ import {
   type RsScheduledLesson, type RsBooking, type RsLessonRecurrence,
 } from "@shared/schema";
 import { ridingSchoolStorage } from "./storage";
+import { CLUB_UTC_OFFSET_HOURS } from "@shared/timezone";
 
 const MAX_RECURRENCE_MONTHS = 12;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parseDaysOfWeek(daysOfWeek: string): number[] {
   return daysOfWeek.split(",").map((d) => parseInt(d.trim(), 10)).filter((d) => d >= 0 && d <= 6);
+}
+
+// Converts a club wall-clock date+time (Asia/Dubai) to the correct UTC
+// instant, independent of the server process's own local timezone.
+function clubWallClockToUtc(year: number, month: number, day: number, hour: number, minute: number): Date {
+  return new Date(Date.UTC(year, month, day, hour - CLUB_UTC_OFFSET_HOURS, minute, 0));
 }
 
 // Materializes rs_scheduled_lessons rows from a recurrence, starting today
@@ -29,17 +35,19 @@ export async function generateInstancesFromRecurrence(recurrence: RsLessonRecurr
   const until = new Date(recurrence.until);
   const endDate = until < cap ? until : cap;
 
+  // Cursor walks whole UTC calendar days — day-of-week matching only needs
+  // to be internally consistent, not tied to any particular timezone; the
+  // actual instant of each instance is computed via clubWallClockToUtc.
   const instances: { start: Date; end: Date }[] = [];
   const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
+  cursor.setUTCHours(0, 0, 0, 0);
   while (cursor <= endDate) {
-    if (days.includes(cursor.getDay())) {
-      const start = new Date(cursor);
-      start.setHours(hh, mm, 0, 0);
+    if (days.includes(cursor.getUTCDay())) {
+      const start = clubWallClockToUtc(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate(), hh, mm);
       const end = new Date(start.getTime() + template.durationMinutes * 60 * 1000);
       instances.push({ start, end });
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return ridingSchoolStorage.createScheduledLessons(

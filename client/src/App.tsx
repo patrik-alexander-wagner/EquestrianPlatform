@@ -29,6 +29,11 @@ import AdminRolesPage from "@/pages/admin-roles";
 import ArenasPage from "@/pages/riding-school/arenas";
 import InstructorsPage from "@/pages/riding-school/instructors";
 import RiderLevelsPage from "@/pages/riding-school/rider-levels";
+import RidingSchoolOverviewPage from "@/pages/riding-school/overview";
+import RidingSchoolCalendarPage from "@/pages/riding-school/calendar";
+import HorseManagementPage from "@/pages/riding-school/horse-management";
+import RidingSchoolReportsPage from "@/pages/riding-school/reports";
+import RidingSchoolSettingsPage from "@/pages/riding-school/settings";
 import { usePermissions, useCan } from "@/hooks/use-permissions";
 
 function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string }) {
@@ -63,6 +68,11 @@ function Router() {
       <Route path="/riding-school/arenas">{() => <PermissionRoute component={ArenasPage} action="shared_resources.view" />}</Route>
       <Route path="/riding-school/instructors">{() => <PermissionRoute component={InstructorsPage} action="shared_resources.view" />}</Route>
       <Route path="/riding-school/rider-levels">{() => <PermissionRoute component={RiderLevelsPage} action="riding_school.settings.manage" />}</Route>
+      <Route path="/riding-school/overview">{() => <PermissionRoute component={RidingSchoolOverviewPage} action="riding_school.view" />}</Route>
+      <Route path="/riding-school/calendar">{() => <PermissionRoute component={RidingSchoolCalendarPage} action="riding_school.view" />}</Route>
+      <Route path="/riding-school/horse-management">{() => <PermissionRoute component={HorseManagementPage} action="riding_school.view" />}</Route>
+      <Route path="/riding-school/reports">{() => <PermissionRoute component={RidingSchoolReportsPage} action="riding_school.view" />}</Route>
+      <Route path="/riding-school/settings">{() => <PermissionRoute component={RidingSchoolSettingsPage} action="riding_school.settings.manage" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
