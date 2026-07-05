@@ -1,24 +1,14 @@
 import { db } from "../../db";
 import { eq, and, sql } from "drizzle-orm";
 import {
-  rsScheduledLessons, rsBookings, rsLessonRecurrences, lessonTemplates, riders,
-  rsPackagePurchases, rsCreditVouchers,
+  rsScheduledLessons, rsBookings, rsLessonRecurrences, lessonTemplates, riders, riderLevels,
+  rsPackagePurchases, rsPackageTemplates, rsCreditVouchers,
   type RsScheduledLesson, type RsBooking, type RsLessonRecurrence,
 } from "@shared/schema";
 import { ridingSchoolStorage } from "./storage";
-import { CLUB_UTC_OFFSET_HOURS } from "@shared/timezone";
+import { computeRecurrenceInstanceDates, getsFullRefund, riderLevelAllowed } from "./scheduling-logic";
 
 const MAX_RECURRENCE_MONTHS = 12;
-
-function parseDaysOfWeek(daysOfWeek: string): number[] {
-  return daysOfWeek.split(",").map((d) => parseInt(d.trim(), 10)).filter((d) => d >= 0 && d <= 6);
-}
-
-// Converts a club wall-clock date+time (Asia/Dubai) to the correct UTC
-// instant, independent of the server process's own local timezone.
-function clubWallClockToUtc(year: number, month: number, day: number, hour: number, minute: number): Date {
-  return new Date(Date.UTC(year, month, day, hour - CLUB_UTC_OFFSET_HOURS, minute, 0));
-}
 
 // Materializes rs_scheduled_lessons rows from a recurrence, starting today
 // through its `until` date (hard-capped at 12 months regardless of what
@@ -27,28 +17,14 @@ export async function generateInstancesFromRecurrence(recurrence: RsLessonRecurr
   const template = await ridingSchoolStorage.getLessonTemplate(recurrence.templateId);
   if (!template) throw { status: 400, message: "Lesson template not found for recurrence" };
 
-  const days = parseDaysOfWeek(recurrence.daysOfWeek);
-  const [hh, mm] = recurrence.startTime.split(":").map((n) => parseInt(n, 10));
-
-  const cap = new Date();
-  cap.setMonth(cap.getMonth() + MAX_RECURRENCE_MONTHS);
-  const until = new Date(recurrence.until);
-  const endDate = until < cap ? until : cap;
-
-  // Cursor walks whole UTC calendar days — day-of-week matching only needs
-  // to be internally consistent, not tied to any particular timezone; the
-  // actual instant of each instance is computed via clubWallClockToUtc.
-  const instances: { start: Date; end: Date }[] = [];
-  const cursor = new Date();
-  cursor.setUTCHours(0, 0, 0, 0);
-  while (cursor <= endDate) {
-    if (days.includes(cursor.getUTCDay())) {
-      const start = clubWallClockToUtc(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate(), hh, mm);
-      const end = new Date(start.getTime() + template.durationMinutes * 60 * 1000);
-      instances.push({ start, end });
-    }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
+  const instances = computeRecurrenceInstanceDates(
+    recurrence.daysOfWeek,
+    recurrence.startTime,
+    new Date(recurrence.until),
+    template.durationMinutes,
+    new Date(),
+    MAX_RECURRENCE_MONTHS,
+  );
 
   return ridingSchoolStorage.createScheduledLessons(
     instances.map(({ start, end }) => ({
@@ -115,7 +91,12 @@ export async function bookLesson(input: BookLessonInput): Promise<RsBooking> {
     const [rider] = await tx.select().from(riders).where(eq(riders.id, input.riderId));
     if (!rider) throw { status: 404, message: "Rider not found" };
 
-    if (template.riderLevelId && rider.riderLevelId !== template.riderLevelId) {
+    const allLevels = await tx.select().from(riderLevels);
+    const sortOrderById = Object.fromEntries(allLevels.map((l) => [l.id, l.sortOrder]));
+    const riderSortOrder = rider.riderLevelId ? sortOrderById[rider.riderLevelId] : null;
+    const minSortOrder = template.minRiderLevelId ? sortOrderById[template.minRiderLevelId] : null;
+    const maxSortOrder = template.maxRiderLevelId ? sortOrderById[template.maxRiderLevelId] : null;
+    if (!riderLevelAllowed(riderSortOrder, minSortOrder, maxSortOrder)) {
       throw { status: 400, message: "This class is not available for the rider's level" };
     }
 
@@ -136,6 +117,11 @@ export async function bookLesson(input: BookLessonInput): Promise<RsBooking> {
       if (pkg.customerId !== rider.customerId) throw { status: 400, message: "This package does not belong to the rider's account" };
       if (pkg.status !== "active" || pkg.lessonsRemaining <= 0) throw { status: 400, message: "This package has no lessons remaining" };
       if (new Date(pkg.validUntil) < new Date()) throw { status: 400, message: "This package has expired" };
+
+      const eligibleTemplates = await tx.select().from(rsPackageTemplates).where(eq(rsPackageTemplates.packageId, pkg.packageId));
+      if (!eligibleTemplates.some((et) => et.templateId === lesson.templateId)) {
+        throw { status: 400, message: "This package cannot be used for this lesson" };
+      }
 
       const [updated] = await tx.update(rsPackagePurchases)
         .set({ lessonsRemaining: sql`${rsPackagePurchases.lessonsRemaining} - 1` })
@@ -164,13 +150,11 @@ export interface CancelBookingResult {
   voucherIssued: boolean;
 }
 
-// Applies the cancellation/credit policy: the tier with the highest
-// thresholdHours that the actual notice period satisfies determines the
-// credit percent (e.g. >=72h -> 100%, >=48h -> 50%, >=24h -> 0%, <24h -> 0%,
-// matching the seeded defaults). Credit percent is treated as an
-// eligibility signal (>0 = eligible) rather than a fractional amount, since
-// the product is a whole "voucher for one class of the same type" per the
-// original requirement — there's no concept of half a class.
+// Applies the single-field cancellation policy: cancel with at least
+// policy.thresholdHours notice and get a full refund (credit/voucher);
+// cancel later than that and get nothing. `creditPercent` in the result is
+// just 100 or 0 — kept as a percent for API-shape compatibility, but there's
+// no partial-credit tier anymore.
 export async function cancelBooking(bookingId: string): Promise<CancelBookingResult> {
   return db.transaction(async (tx) => {
     const [booking] = await tx.select().from(rsBookings).where(eq(rsBookings.id, bookingId)).for("update");
@@ -186,14 +170,14 @@ export async function cancelBooking(bookingId: string): Promise<CancelBookingRes
     const [template] = await tx.select().from(lessonTemplates).where(eq(lessonTemplates.id, lesson.templateId));
 
     const hoursUntilLesson = (new Date(lesson.startDatetime).getTime() - Date.now()) / (60 * 60 * 1000);
-    const policies = await ridingSchoolStorage.getCancellationPolicies(); // sorted desc by thresholdHours
-    const matched = policies.find((p) => hoursUntilLesson >= p.thresholdHours);
-    const creditPercent = matched?.creditPercent ?? 0;
+    const policy = await ridingSchoolStorage.getCancellationPolicy();
+    const fullRefund = getsFullRefund(hoursUntilLesson, policy?.thresholdHours ?? 0);
+    const creditPercent = fullRefund ? 100 : 0;
 
     let refundedToPackage = false;
     let voucherIssued = false;
 
-    if (creditPercent > 0) {
+    if (fullRefund) {
       if (booking.packagePurchaseId) {
         await tx.update(rsPackagePurchases)
           .set({ lessonsRemaining: sql`${rsPackagePurchases.lessonsRemaining} + 1` })

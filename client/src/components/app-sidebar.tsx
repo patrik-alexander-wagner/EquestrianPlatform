@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -37,12 +36,26 @@ import {
   LayoutDashboard,
   CalendarRange,
   HeartPulse,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
+import { LogoMark } from "@/components/icons/logo-mark";
 import { usePermissions } from "@/hooks/use-permissions";
 
-const stableManagementNavGroups = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  view: string | string[];
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const stableManagementNavGroups: NavGroup[] = [
   {
     label: "Billing Element",
     items: [
@@ -86,18 +99,9 @@ const stableManagementNavGroups = [
       { title: "Livery Reports", url: "/reports/livery", icon: BarChart3, view: "reports.view" },
     ],
   },
-  {
-    label: "Administration",
-    items: [
-      { title: "Users", url: "/admin/users", icon: UserCog, view: "admin.users" },
-      { title: "Roles", url: "/admin/roles", icon: ShieldCheck, view: "admin.roles" },
-      { title: "Settings", url: "/admin/settings", icon: Settings, view: "admin.settings" },
-      { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield, view: "admin.audit_logs" },
-    ],
-  },
 ];
 
-const ridingSchoolNavGroups = [
+const ridingSchoolNavGroups: NavGroup[] = [
   {
     label: "Riding School",
     items: [
@@ -108,47 +112,66 @@ const ridingSchoolNavGroups = [
       { title: "Instructors", url: "/riding-school/instructors", icon: GraduationCap, view: "shared_resources.view" },
       { title: "Customers", url: "/customers", icon: Users, view: "customers.view" },
       { title: "Reports", url: "/riding-school/reports", icon: BarChart3, view: "riding_school.view" },
+      { title: "Booking History", url: "/riding-school/booking-history", icon: ListChecks, view: "riding_school.view" },
       { title: "Rider Levels", url: "/riding-school/rider-levels", icon: Tags, view: "riding_school.settings.manage" },
-      { title: "Settings", url: "/riding-school/settings", icon: Settings, view: "riding_school.settings.manage" },
     ],
   },
 ];
 
+// Shared across both admin sub-modes so toggling Stable Mgmt <-> Riding
+// School never hides Users/Roles/Settings/Audit Logs. Settings is a single
+// shared page (client/src/pages/admin-settings.tsx) that itself shows/hides
+// its livery vs. lesson-template/package/cancellation-notice sections per
+// the viewer's specific permission — the nav link (and route) just need ANY
+// one of those permissions to be reachable at all.
+const administrationNavGroup: NavGroup = {
+  label: "Administration",
+  items: [
+    { title: "Users", url: "/admin/users", icon: UserCog, view: "admin.users" },
+    { title: "Roles", url: "/admin/roles", icon: ShieldCheck, view: "admin.roles" },
+    {
+      title: "Settings", url: "/admin/settings", icon: Settings,
+      view: ["admin.settings", "riding_school.templates.manage", "riding_school.packages.manage", "riding_school.settings.manage"],
+    },
+    { title: "Audit Logs", url: "/admin/audit-logs", icon: Shield, view: "admin.audit_logs" },
+  ],
+};
+
+export type AdminMode = "stable" | "riding-school";
+
 interface AppSidebarProps {
   onLogout: () => void;
+  mode: AdminMode;
+  onModeChange: (mode: AdminMode) => void;
 }
 
-const MODE_STORAGE_KEY = "stablemaster.sidebarMode";
-
-export function AppSidebar({ onLogout }: AppSidebarProps) {
+export function AppSidebar({ onLogout, mode, onModeChange }: AppSidebarProps) {
   const [location] = useLocation();
   const { isAdmin, permissions } = usePermissions();
-  const [mode, setMode] = useState<"stable" | "riding-school">(() => {
-    if (typeof window === "undefined") return "stable";
-    return (localStorage.getItem(MODE_STORAGE_KEY) as "stable" | "riding-school") || "stable";
-  });
 
-  const canView = (key: string) => isAdmin || permissions.includes(key);
+  const canView = (key: string | string[]) => {
+    if (isAdmin) return true;
+    const keys = Array.isArray(key) ? key : [key];
+    return keys.some((k) => permissions.includes(k));
+  };
   const canViewRidingSchool = isAdmin || permissions.includes("riding_school.view") || permissions.includes("shared_resources.view");
 
-  const setModeAndPersist = (next: "stable" | "riding-school") => {
-    setMode(next);
-    localStorage.setItem(MODE_STORAGE_KEY, next);
-  };
-
-  const activeNavGroups = mode === "riding-school" ? ridingSchoolNavGroups : stableManagementNavGroups;
+  const activeNavGroups = [
+    ...(mode === "riding-school" ? ridingSchoolNavGroups : stableManagementNavGroups),
+    administrationNavGroup,
+  ];
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Horseshoe className="w-5 h-5" inverted />
+            <div className="w-9 h-9 rounded-[10px] bg-white border border-sidebar-border flex items-center justify-center shrink-0">
+              <LogoMark className="w-5 h-[26px]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">StableMaster</h1>
-              <p className="text-xs text-muted-foreground">{mode === "riding-school" ? "Riding School" : "Stable Management"}</p>
+              <h1 className="font-serif text-base font-semibold tracking-tight leading-none" data-testid="text-app-title">Saddle Hub</h1>
+              <p className="text-xs text-muted-foreground">ADEC &middot; {mode === "riding-school" ? "Riding School" : "Stable Management"}</p>
             </div>
           </div>
         </Link>
@@ -156,7 +179,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
           <div className="flex mt-3 rounded-md border p-0.5 text-xs">
             <button
               type="button"
-              onClick={() => setModeAndPersist("stable")}
+              onClick={() => onModeChange("stable")}
               data-testid="button-mode-stable"
               className={`flex-1 rounded px-2 py-1 ${mode === "stable" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
             >
@@ -164,7 +187,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
             </button>
             <button
               type="button"
-              onClick={() => setModeAndPersist("riding-school")}
+              onClick={() => onModeChange("riding-school")}
               data-testid="button-mode-riding-school"
               className={`flex-1 rounded px-2 py-1 ${mode === "riding-school" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
             >

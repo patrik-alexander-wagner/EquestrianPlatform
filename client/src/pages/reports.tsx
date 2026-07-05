@@ -1,13 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -439,16 +433,14 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-card">
           <Calendar className="w-4 h-4 text-muted-foreground" />
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-44 h-7 border-0 shadow-none px-0" data-testid="select-month">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {monthOptions.map(m => (
-                <SelectItem key={m} value={m}>{formatMonthLabel(m)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={selectedMonth}
+            onValueChange={setSelectedMonth}
+            options={monthOptions.map(m => ({ value: m, label: formatMonthLabel(m) }))}
+            className="w-44 h-7 border-0 shadow-none px-0"
+            searchPlaceholder="Search months..."
+            testId="select-month"
+          />
         </div>
         <div className="text-xs px-3 py-1.5 rounded-full border bg-card text-muted-foreground" data-testid="text-generated">
           Generated {generatedLabel}

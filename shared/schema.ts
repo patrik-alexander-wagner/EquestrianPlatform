@@ -9,8 +9,6 @@ import { z } from "zod";
 // without this every date/timestamp field rejects normal API input.
 const { createInsertSchema } = createSchemaFactory({ coerce: { date: true } });
 
-export const userRoleEnum = pgEnum("user_role", ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"]);
-
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "DRAFT", "VET_VALIDATION", "STORES_VALIDATION", "FINANCE_VALIDATION",
   "APPROVED", "PUSHED_TO_ERP", "REJECTED"
@@ -23,15 +21,10 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role").notNull().default("LIVERY_ADMIN"),
-  ssoId: text("sso_id").unique(),
-  // "STAFF" | "CUSTOMER" — CUSTOMER users are gated by accountType checks in portal
-  // routes, not by the staff role/permission catalog below.
-  accountType: text("account_type").notNull().default("STAFF"),
-  // The CUSTOMER user's own billing/master account (riding-school portal identity).
+  // The customer record this user represents, meaningful whenever they hold
+  // the CUSTOMER role (see userRoles below) — set regardless of whether they
+  // also hold staff roles, which is what powers "switch to Customer Portal".
   customerId: uuid("customer_id").references(() => customers.id),
-  // Set on a STAFF user who is also a member, to power "switch to Customer Portal".
-  linkedCustomerId: uuid("linked_customer_id").references(() => customers.id),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -49,6 +42,22 @@ export const roles = pgTable("roles", {
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export type InsertRole = z.infer<typeof insertRoleSchema>;
 export type Role = typeof roles.$inferSelect;
+
+// A user can hold multiple roles at once (e.g. ADMIN + CUSTOMER, so staff can
+// see the booking/public schedule experience from a member's point of view).
+// roleKey is plain text (like role_permissions.role_key below), not an FK —
+// mirrors the existing dynamic-RBAC pattern where roles are DB rows, not enums.
+export const userRoles = pgTable("user_roles", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  roleKey: text("role_key").notNull(),
+}, (t) => ({
+  uniqUserRole: unique("user_roles_user_role_unique").on(t.userId, t.roleKey),
+}));
+
+export const insertUserRoleSchema = createInsertSchema(userRoles).omit({ id: true });
+export type InsertUserRoleAssignment = z.infer<typeof insertUserRoleSchema>;
+export type UserRoleAssignment = typeof userRoles.$inferSelect;
 
 export const rolePermissions = pgTable("role_permissions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -86,6 +95,11 @@ export const horses = pgTable("horses", {
   dateOfBirth: text("date_of_birth"),
   comments: text("comments"),
   status: text("status").notNull().default("active"),
+  // Membership flag only — simple on/off, no history needed here. "When was
+  // this horse doing lessons" is already answered by rs_bookings.horseId
+  // over time; this flag just controls whether it shows up on the Riding
+  // School's Horse Management page and can be scheduled for new lessons.
+  isRidingSchoolHorse: boolean("is_riding_school_horse").notNull().default(false),
 });
 
 export const insertHorseSchema = createInsertSchema(horses).omit({ id: true });
@@ -332,20 +346,6 @@ export const insertRiderLevelSchema = createInsertSchema(riderLevels).omit({ id:
 export type InsertRiderLevel = z.infer<typeof insertRiderLevelSchema>;
 export type RiderLevel = typeof riderLevels.$inferSelect;
 
-// Append-only history; no update/delete — always insert a new row to change status.
-export const horseWellbeingStatus = pgTable("horse_wellbeing_status", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  horseId: uuid("horse_id").notNull().references(() => horses.id),
-  statusTag: text("status_tag").notNull(),
-  note: text("note"),
-  setBy: uuid("set_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertHorseWellbeingStatusSchema = createInsertSchema(horseWellbeingStatus).omit({ id: true, createdAt: true });
-export type InsertHorseWellbeingStatus = z.infer<typeof insertHorseWellbeingStatusSchema>;
-export type HorseWellbeingStatus = typeof horseWellbeingStatus.$inferSelect;
-
 // ---------------------------------------------------------------------------
 // Riding School — customer/rider identity
 // ---------------------------------------------------------------------------
@@ -374,7 +374,11 @@ export const lessonTemplates = pgTable("lesson_templates", {
   name: text("name").notNull(),
   minAge: integer("min_age"),
   maxAge: integer("max_age"),
-  riderLevelId: uuid("rider_level_id").references(() => riderLevels.id),
+  // Range (inclusive) over rider_levels.sort_order — either bound may be
+  // null to mean "no restriction on that side". A rider qualifies if their
+  // level falls within [min, max]; see scheduling-logic.ts riderLevelAllowed.
+  minRiderLevelId: uuid("min_rider_level_id").references(() => riderLevels.id),
+  maxRiderLevelId: uuid("max_rider_level_id").references(() => riderLevels.id),
   minRiders: integer("min_riders").notNull().default(1),
   maxRiders: integer("max_riders").notNull().default(1),
   durationMinutes: integer("duration_minutes").notNull(),
@@ -445,7 +449,6 @@ export type RsBooking = typeof rsBookings.$inferSelect;
 export const rsRidingPackages = pgTable("rs_riding_packages", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  lessonTemplateCategory: text("lesson_template_category").notNull(),
   numberOfLessons: integer("number_of_lessons").notNull(),
   validityDays: integer("validity_days").notNull(),
   price: numeric("price").notNull(),
@@ -455,6 +458,22 @@ export const rsRidingPackages = pgTable("rs_riding_packages", {
 export const insertRsRidingPackageSchema = createInsertSchema(rsRidingPackages).omit({ id: true });
 export type InsertRsRidingPackage = z.infer<typeof insertRsRidingPackageSchema>;
 export type RsRidingPackage = typeof rsRidingPackages.$inferSelect;
+
+// Which lesson templates a Term / Riding Package's lessons may be redeemed
+// against — e.g. a "Beginner 10-pack" that only covers the Beginner Group
+// Lesson template. A rider can still book any level-appropriate lesson;
+// this only gates which lessons this specific package's balance can pay for.
+export const rsPackageTemplates = pgTable("rs_package_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  packageId: uuid("package_id").notNull().references(() => rsRidingPackages.id),
+  templateId: uuid("template_id").notNull().references(() => lessonTemplates.id),
+}, (t) => ({
+  uniqPackageTemplate: unique("rs_package_templates_package_template_unique").on(t.packageId, t.templateId),
+}));
+
+export const insertRsPackageTemplateSchema = createInsertSchema(rsPackageTemplates).omit({ id: true });
+export type InsertRsPackageTemplate = z.infer<typeof insertRsPackageTemplateSchema>;
+export type RsPackageTemplate = typeof rsPackageTemplates.$inferSelect;
 
 export const rsPackagePurchases = pgTable("rs_package_purchases", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -471,10 +490,13 @@ export const insertRsPackagePurchaseSchema = createInsertSchema(rsPackagePurchas
 export type InsertRsPackagePurchase = z.infer<typeof insertRsPackagePurchaseSchema>;
 export type RsPackagePurchase = typeof rsPackagePurchases.$inferSelect;
 
+// A single row: cancel with at least this much notice -> full refund
+// (credit/voucher); cancel later than that -> no refund. There is
+// intentionally only ever one row (see DatabaseStorage-style upsert in
+// ridingSchoolStorage.upsertCancellationPolicy).
 export const rsCancellationPolicy = pgTable("rs_cancellation_policy", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   thresholdHours: integer("threshold_hours").notNull(),
-  creditPercent: integer("credit_percent").notNull().default(100),
 });
 
 export const insertRsCancellationPolicySchema = createInsertSchema(rsCancellationPolicy).omit({ id: true });
@@ -494,6 +516,29 @@ export const rsCreditVouchers = pgTable("rs_credit_vouchers", {
 export const insertRsCreditVoucherSchema = createInsertSchema(rsCreditVouchers).omit({ id: true, createdAt: true });
 export type InsertRsCreditVoucher = z.infer<typeof insertRsCreditVoucherSchema>;
 export type RsCreditVoucher = typeof rsCreditVouchers.$inferSelect;
+
+export const rsHorseMoodEnum = pgEnum("rs_horse_mood", ["fit", "lame", "needs_training", "injured"]);
+
+// Append-only history for a Riding School horse's mood/limits — no
+// update/delete, insert a new row to change status. Structured (enum mood +
+// numeric lesson limits) since these constrain lesson scheduling. Membership
+// in the Riding School roster itself is NOT tracked here — see
+// horses.isRidingSchoolHorse (a simple flag is enough there; booking history
+// already answers "when was this horse doing lessons").
+export const rsHorseStatus = pgTable("rs_horse_status", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  horseId: uuid("horse_id").notNull().references(() => horses.id),
+  mood: rsHorseMoodEnum("mood").notNull(),
+  maxLessonsPerDay: integer("max_lessons_per_day"),
+  maxLessonsPerWeek: integer("max_lessons_per_week"),
+  note: text("note"),
+  setBy: uuid("set_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRsHorseStatusSchema = createInsertSchema(rsHorseStatus).omit({ id: true, createdAt: true });
+export type InsertRsHorseStatus = z.infer<typeof insertRsHorseStatusSchema>;
+export type RsHorseStatus = typeof rsHorseStatus.$inferSelect;
 
 export const VALID_ROLES = ["ADMIN", "LIVERY_ADMIN", "VETERINARY", "STORES", "FINANCE", "VIEWER"] as const;
 export type UserRole = typeof VALID_ROLES[number];

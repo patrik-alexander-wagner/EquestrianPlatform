@@ -35,6 +35,210 @@ STORES, FINANCE, VIEWER — all staff). There is no customer identity concept at
 
 ---
 
+## STATUS (as of 2026-07-05) — read this before doing anything else
+
+Phase 1 milestones M1-M5 are built and verified live; M6 testing infra is in place. **M6 is still
+not fully done** — 2 of the original 4 security findings remain open (see below). Since M5, the
+identity model, branding, admin navigation, the Riding School calendar, and Riding School Settings
+have all been substantially reworked — treat the milestone-by-milestone narrative further down in
+this doc as the *original* target shape, and this STATUS section as ground truth for what the code
+actually looks like today.
+
+### Identity: multi-role, not single `role` + `accountType`
+
+The original single `users.role` column plus a separate `accountType` ("STAFF"|"CUSTOMER") /
+`linkedCustomerId` pair has been **replaced** with a proper many-to-many `user_roles` table
+(`shared/schema.ts`, migrated in `server/migrations/multi-role.ts`). A user can hold multiple
+roles at once (e.g. `ADMIN` + `CUSTOMER`, so staff can see the member-facing booking experience
+without a second account). `CUSTOMER` is now just a role like any other — held via `user_roles`,
+carrying zero default permissions of its own (`shared/permissions.ts`) — and `users.customerId`
+alone (no more `linkedCustomerId`) identifies which customer record a `CUSTOMER`-role holder
+represents, regardless of what other roles they also hold. `server/permissions.ts`'s
+`can()`/`isAdminRole()`/`requirePermission()` all operate on `roleKeys: string[]` (union semantics:
+admin/granted if *any* held role qualifies) — same on the client via `useCan()`/`PermissionRoute`,
+which now also accept an array of alternative action keys (any-of), not just one.
+`INSTRUCTOR` is a second identity-only role added later: holding it auto-creates/retires the
+user's row in the shared `instructors` table (`DatabaseStorage.syncInstructorForUser` in
+`server/storage.ts`) — instructors are no longer created by hand, only by granting this role.
+
+**Security side-effects of the multi-role rework** (see the original 4-finding list this section
+used to carry): finding #1 (CUSTOMER defaulting to the staff `VIEWER` role) and #4 (mass-assignable
+`accountType`/`linkedCustomerId` on `POST /api/users`) are now **structurally fixed** — those
+columns don't exist anymore, and `CUSTOMER` genuinely carries zero staff permissions. **Findings
+#2 and #3 are still open**: `server/modules/riding-school/routes.ts`'s
+`GET /customers/:customerId/{riders,package-purchases,credit-vouchers}` (still `requireAuth`-only,
+no ownership check against `req.params.customerId`) and `GET /scheduled-lessons*` (still
+unfiltered for any authenticated session) — fix before calling M6 done.
+
+### Branding: "Saddle Hub by ADEC"
+
+Rebranded from "StableMaster" per the client's brand PDF and a follow-up high-fidelity design
+handoff (mockups in `design_handoff_saddle_hub/`, not part of this repo). Brand tokens live in
+`client/src/index.css`: root theme = Stable Management (brand green `#183a2c`), `.riding-school-theme`
+class swaps the accent to near-black `#231f20` (same white sidebar), `.portal-theme` class swaps
+the *sidebar background* to warm cream `#f7edde` with a pale-green active-nav fill (avatar/buttons
+stay brand green — cream is the differentiator, not a different accent hue). Logo mark is a real
+asset (`attached_assets/logo-mark.png`, via `client/src/components/icons/logo-mark.tsx`), not the
+old horseshoe icon (that icon still exists and is still used for unrelated "Horses" nav entries —
+only the brand mark itself was replaced). Wordmark font is Playfair Display (already preloaded,
+zero extra cost) — ADEC's actual licensed typefaces (ABC Arizona Mix / Aeonik Pro) were not
+available and would need to be swapped in later if provided.
+
+### Admin navigation: one Settings page, not two
+
+`/riding-school/settings` no longer exists. `client/src/pages/admin-settings.tsx` is now the single
+Settings page for **both** admin modes, reachable via the shared `administrationNavGroup` in
+`app-sidebar.tsx` (Users/Roles/Settings/Audit Logs, shown regardless of Stable Mgmt vs Riding School
+toggle). Since a Riding School Admin doesn't have `admin.settings` by default, the route/nav gate
+had to become "any of `admin.settings` OR the three `riding_school.*.manage` keys" — each section
+within the page (Livery Packages / Lesson Templates / Terms-Riding-Package / Cancellation Notice)
+independently shows/hides based on the viewer's own specific permission, so a Livery-only admin
+never sees Riding School config and vice versa.
+
+### Riding School Settings: what changed
+
+- **Lesson Templates**: edit was silently missing from the UI (the PATCH route already existed —
+  pure frontend gap, now fixed). Rider-level gating changed from a single exact `riderLevelId` to a
+  `minRiderLevelId`/`maxRiderLevelId` **range** over `rider_levels.sort_order`
+  (`scheduling-logic.ts`'s `riderLevelAllowed`), used by both `bookLesson` and the customer portal
+  calendar's visibility filter.
+- **Terms / Riding Package** (renamed from "Riding Packages"): edit was also missing (same
+  frontend-only gap). The old free-text `lessonTemplateCategory` field — which was never actually
+  checked against anything at redemption time — is now a real many-to-many join
+  (`rs_package_templates`), edited via a checkbox list of lesson templates. `bookLesson` now
+  actually enforces it: redeeming a package for a lesson whose template isn't in that package's
+  allowed set is rejected (this was a real gap before, not just a naming issue).
+- **Cancellation policy**: collapsed from a tiered `{thresholdHours, creditPercent}` table to a
+  single `{thresholdHours}` row (`rs_cancellation_policy`) with a binary rule — full refund if
+  cancelled with at least that much notice, nothing otherwise
+  (`scheduling-logic.ts`'s `getsFullRefund`). Migrated via `server/migrations/riding-school-settings-v2.ts`,
+  which also carries the min/max rider-level backfill and the package/template backfill described
+  above.
+
+### Riding School Calendar: rebuilt from scratch
+
+`react-big-calendar` is gone (dependency removed from `package.json`). `client/src/components/riding-school-calendar.tsx`
+is now a custom resource-grid component: Day/Week/Month view toggle, a Full-Day/By-Hour toggle
+(forced to "By Hour" in Day view, forced to "Full Day" and hidden entirely in Month view), and a
+Horses/Instructors/Customers/Facilities resource-axis toggle (hidden in Month view, which is a
+plain full-month grid with no resource rows). Two new bulk-lookup endpoints
+(`GET /api/riding-school/bookings`, `GET /api/riding-school/riders`) support the Horses/Customers
+axes without N+1 queries. `RIDING_SCHOOL_ADMIN` also picked up `customers.view`/`horses.view` by
+default here — the nav already linked to those pages, but the role never actually had access.
+
+### SSO ("Unified Portal") removed entirely
+
+The `GET /sso` token-handoff route (verified against `aksportal.com`, auto-provisioned/linked local
+users) has been deleted from `server/routes.ts`, along with `users.ssoId`
+(`server/storage.ts`'s `getUserBySsoId`, the `getUsers()` column selection) and the client-side SSO
+error-message handling in `login.tsx`. `server/migrate.ts`'s `sso_id` migration now drops the column
+instead of adding it. Standalone `/api/login` (Passport local) is untouched and was verified live
+after the change. `threat_model.md` updated to remove SSO from trust boundaries/spoofing sections.
+
+### Lesson Template lifecycle: delete guards + Active/Inactive lock
+
+Deleting a lesson template or Terms/Riding Package used to throw a raw Postgres FK-violation 500
+(`Failed query: delete from "lesson_templates"...`) whenever a recurrence/scheduled lesson/package
+purchase referenced it. Both now check first and throw a friendly 400 ("Mark it inactive instead")
+— `deleteLessonTemplate`/`deleteRidingPackage` in `server/modules/riding-school/storage.ts`.
+
+Lesson templates went further per an explicit follow-up request: `hasLessonTemplateInstances(id)`
+(true if any recurrence or scheduled lesson — past, present, or future — references the template)
+now also **blocks editing** any field other than `isActive` once true (`updateLessonTemplate`),
+not just deleting. `GET /api/riding-school/lesson-templates` returns a `hasInstances` flag per row
+so the UI can grey out Edit/Delete without extra round-trips. `admin-settings.tsx`'s Lesson
+Templates section gained: an Active/Inactive/All filter (defaults to Active), a Status column, and
+a 3-dot menu with **Edit** (disabled when `hasInstances`), **Deactivate/Activate** (always
+available — a direct one-click `isActive` toggle, no dialog, so a locked template can still be
+retired), and **Delete** (disabled when `hasInstances`). The calendar's "New Lesson" template
+picker now filters to `isActive` templates only, so inactive ones can't be used to schedule new
+classes. Riding Packages got the delete-guard fix but not the same lock/filter/lifecycle UI — that
+was scoped to lesson templates only per the request that drove it.
+
+### Riding School horse roster (new) + `horse_wellbeing_status` removed
+
+Two related changes, same session:
+
+- **New roster concept**: `horses.isRidingSchoolHorse` (simple boolean flag — no history needed;
+  `rs_bookings.horseId` already answers "when did this horse do lessons"). An "Assign Riding School
+  Horses" button on Horse Management opens a dialog listing every horse + owner (reuses
+  `storage.getHorsesWithOwners()`, now including the flag) with separate search filters for horse
+  name and owner, checkboxes, and a bulk-set save (`POST /api/riding-school/horses/assignments` →
+  `storage.setRidingSchoolHorses`). A new append-only `rs_horse_status` table
+  (`server/migrations/riding-school-horses.ts`) tracks each roster horse's `mood` (enum: fit / lame
+  / needs_training / injured) plus `maxLessonsPerDay`/`maxLessonsPerWeek` over time — insert-only,
+  never update, same philosophy as the table it superseded (see below). Horse Management
+  (`client/src/pages/riding-school/horse-management.tsx`, previously just an unfiltered dump of
+  every horse in the system — hence "the page is empty/wrong" complaint that started this) now
+  shows **only** roster horses, each with its latest status and a history view. New permission:
+  `riding_school.horses.manage`, granted to `RIDING_SCHOOL_ADMIN` by default.
+- **`horse_wellbeing_status` deleted**: the old general-purpose freeform wellbeing log (any horse,
+  livery or not — `statusTag` + note, embedded in the plain Horses page edit dialog) is gone —
+  table, storage methods, routes, the `shared_resources.horse_wellbeing.manage` permission, and the
+  `HorseWellbeingSection` component all removed. Superseded by `rs_horse_status` for Riding School
+  horses specifically; the general Horses page has no wellbeing UI anymore. Migration drops the
+  table for existing databases; `riding-school.ts`'s original `CREATE TABLE` for it was also
+  removed so fresh databases never create it. Verified idempotent (drop logs once, silent no-op on
+  the next boot).
+
+### Customer Portal: riders are now editable
+
+`PATCH /api/portal/riders/:id` already existed (ownership-checked, M5) but had no UI. `my-riders.tsx`
+now has a Pencil action per row opening an edit dialog (Full Name / DOB / Riding Level — deliberately
+not `isAccountHolder`, same fields the Create dialog exposes).
+
+### New admin page: Booking History (`/riding-school/booking-history`)
+
+One row per customer **interaction** with a scheduled lesson — booked or cancelled, not just
+currently-confirmed (deliberately broader than the existing `GET /api/riding-school/bookings`,
+which stays confirmed-only because the calendar's resource axes depend on that). New
+`getBookingHistoryInRange`/`GET /api/riding-school/bookings/history` (gated by `riding_school.view`).
+Columns: Lesson, Lesson Date, Rider, Customer, Horse, Status, Booked On; filters: date range,
+status, and a text search across rider/customer/lesson name.
+
+### Known unresolved: deleting a scheduled lesson (calendar)
+
+A "Delete Lesson" flow was added to the calendar's lesson-detail dialog (this occurrence vs. this
+and following events, with a preview of exactly which dates a series-delete would remove, and a
+block if any target instance has an active booking) — `DELETE /api/riding-school/scheduled-lessons/:id?scope=`,
+`GET /api/riding-school/recurrences/:id/future-instances`. Live-tested by the user: deleting a
+27-occurrence series failed with the same class of raw FK-violation 500 as the lesson-template bug
+above — `rs_bookings.scheduledLessonId` is `notNull`, and **cancelled** bookings are kept as history
+(never deleted, per `cancelBooking`), so a hard `DELETE` on `rs_scheduled_lessons` fails even after
+the active-booking guard passes, because old cancelled bookings still FK-reference the row.
+
+A fix mirroring `cancelBooking`'s own pattern was written — `cancelScheduledLessons` (renamed from
+`deleteScheduledLessons`) now flips `status` to `"cancelled"` instead of hard-deleting, and
+`getScheduledLessonsInRange` excludes `status = "cancelled"` so cancelled lessons disappear from
+the calendar/portal calendar views without breaking the FK. **This fix is implemented in code but
+NOT yet live-verified** — the user asked to pause and investigate further ("I didn't know it was
+referenced somewhere else") right as the fix landed, and the session moved on to other work before
+confirming it live. Next session: restart the server, retest the exact series-delete scenario that
+originally failed, confirm cancelled scheduled lessons vanish from both calendars, and check
+`getReportSummary`'s `lessonsInRange` count (still counts by date range only, does not yet exclude
+`status = "cancelled"` — decide if that should also be excluded before calling this done).
+
+### Not started: Riding School Billing page
+
+Requested: a Billing section under Riding School admin showing all customer transactions (package
+purchases and one-off lesson bookings). Investigation surfaced a real gap: **one-off (non-package)
+lesson bookings currently create no invoice/charge at all** — `bookLesson`
+(`server/modules/riding-school/scheduling.ts`) only calls `simulatedPaymentProvider.createCharge`
+when a `packagePurchaseId` is present; a customer can book and attend a lesson paying nothing today
+if they don't redeem a package. The user was asked whether to (a) implement one-off charging first
+so the new page reflects both transaction types, or (b) scope the page to package purchases only
+for now — the question was dismissed/deferred, not answered. **Nothing has been built for this
+yet** — no page, no route, no decision made on the one-off-charging gap. Ask the user which
+direction before starting.
+
+**Next steps when resuming, in priority order:** (1) decide + verify the scheduled-lesson delete
+fix above, (2) get a decision on one-off lesson billing and build the Billing page, (3) fix IDOR
+findings #2/#3 from the Identity section above, re-verify live, update `threat_model.md` for any
+trust-boundary changes — then this doc's Phase 1 exit criteria (below) can be considered met and
+M6/Phase 1 called done.
+
+---
+
 ## 1. Target End State
 
 One platform, two operational domains sharing resources, plus a customer-facing portal:

@@ -30,12 +30,8 @@ async function seedRidingSchoolReferenceData() {
 
   const existingPolicy = await db.select().from(rsCancellationPolicy).limit(1);
   if (existingPolicy.length === 0) {
-    await db.insert(rsCancellationPolicy).values([
-      { thresholdHours: 24, creditPercent: 0 },
-      { thresholdHours: 48, creditPercent: 50 },
-      { thresholdHours: 72, creditPercent: 100 },
-    ]);
-    console.log("Riding school cancellation policy defaults seeded");
+    await db.insert(rsCancellationPolicy).values([{ thresholdHours: 24 }]);
+    console.log("Riding school cancellation policy default seeded");
   }
 }
 
@@ -59,9 +55,9 @@ async function ensureAdminUser() {
       "Warning: No SEED_ADMIN_PASSWORD set. Creating admin user with default password 'admin123' " +
       "for development only. Never deploy without setting SEED_ADMIN_PASSWORD."
     );
-    await storage.createUser({ username: "admin", password: "admin123", role: "ADMIN" });
+    await storage.createUser({ username: "admin", password: "admin123" }, ["ADMIN"]);
   } else {
-    await storage.createUser({ username: "admin", password: adminPassword, role: "ADMIN" });
+    await storage.createUser({ username: "admin", password: adminPassword }, ["ADMIN"]);
   }
 
   console.log("Admin user created");

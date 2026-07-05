@@ -88,9 +88,9 @@ passport.use(
       if (!user) return done(null, false, { message: "Invalid username or password" });
       const valid = await verifyPassword(password, user.password);
       if (!valid) return done(null, false, { message: "Invalid username or password" });
+      const roles = await storage.getUserRoles(user.id);
       return done(null, {
-        id: user.id, username: user.username, role: user.role,
-        accountType: user.accountType, customerId: user.customerId, linkedCustomerId: user.linkedCustomerId,
+        id: user.id, username: user.username, roles, customerId: user.customerId,
       });
     } catch (err) {
       return done(err);
@@ -106,9 +106,9 @@ passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await storage.getUser(id);
     if (!user) return done(null, false);
+    const roles = await storage.getUserRoles(user.id);
     done(null, {
-      id: user.id, username: user.username, role: user.role,
-      accountType: user.accountType, customerId: user.customerId, linkedCustomerId: user.linkedCustomerId,
+      id: user.id, username: user.username, roles, customerId: user.customerId,
     });
   } catch (err) {
     done(err);
@@ -147,6 +147,15 @@ app.use((req, res, next) => {
 
   const { runRidingSchoolMigration } = await import("./migrations/riding-school");
   await runRidingSchoolMigration();
+
+  const { runMultiRoleMigration } = await import("./migrations/multi-role");
+  await runMultiRoleMigration();
+
+  const { runRidingSchoolSettingsV2Migration } = await import("./migrations/riding-school-settings-v2");
+  await runRidingSchoolSettingsV2Migration();
+
+  const { runRidingSchoolHorsesMigration } = await import("./migrations/riding-school-horses");
+  await runRidingSchoolHorsesMigration();
 
   const { seedDatabase } = await import("./seed");
   await seedDatabase();

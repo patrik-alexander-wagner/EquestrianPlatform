@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useCan } from "@/hooks/use-permissions";
@@ -206,16 +207,14 @@ export default function BoxesPage() {
               </div>
               <div>
                 <Label>Parent Stable</Label>
-                <Select value={selectedStableId} onValueChange={setSelectedStableId}>
-                  <SelectTrigger data-testid="select-box-stable">
-                    <SelectValue placeholder="Select stable..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stables.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={selectedStableId}
+                  onValueChange={setSelectedStableId}
+                  options={stables.map(s => ({ value: s.id, label: s.name }))}
+                  placeholder="Select stable..."
+                  searchPlaceholder="Search stables..."
+                  testId="select-box-stable"
+                />
               </div>
             </div>
             <DialogFooter className="mt-4">
@@ -270,16 +269,15 @@ export default function BoxesPage() {
         extraSelectors={
           <div>
             <Label>Parent Stable (required for all imported boxes)</Label>
-            <Select value={importStableId} onValueChange={setImportStableId}>
-              <SelectTrigger data-testid="select-import-stable" className="mt-1">
-                <SelectValue placeholder="Select stable..." />
-              </SelectTrigger>
-              <SelectContent>
-                {stables.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={importStableId}
+              onValueChange={setImportStableId}
+              options={stables.map(s => ({ value: s.id, label: s.name }))}
+              placeholder="Select stable..."
+              searchPlaceholder="Search stables..."
+              className="mt-1"
+              testId="select-import-stable"
+            />
           </div>
         }
       />

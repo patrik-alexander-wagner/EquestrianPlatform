@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { requirePermission } from "../../permissions";
 import { requireAuth, validateBody, auditLog } from "../../route-helpers";
 import {
-  insertArenaSchema, insertInstructorSchema, insertRiderLevelSchema, insertHorseWellbeingStatusSchema,
+  insertArenaSchema, insertInstructorSchema, insertRiderLevelSchema,
 } from "@shared/schema";
 import { sharedResourcesStorage } from "./storage";
 
@@ -52,25 +52,18 @@ export function registerSharedResourcesRoutes(app: Express) {
   });
 
   // --- Instructors ---
+  // Read-only + rename here: an instructor's row is created/retired
+  // automatically by granting/removing the INSTRUCTOR role on a user
+  // (server/storage.ts DatabaseStorage.syncInstructorForUser) — there is no
+  // direct create/delete anymore, only editing the display name.
   app.get("/api/instructors", requireAuth, async (_req, res) => {
     res.json(await sharedResourcesStorage.getInstructors());
-  });
-
-  app.post("/api/instructors", requirePermission("shared_resources.instructors.manage"), async (req, res) => {
-    try {
-      const data = validateBody(insertInstructorSchema, req.body);
-      const instructor = await sharedResourcesStorage.createInstructor(data);
-      auditLog(req, "create_instructor", "instructor", instructor.id, `Created instructor: ${instructor.name}`);
-      res.status(201).json(instructor);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
   });
 
   app.patch("/api/instructors/:id", requirePermission("shared_resources.instructors.manage"), async (req, res) => {
     try {
       const id = req.params.id as string;
-      const data = validateBody(insertInstructorSchema.partial(), req.body);
+      const data = validateBody(insertInstructorSchema.pick({ name: true }).partial(), req.body);
       const instructor = await sharedResourcesStorage.updateInstructor(id, data);
       if (!instructor) return res.status(404).json({ message: "Instructor not found" });
       auditLog(req, "update_instructor", "instructor", instructor.id, `Updated instructor: ${instructor.name}`);
@@ -78,15 +71,6 @@ export function registerSharedResourcesRoutes(app: Express) {
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
-  });
-
-  app.delete("/api/instructors/:id", requirePermission("shared_resources.instructors.manage"), async (req, res) => {
-    const id = req.params.id as string;
-    const instructor = await sharedResourcesStorage.getInstructor(id);
-    if (!instructor) return res.status(404).json({ message: "Instructor not found" });
-    await sharedResourcesStorage.deleteInstructor(id);
-    auditLog(req, "delete_instructor", "instructor", instructor.id, `Deleted instructor: ${instructor.name}`);
-    res.json({ success: true });
   });
 
   // --- Rider levels (managed from Riding School Settings) ---
@@ -125,28 +109,5 @@ export function registerSharedResourcesRoutes(app: Express) {
     await sharedResourcesStorage.deleteRiderLevel(id);
     auditLog(req, "delete_rider_level", "rider_level", level.id, `Deleted rider level: ${level.name}`);
     res.json({ success: true });
-  });
-
-  // --- Horse wellbeing status (append-only, embedded in the Horses page) ---
-  app.get("/api/horses/:horseId/wellbeing-status", requireAuth, async (req, res) => {
-    const horseId = req.params.horseId as string;
-    res.json(await sharedResourcesStorage.getHorseWellbeingHistory(horseId));
-  });
-
-  app.post("/api/horses/:horseId/wellbeing-status", requirePermission("shared_resources.horse_wellbeing.manage"), async (req, res) => {
-    try {
-      const horseId = req.params.horseId as string;
-      const user = req.user as any;
-      const data = validateBody(insertHorseWellbeingStatusSchema, {
-        ...req.body,
-        horseId,
-        setBy: user?.id || null,
-      });
-      const entry = await sharedResourcesStorage.addHorseWellbeingStatus(data);
-      auditLog(req, "add_horse_wellbeing_status", "horse", horseId, `Set wellbeing status: ${entry.statusTag}`);
-      res.status(201).json(entry);
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
   });
 }

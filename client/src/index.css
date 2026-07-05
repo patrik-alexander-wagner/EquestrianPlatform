@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LIGHT MODE
+ * Brand palette (ADEC Equestrian Club guidelines): Rich Green #183a2c is the
+ * Admin/Stable Management identity color, Gold #d9bf66 is the Customer
+ * Portal identity color — both drive only --primary/--sidebar-primary/--ring
+ * (badges, active nav, buttons, focus rings), never --background, which
+ * stays pure white in both views. This is a functional app, not a brochure
+ * site, so the brand cream/gold are used as accents, not page backgrounds. */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -18,33 +24,33 @@
   --sidebar: 0 0% 96%;
   --sidebar-foreground: 0 0% 9%;
   --sidebar-border: 0 0% 92%;
-  --sidebar-primary: 142 76% 36%;
+  --sidebar-primary: 155 41% 16%;
   --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 0 0% 92%;
-  --sidebar-accent-foreground: 0 0% 9%;
-  --sidebar-ring: 142 76% 36%;
+  --sidebar-accent: 155 25% 90%;
+  --sidebar-accent-foreground: 155 41% 16%;
+  --sidebar-ring: 155 41% 16%;
   --popover: 0 0% 94%;
   --popover-foreground: 0 0% 9%;
   --popover-border: 0 0% 90%;
-  --primary: 142 76% 36%;
+  --primary: 155 41% 16%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 91%;
   --secondary-foreground: 0 0% 9%;
-  --muted: 142 5% 93%;
+  --muted: 155 5% 93%;
   --muted-foreground: 0 0% 45%;
-  --accent: 142 8% 94%;
+  --accent: 155 8% 94%;
   --accent-foreground: 0 0% 9%;
   --destructive: 0 84% 42%;
   --destructive-foreground: 0 0% 98%;
   --input: 0 0% 75%;
-  --ring: 142 76% 36%;
-  --chart-1: 142 76% 36%;
+  --ring: 155 41% 16%;
+  --chart-1: 155 41% 16%;
   --chart-2: 25 95% 53%;
   --chart-3: 197 84% 42%;
-  --chart-4: 43 74% 49%;
+  --chart-4: 46 60% 63%;
   --chart-5: 280 65% 60%;
   --font-sans: Open Sans, sans-serif;
-  --font-serif: Georgia, serif;
+  --font-serif: "Playfair Display", Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: .5rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
@@ -85,6 +91,34 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* RIDING SCHOOL THEME (admin sub-mode)
+ * Per the Saddle Hub design handoff: within the admin shell, Riding School
+ * mode uses a near-black accent (#231f20) everywhere Stable Management
+ * (the default/root theme) uses brand green (#183a2c) — the deliberate
+ * visual cue so staff can tell which admin mode they're in at a glance.
+ * Applied as a wrapper class around the whole admin shell, toggled by the
+ * sidebar's Stable Mgmt / Riding School segmented control. */
+.riding-school-theme {
+  --sidebar-accent: 0 0% 94%;
+  --sidebar-accent-foreground: 60 4% 11%;
+  --primary: 345 6% 13%;
+  --primary-foreground: 0 0% 98%;
+  --ring: 345 6% 13%;
+}
+
+/* CUSTOMER PORTAL THEME
+ * Applied as a wrapper class around the whole portal shell. Per the design
+ * handoff, the portal keeps the same brand green as Stable Management for
+ * primary actions/avatar — the identity cue here is the warm cream sidebar
+ * (vs. white in admin) and a pale-green active-nav fill, not a different
+ * primary color. Main content background stays white either way. */
+.portal-theme {
+  --sidebar: 36 61% 92%;
+  --sidebar-border: 39 49% 85%;
+  --sidebar-accent: 140 21% 89%;
+  --sidebar-accent-foreground: 155 41% 16%;
 }
 
 .dark {

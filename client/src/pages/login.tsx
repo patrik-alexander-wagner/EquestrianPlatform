@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LogIn } from "lucide-react";
-import { Horseshoe } from "@/components/icons/horseshoe";
-
-const SSO_ERROR_MESSAGES: Record<string, string> = {
-  missing_token: "SSO token is missing",
-  invalid_token: "SSO token invalid or expired",
-  sso_failed: "SSO authentication failed",
-};
+import { LogoMark } from "@/components/icons/logo-mark";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -21,15 +15,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ssoError = params.get("error");
-    if (ssoError && SSO_ERROR_MESSAGES[ssoError]) {
-      setError(SSO_ERROR_MESSAGES[ssoError]);
-      window.history.replaceState({}, "", "/login");
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,12 +47,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
-              <Horseshoe className="w-7 h-7" inverted />
+            <div className="w-12 h-12 rounded-[10px] bg-white border border-border flex items-center justify-center">
+              <LogoMark className="w-6 h-8" />
             </div>
           </div>
-          <CardTitle className="text-xl" data-testid="text-login-title">StableMaster</CardTitle>
-          <p className="text-sm text-muted-foreground">Sign in to your account</p>
+          <CardTitle className="font-serif text-2xl" data-testid="text-login-title">Saddle Hub</CardTitle>
+          <p className="text-xs tracking-wide text-muted-foreground uppercase">by ADEC</p>
+          <p className="text-sm text-muted-foreground mt-2">Sign in to your account</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

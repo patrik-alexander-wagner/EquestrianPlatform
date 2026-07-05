@@ -22,31 +22,40 @@ export async function ensureLoaded(): Promise<void> {
   if (!loaded) await loadPermissions();
 }
 
-export function isAdminRole(roleKey: string | undefined | null): boolean {
-  return !!roleKey && adminRoleKeys.has(roleKey);
+// A user can hold multiple roles at once (e.g. ADMIN + CUSTOMER); every check
+// below is a union across all of them — admin if ANY held role is admin,
+// granted if ANY held role grants the action.
+export function isAdminRole(roleKeys: string[] | undefined | null): boolean {
+  if (!roleKeys) return false;
+  return roleKeys.some(key => adminRoleKeys.has(key));
 }
 
-export function can(roleKey: string | undefined | null, actionKey: string): boolean {
-  if (!roleKey) return false;
-  if (adminRoleKeys.has(roleKey)) return true;
-  return permissionsByRole[roleKey]?.has(actionKey) ?? false;
+export function can(roleKeys: string[] | undefined | null, actionKey: string): boolean {
+  if (!roleKeys || roleKeys.length === 0) return false;
+  if (isAdminRole(roleKeys)) return true;
+  return roleKeys.some(key => permissionsByRole[key]?.has(actionKey) ?? false);
 }
 
-// Resolve the full set of granted action keys for a role (used by /api/me).
-export function permissionsForRole(roleKey: string | undefined | null): string[] {
-  if (!roleKey) return [];
-  return Array.from(permissionsByRole[roleKey] || []);
+// Resolve the full set of granted action keys across all of a user's roles
+// (used by /api/me).
+export function permissionsForRoles(roleKeys: string[] | undefined | null): string[] {
+  if (!roleKeys) return [];
+  const union = new Set<string>();
+  for (const key of roleKeys) {
+    for (const action of Array.from(permissionsByRole[key] || [])) union.add(action);
+  }
+  return Array.from(union);
 }
 
-// Middleware factory: allow if user's role is an admin role OR has ANY of the keys.
+// Middleware factory: allow if any of the user's roles is admin OR grants ANY of the keys.
 export function requirePermission(...actionKeys: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
     await ensureLoaded();
     const user = req.user as any;
-    const roleKey = user?.role as string | undefined;
-    if (isAdminRole(roleKey)) return next();
-    if (actionKeys.some(key => can(roleKey, key))) return next();
+    const roleKeys = (user?.roles as string[] | undefined) ?? [];
+    if (isAdminRole(roleKeys)) return next();
+    if (actionKeys.some(key => can(roleKeys, key))) return next();
     return res.status(403).json({ message: "Insufficient permissions" });
   };
 }

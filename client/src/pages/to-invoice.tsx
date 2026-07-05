@@ -17,13 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { FileText, Trash2, Pencil, AlertTriangle, ShieldCheck, Package } from "lucide-react";
@@ -537,17 +531,15 @@ export default function ToInvoicePage() {
         />
         <div>
           <Label className="text-xs text-muted-foreground mb-1 block">Created By</Label>
-          <Select value={createdByFilter} onValueChange={(v) => setCreatedByFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-56" data-testid="select-created-by">
-              <SelectValue placeholder="All users" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All users</SelectItem>
-              {distinctCreators.map((username) => (
-                <SelectItem key={username} value={username}>{username}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={createdByFilter || "all"}
+            onValueChange={(v) => setCreatedByFilter(v === "all" ? "" : v)}
+            options={[{ value: "all", label: "All users" }, ...distinctCreators.map((username) => ({ value: username, label: username }))]}
+            placeholder="All users"
+            searchPlaceholder="Search users..."
+            className="w-56"
+            testId="select-created-by"
+          />
         </div>
         <div>
           <Label className="text-xs text-muted-foreground mb-1 block">Billing Month</Label>

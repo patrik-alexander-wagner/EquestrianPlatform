@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -240,7 +240,7 @@ export function ImportDialog({
                       </Label>
                     </div>
                     <ArrowLeft className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <Select
+                    <SearchableSelect
                       value={mapping[field.targetField] || "__none__"}
                       onValueChange={(val) =>
                         setMapping(prev => ({
@@ -248,17 +248,12 @@ export function ImportDialog({
                           [field.targetField]: val === "__none__" ? "" : val,
                         }))
                       }
-                    >
-                      <SelectTrigger className="flex-1" data-testid={`select-map-${field.targetField}`}>
-                        <SelectValue placeholder="Select source column..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">-- Not mapped --</SelectItem>
-                        {headers.map(h => (
-                          <SelectItem key={h} value={h}>{h}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={[{ value: "__none__", label: "-- Not mapped --" }, ...headers.map(h => ({ value: h, label: h }))]}
+                      placeholder="Select source column..."
+                      searchPlaceholder="Search columns..."
+                      className="flex-1"
+                      testId={`select-map-${field.targetField}`}
+                    />
                     {mapping[field.targetField] && (
                       <Check className="w-4 h-4 text-primary shrink-0" />
                     )}

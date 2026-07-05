@@ -1,11 +1,10 @@
 import { db } from "../../db";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
-  arenas, instructors, riderLevels, horseWellbeingStatus,
+  arenas, instructors, riderLevels, users,
   type InsertArena, type Arena,
   type InsertInstructor, type Instructor,
   type InsertRiderLevel, type RiderLevel,
-  type InsertHorseWellbeingStatus, type HorseWellbeingStatus,
 } from "@shared/schema";
 
 // Storage for the Shared Resources domain (arenas, instructors, rider levels,
@@ -33,24 +32,24 @@ export const sharedResourcesStorage = {
     await db.delete(arenas).where(eq(arenas.id, id));
   },
 
-  // Instructors
-  async getInstructors(): Promise<Instructor[]> {
-    return db.select().from(instructors);
+  // Instructors — instantiated by granting the INSTRUCTOR role on a user
+  // (see server/storage.ts DatabaseStorage.syncInstructorForUser), never
+  // created directly here.
+  async getInstructors(): Promise<(Instructor & { username: string | null })[]> {
+    const allInstructors = await db.select().from(instructors);
+    const allUsers = await db.select({ id: users.id, username: users.username }).from(users);
+    return allInstructors.map(i => ({
+      ...i,
+      username: allUsers.find(u => u.id === i.userId)?.username || null,
+    }));
   },
   async getInstructor(id: string): Promise<Instructor | undefined> {
     const [row] = await db.select().from(instructors).where(eq(instructors.id, id));
     return row;
   },
-  async createInstructor(data: InsertInstructor): Promise<Instructor> {
-    const [row] = await db.insert(instructors).values(data).returning();
-    return row;
-  },
   async updateInstructor(id: string, data: Partial<InsertInstructor>): Promise<Instructor | undefined> {
     const [row] = await db.update(instructors).set(data).where(eq(instructors.id, id)).returning();
     return row;
-  },
-  async deleteInstructor(id: string): Promise<void> {
-    await db.delete(instructors).where(eq(instructors.id, id));
   },
 
   // Rider levels (managed from Riding School Settings)
@@ -71,16 +70,5 @@ export const sharedResourcesStorage = {
   },
   async deleteRiderLevel(id: string): Promise<void> {
     await db.delete(riderLevels).where(eq(riderLevels.id, id));
-  },
-
-  // Horse wellbeing status — append-only history; no update/delete.
-  async getHorseWellbeingHistory(horseId: string): Promise<HorseWellbeingStatus[]> {
-    return db.select().from(horseWellbeingStatus)
-      .where(eq(horseWellbeingStatus.horseId, horseId))
-      .orderBy(desc(horseWellbeingStatus.createdAt));
-  },
-  async addHorseWellbeingStatus(data: InsertHorseWellbeingStatus): Promise<HorseWellbeingStatus> {
-    const [row] = await db.insert(horseWellbeingStatus).values(data).returning();
-    return row;
   },
 };

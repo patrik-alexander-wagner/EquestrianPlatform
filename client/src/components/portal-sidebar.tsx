@@ -14,6 +14,7 @@ import {
 import { LayoutDashboard, CalendarRange, Users, Package, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Horseshoe } from "@/components/icons/horseshoe";
+import { LogoMark } from "@/components/icons/logo-mark";
 
 const navItems = [
   { title: "Dashboard", url: "/portal", icon: LayoutDashboard },
@@ -32,15 +33,15 @@ export function PortalSidebar({ onLogout }: PortalSidebarProps) {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
+      <SidebarHeader className="p-4">
         <Link href="/portal">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Horseshoe className="w-5 h-5" inverted />
+            <div className="w-[38px] h-[38px] rounded-[10px] bg-white border border-sidebar-border flex items-center justify-center shrink-0">
+              <LogoMark className="w-5 h-[26px]" />
             </div>
             <div>
-              <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">StableMaster</h1>
-              <p className="text-xs text-muted-foreground">Member Portal</p>
+              <h1 className="font-serif text-lg font-semibold tracking-tight leading-none" data-testid="text-app-title">Saddle Hub</h1>
+              <p className="text-xs text-muted-foreground">ADEC &middot; Member Portal</p>
             </div>
           </div>
         </Link>

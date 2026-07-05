@@ -5,7 +5,9 @@ import { insertRiderSchema } from "@shared/schema";
 import { storage } from "../../storage";
 import { ridingSchoolStorage } from "../riding-school/storage";
 import { bookLesson, cancelBooking } from "../riding-school/scheduling";
+import { riderLevelAllowed } from "../riding-school/scheduling-logic";
 import { simulatedPaymentProvider } from "../riding-school/payment-provider";
+import { sharedResourcesStorage } from "../shared-resources/storage";
 
 // Routes for the Customer Portal — the self-service surface for members.
 // Every route here is scoped to the logged-in customer's own data; this is
@@ -55,14 +57,24 @@ export function registerCustomerPortalRoutes(app: Express) {
     const to = req.query.to ? new Date(req.query.to as string) : new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const riders = await ridingSchoolStorage.getRidersForCustomer(customerId(req));
-    const riderLevelIds = new Set(riders.map((r) => r.riderLevelId).filter(Boolean));
+    const allLevels = await sharedResourcesStorage.getRiderLevels();
+    const sortOrderById = Object.fromEntries(allLevels.map((l) => [l.id, l.sortOrder]));
+    // A lesson is visible if ANY of the customer's riders could book it —
+    // the portal calendar is a shared family view, not per-rider. A
+    // customer with no riders yet still sees unrestricted lessons (matches
+    // riderLevelAllowed's "no level" behavior for a single virtual rider).
+    const riderSortOrders = riders.length > 0
+      ? riders.map((r) => (r.riderLevelId ? sortOrderById[r.riderLevelId] : null))
+      : [null];
 
     const lessons = await ridingSchoolStorage.getScheduledLessonsInRange(from, to);
     const visible = [];
     for (const lesson of lessons) {
       if (!lesson.isPublic || lesson.status !== "scheduled") continue;
       const template = await ridingSchoolStorage.getLessonTemplate(lesson.templateId);
-      if (template && template.riderLevelId && !riderLevelIds.has(template.riderLevelId)) continue;
+      const minSortOrder = template?.minRiderLevelId ? sortOrderById[template.minRiderLevelId] : null;
+      const maxSortOrder = template?.maxRiderLevelId ? sortOrderById[template.maxRiderLevelId] : null;
+      if (!riderSortOrders.some((rso) => riderLevelAllowed(rso, minSortOrder, maxSortOrder))) continue;
       const bookings = await ridingSchoolStorage.getActiveBookingsForLesson(lesson.id);
       visible.push({ ...lesson, templateName: template?.name, price: template?.price, bookedCount: bookings.length });
     }
@@ -178,13 +190,7 @@ export function registerCustomerPortalRoutes(app: Express) {
 
   // --- My Horses (read-only, from the existing livery horse_ownership) ---
   app.get("/api/portal/horses", requireCustomer, async (req, res) => {
-    const ownership = await storage.getHorseOwnershipByCustomerId(customerId(req));
-    const horses = [];
-    for (const o of ownership) {
-      const horse = await storage.getHorse(o.horseId);
-      if (horse) horses.push(horse);
-    }
-    res.json(horses);
+    res.json(await storage.getHorsesWithLocationForCustomer(customerId(req)));
   });
 
   // --- Dashboard ---

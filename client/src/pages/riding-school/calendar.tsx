@@ -1,88 +1,135 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { View } from "react-big-calendar";
 import { PageHeader } from "@/components/page-header";
-import { RidingSchoolCalendar, type CalendarEvent } from "@/components/riding-school-calendar";
+import {
+  RidingSchoolCalendar, rangeForCalendarView,
+  type CalendarEvent, type CalendarRow, type CalendarViewMode, type CalendarGranularity, type CalendarResourceAxis,
+} from "@/components/riding-school-calendar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { useCan } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Trash2 } from "lucide-react";
-import type { LessonTemplate, Instructor, Arena } from "@shared/schema";
+import type { LessonTemplate, Instructor, Arena, Customer, Rider } from "@shared/schema";
 import { CLUB_UTC_OFFSET_ISO } from "@shared/timezone";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function rangeForView(view: View, date: Date): { from: Date; to: Date } {
-  if (view === "month") {
-    const from = new Date(date.getFullYear(), date.getMonth(), 1);
-    const to = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
-    return { from, to };
-  }
-  if (view === "week") {
-    const from = new Date(date);
-    from.setDate(from.getDate() - from.getDay());
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 7);
-    return { from, to };
-  }
-  const from = new Date(date); from.setHours(0, 0, 0, 0);
-  const to = new Date(date); to.setHours(23, 59, 59, 999);
-  return { from, to };
+function pushUnique(map: Record<string, CalendarEvent[]>, rowId: string, event: CalendarEvent) {
+  const arr = (map[rowId] ||= []);
+  if (!arr.some((e) => e.id === event.id)) arr.push(event);
 }
 
 export default function RidingSchoolCalendarPage() {
   const canManage = useCan("riding_school.calendar.manage");
   const { toast } = useToast();
 
-  const [view, setView] = useState<View>("week");
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
+  const [granularity, setGranularity] = useState<CalendarGranularity>("full");
+  const [resourceAxis, setResourceAxis] = useState<CalendarResourceAxis>("horses");
   const [date, setDate] = useState(new Date());
-  const [groupByInstructor, setGroupByInstructor] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createSlot, setCreateSlot] = useState<{ start: Date; resourceId?: string } | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [editScope, setEditScope] = useState<"instance" | "series">("instance");
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteScope, setDeleteScope] = useState<"instance" | "series">("instance");
   const [newRiderId, setNewRiderId] = useState("");
   const [newHorseId, setNewHorseId] = useState("");
+  const [newTemplateId, setNewTemplateId] = useState("");
+  const [newInstructorId, setNewInstructorId] = useState("");
+  const [newArenaId, setNewArenaId] = useState("");
 
-  const { from, to } = useMemo(() => rangeForView(view, date), [view, date]);
+  const { from, to } = useMemo(() => rangeForCalendarView(viewMode, date), [viewMode, date]);
 
   const { data: lessons = [] } = useQuery<any[]>({
     queryKey: ["/api/riding-school/scheduled-lessons", from.toISOString(), to.toISOString()],
     queryFn: () => fetch(`/api/riding-school/scheduled-lessons?from=${from.toISOString()}&to=${to.toISOString()}`, { credentials: "include" }).then((r) => r.json()),
   });
 
+  const { data: bookings = [] } = useQuery<any[]>({
+    queryKey: ["/api/riding-school/bookings", from.toISOString(), to.toISOString()],
+    queryFn: () => fetch(`/api/riding-school/bookings?from=${from.toISOString()}&to=${to.toISOString()}`, { credentials: "include" }).then((r) => r.json()),
+    enabled: resourceAxis === "horses" || resourceAxis === "customers",
+  });
+
   const { data: templates = [] } = useQuery<LessonTemplate[]>({ queryKey: ["/api/riding-school/lesson-templates"] });
   const { data: instructors = [] } = useQuery<Instructor[]>({ queryKey: ["/api/instructors"] });
   const { data: arenas = [] } = useQuery<Arena[]>({ queryKey: ["/api/arenas"] });
+  const { data: horses = [] } = useQuery<any[]>({ queryKey: ["/api/horses/"], enabled: resourceAxis === "horses" });
+  const { data: customersList = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"], enabled: resourceAxis === "customers" });
+  const { data: allRiders = [] } = useQuery<Rider[]>({ queryKey: ["/api/riding-school/riders"], enabled: resourceAxis === "customers" });
 
-  const { data: bookings = [] } = useQuery<any[]>({
+  const { data: lessonBookings = [] } = useQuery<any[]>({
     queryKey: [`/api/riding-school/scheduled-lessons/${selectedEvent?.id}/bookings`],
     enabled: !!selectedEvent,
   });
 
   const templateById = useMemo(() => Object.fromEntries(templates.map((t) => [t.id, t])), [templates]);
-  const instructorById = useMemo(() => Object.fromEntries(instructors.map((i) => [i.id, i])), [instructors]);
+  const lessonById = useMemo(() => Object.fromEntries(lessons.map((l: any) => [l.id, l])), [lessons]);
+  const selectedLesson = selectedEvent ? lessonById[selectedEvent.id] : undefined;
 
-  const events: CalendarEvent[] = useMemo(() => lessons.map((l) => ({
+  const { data: seriesDeletePreview = [] } = useQuery<any[]>({
+    queryKey: [`/api/riding-school/recurrences/${selectedLesson?.recurrenceId}/future-instances`],
+    enabled: showDeleteDialog && deleteScope === "series" && !!selectedLesson?.recurrenceId,
+  });
+
+  const eventFromLesson = (l: any): CalendarEvent => ({
     id: l.id,
     title: `${templateById[l.templateId]?.name || "Lesson"}${l.isPublic ? "" : " (private)"}`,
     start: new Date(l.startDatetime),
     end: new Date(l.endDatetime),
-    resourceId: groupByInstructor ? l.instructorId : undefined,
     isException: l.isException,
-  })), [lessons, templateById, groupByInstructor]);
+  });
 
-  const resources = useMemo(() => instructors.map((i) => ({ resourceId: i.id, resourceTitle: i.name })), [instructors]);
+  const allEvents = useMemo(() => lessons.map(eventFromLesson), [lessons, templateById]);
+
+  const { rows, eventsByRow } = useMemo<{ rows: CalendarRow[]; eventsByRow: Record<string, CalendarEvent[]> }>(() => {
+    const eventsByRow: Record<string, CalendarEvent[]> = {};
+
+    if (resourceAxis === "instructors") {
+      for (const l of lessons) pushUnique(eventsByRow, l.instructorId, eventFromLesson(l));
+      return { rows: instructors.map((i) => ({ id: i.id, title: i.name })), eventsByRow };
+    }
+
+    if (resourceAxis === "facilities") {
+      for (const l of lessons) pushUnique(eventsByRow, l.arenaId, eventFromLesson(l));
+      return { rows: arenas.map((a) => ({ id: a.id, title: a.name })), eventsByRow };
+    }
+
+    if (resourceAxis === "horses") {
+      for (const b of bookings) {
+        if (!b.horseId) continue;
+        const lesson = lessonById[b.scheduledLessonId];
+        if (!lesson) continue;
+        pushUnique(eventsByRow, b.horseId, eventFromLesson(lesson));
+      }
+      return { rows: horses.map((h: any) => ({ id: h.id, title: h.horseName })), eventsByRow };
+    }
+
+    // customers
+    const riderToCustomer = Object.fromEntries(allRiders.map((r) => [r.id, r.customerId]));
+    const customerIdsWithRiders = new Set(allRiders.map((r) => r.customerId));
+    for (const b of bookings) {
+      const customerId = riderToCustomer[b.riderId];
+      if (!customerId) continue;
+      const lesson = lessonById[b.scheduledLessonId];
+      if (!lesson) continue;
+      pushUnique(eventsByRow, customerId, eventFromLesson(lesson));
+    }
+    return {
+      rows: customersList.filter((c) => customerIdsWithRiders.has(c.id)).map((c) => ({ id: c.id, title: c.fullname })),
+      eventsByRow,
+    };
+  }, [resourceAxis, instructors, arenas, horses, customersList, allRiders, bookings, lessons, lessonById, templateById]);
 
   const createRecurrenceMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/riding-school/recurrences", data),
@@ -114,10 +161,22 @@ export default function RidingSchoolCalendarPage() {
     onError: (e: any) => toast({ title: "Failed to update lesson", description: e.message, variant: "destructive" as any }),
   });
 
+  const deleteLessonMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/riding-school/scheduled-lessons/${selectedEvent!.id}?scope=${deleteScope}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/riding-school/scheduled-lessons"] });
+      setShowDeleteDialog(false);
+      setSelectedEvent(null);
+      toast({ title: "Lesson deleted" });
+    },
+    onError: (e: any) => toast({ title: "Failed to delete lesson", description: e.message, variant: "destructive" as any }),
+  });
+
   const addBookingMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/riding-school/bookings", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/riding-school/scheduled-lessons/${selectedEvent?.id}/bookings`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/riding-school/bookings"] });
       setNewRiderId("");
       setNewHorseId("");
       toast({ title: "Rider booked" });
@@ -127,8 +186,9 @@ export default function RidingSchoolCalendarPage() {
 
   const cancelBookingMutation = useMutation({
     mutationFn: (bookingId: string) => apiRequest("POST", `/api/riding-school/bookings/${bookingId}/cancel`),
-    onSuccess: (res: any) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/riding-school/scheduled-lessons/${selectedEvent?.id}/bookings`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/riding-school/bookings"] });
       toast({ title: "Booking cancelled" });
     },
     onError: (e: any) => toast({ title: "Failed to cancel booking", description: e.message, variant: "destructive" as any }),
@@ -138,6 +198,15 @@ export default function RidingSchoolCalendarPage() {
     setSelectedDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
   };
 
+  const resetCreateForm = (slot: { start: Date; resourceId?: string }) => {
+    setCreateSlot(slot);
+    setIsRecurring(false);
+    setSelectedDays([]);
+    setNewTemplateId("");
+    setNewInstructorId(resourceAxis === "instructors" ? (slot.resourceId || "") : "");
+    setNewArenaId(resourceAxis === "facilities" ? (slot.resourceId || "") : "");
+  };
+
   return (
     <div className="p-6 flex flex-col h-full">
       <PageHeader
@@ -145,12 +214,7 @@ export default function RidingSchoolCalendarPage() {
         description="Schedule and manage riding lessons"
         actions={canManage ? (
           <Button
-            onClick={() => {
-              setCreateSlot({ start: new Date() });
-              setIsRecurring(false);
-              setSelectedDays([]);
-              setShowCreateDialog(true);
-            }}
+            onClick={() => { resetCreateForm({ start: new Date() }); setShowCreateDialog(true); }}
             data-testid="button-new-lesson"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -159,30 +223,27 @@ export default function RidingSchoolCalendarPage() {
         ) : undefined}
       />
 
-      <div className="flex items-center gap-4 mb-3">
-        <div className="flex items-center gap-2">
-          <Switch checked={groupByInstructor} onCheckedChange={setGroupByInstructor} data-testid="switch-group-by-instructor" />
-          <Label className="text-sm">Group by instructor</Label>
-        </div>
-      </div>
-
       <RidingSchoolCalendar
-        events={events}
-        resources={groupByInstructor && view !== "month" ? resources : undefined}
-        view={view}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        granularity={granularity}
+        onGranularityChange={setGranularity}
+        resourceAxis={resourceAxis}
+        onResourceAxisChange={setResourceAxis}
         date={date}
         onNavigate={setDate}
-        onView={setView}
+        rows={rows}
+        eventsByRow={eventsByRow}
+        allEvents={allEvents}
         onSelectSlot={(slot) => {
           if (!canManage) return;
-          setCreateSlot({ start: slot.start, resourceId: slot.resourceId });
-          setIsRecurring(false);
-          setSelectedDays([]);
+          resetCreateForm({ start: slot.start, resourceId: slot.rowId });
           setShowCreateDialog(true);
         }}
         onSelectEvent={(event) => {
           setSelectedEvent(event);
           setEditScope("instance");
+          setDeleteScope("instance");
         }}
       />
 
@@ -199,6 +260,10 @@ export default function RidingSchoolCalendarPage() {
               const templateId = fd.get("templateId") as string;
               const instructorId = fd.get("instructorId") as string;
               const arenaId = fd.get("arenaId") as string;
+              if (!templateId || !instructorId || !arenaId) {
+                toast({ title: "Template, instructor, and arena are required", variant: "destructive" });
+                return;
+              }
               const isPublic = fd.get("isPublic") === "on";
               const template = templateById[templateId];
 
@@ -228,30 +293,39 @@ export default function RidingSchoolCalendarPage() {
             <div className="space-y-4">
               <div>
                 <Label>Lesson Template</Label>
-                <Select name="templateId" required>
-                  <SelectTrigger data-testid="select-template"><SelectValue placeholder="Select a template" /></SelectTrigger>
-                  <SelectContent>
-                    {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.durationMinutes}min, max {t.maxRiders})</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <input type="hidden" name="templateId" value={newTemplateId} />
+                <SearchableSelect
+                  value={newTemplateId}
+                  onValueChange={setNewTemplateId}
+                  options={templates.filter((t) => t.isActive).map((t) => ({ value: t.id, label: `${t.name} (${t.durationMinutes}min, max ${t.maxRiders})` }))}
+                  placeholder="Select a template"
+                  searchPlaceholder="Search templates..."
+                  testId="select-template"
+                />
               </div>
               <div>
                 <Label>Instructor</Label>
-                <Select name="instructorId" defaultValue={createSlot?.resourceId} required>
-                  <SelectTrigger data-testid="select-instructor"><SelectValue placeholder="Select an instructor" /></SelectTrigger>
-                  <SelectContent>
-                    {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <input type="hidden" name="instructorId" value={newInstructorId} />
+                <SearchableSelect
+                  value={newInstructorId}
+                  onValueChange={setNewInstructorId}
+                  options={instructors.map((i) => ({ value: i.id, label: i.name }))}
+                  placeholder="Select an instructor"
+                  searchPlaceholder="Search instructors..."
+                  testId="select-instructor"
+                />
               </div>
               <div>
                 <Label>Arena</Label>
-                <Select name="arenaId" required>
-                  <SelectTrigger data-testid="select-arena"><SelectValue placeholder="Select an arena" /></SelectTrigger>
-                  <SelectContent>
-                    {arenas.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <input type="hidden" name="arenaId" value={newArenaId} />
+                <SearchableSelect
+                  value={newArenaId}
+                  onValueChange={setNewArenaId}
+                  options={arenas.map((a) => ({ value: a.id, label: a.name }))}
+                  placeholder="Select an arena"
+                  searchPlaceholder="Search arenas..."
+                  testId="select-arena"
+                />
               </div>
 
               <div className="flex items-center gap-2">
@@ -326,9 +400,9 @@ export default function RidingSchoolCalendarPage() {
               </p>
 
               <div>
-                <Label className="text-sm font-medium">Bookings ({bookings.length})</Label>
+                <Label className="text-sm font-medium">Bookings ({lessonBookings.length})</Label>
                 <ul className="mt-1 space-y-1 max-h-32 overflow-auto text-sm">
-                  {bookings.map((b: any) => (
+                  {lessonBookings.map((b: any) => (
                     <li key={b.id} className="flex justify-between items-center gap-2">
                       <span>{b.riderId}{b.horseId ? ` (horse: ${b.horseId})` : ""}</span>
                       {canManage && (
@@ -338,7 +412,7 @@ export default function RidingSchoolCalendarPage() {
                       )}
                     </li>
                   ))}
-                  {bookings.length === 0 && <li className="text-muted-foreground">No bookings yet.</li>}
+                  {lessonBookings.length === 0 && <li className="text-muted-foreground">No bookings yet.</li>}
                 </ul>
               </div>
 
@@ -385,8 +459,83 @@ export default function RidingSchoolCalendarPage() {
                   </form>
                 </div>
               )}
+
+              {canManage && (
+                <div className="pt-3 border-t">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => { setDeleteScope("instance"); setShowDeleteDialog(true); }}
+                    data-testid="button-delete-lesson"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />Delete Lesson
+                  </Button>
+                </div>
+              )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete lesson confirmation dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Lesson</DialogTitle>
+          </DialogHeader>
+          {selectedEvent && (
+            <div className="space-y-4">
+              {lessonBookings.length > 0 && deleteScope === "instance" ? (
+                <p className="text-sm text-destructive">
+                  Cannot delete: {lessonBookings.length} rider(s) are booked on this lesson. Cancel their booking(s) first.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+              )}
+
+              {selectedLesson?.recurrenceId && (
+                <div>
+                  <Label className="text-sm font-medium">What do you want to delete?</Label>
+                  <Select value={deleteScope} onValueChange={(v) => setDeleteScope(v as any)}>
+                    <SelectTrigger data-testid="select-delete-scope"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="instance">This occurrence only</SelectItem>
+                      <SelectItem value="series">This and all following occurrences</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {deleteScope === "instance" ? (
+                <div className="text-sm border rounded-md p-2">
+                  {selectedEvent.start.toLocaleString()} — {selectedEvent.end.toLocaleTimeString()}
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-sm font-medium">
+                    {seriesDeletePreview.length} occurrence{seriesDeletePreview.length !== 1 ? "s" : ""} will be deleted:
+                  </Label>
+                  <ul className="mt-1 space-y-1 max-h-40 overflow-auto text-sm border rounded-md p-2">
+                    {seriesDeletePreview.map((l: any) => (
+                      <li key={l.id}>{new Date(l.startDatetime).toLocaleString()}</li>
+                    ))}
+                    {seriesDeletePreview.length === 0 && <li className="text-muted-foreground">No upcoming occurrences.</li>}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} data-testid="button-cancel-delete-lesson">Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteLessonMutation.mutate()}
+              disabled={deleteLessonMutation.isPending || (deleteScope === "instance" && lessonBookings.length > 0)}
+              data-testid="button-confirm-delete-lesson"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

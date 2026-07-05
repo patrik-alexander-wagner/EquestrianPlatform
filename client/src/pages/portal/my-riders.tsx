@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import type { Rider, RiderLevel } from "@shared/schema";
 
 export default function MyRidersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editing, setEditing] = useState<Rider | null>(null);
   const { toast } = useToast();
 
   const { data: riders = [], isLoading } = useQuery<Rider[]>({ queryKey: ["/api/portal/riders"] });
@@ -28,6 +29,16 @@ export default function MyRidersPage() {
       toast({ title: "Rider added" });
     },
     onError: (e: any) => toast({ title: "Failed to add rider", description: e.message, variant: "destructive" as any }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }: any) => apiRequest("PATCH", `/api/portal/riders/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/riders"] });
+      setEditing(null);
+      toast({ title: "Rider updated" });
+    },
+    onError: (e: any) => toast({ title: "Failed to update rider", description: e.message, variant: "destructive" as any }),
   });
 
   const columns = [
@@ -50,7 +61,16 @@ export default function MyRidersPage() {
         }
       />
 
-      <DataTable columns={columns} data={riders} isLoading={isLoading} />
+      <DataTable
+        columns={columns}
+        data={riders}
+        isLoading={isLoading}
+        actions={(item: Rider) => (
+          <Button variant="ghost" size="icon" onClick={() => setEditing(item)} data-testid={`button-edit-rider-${item.id}`}>
+            <Pencil className="w-4 h-4" />
+          </Button>
+        )}
+      />
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
@@ -92,6 +112,51 @@ export default function MyRidersPage() {
               <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-rider">Add</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Rider</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateMutation.mutate({
+                  id: editing.id,
+                  fullName: fd.get("fullName"),
+                  dateOfBirth: fd.get("dateOfBirth") || undefined,
+                  riderLevelId: fd.get("riderLevelId") || undefined,
+                });
+              }}
+            >
+              <div className="space-y-4">
+                <div>
+                  <Label>Full Name</Label>
+                  <Input name="fullName" defaultValue={editing.fullName} required data-testid="input-edit-rider-name" />
+                </div>
+                <div>
+                  <Label>Date of Birth</Label>
+                  <Input name="dateOfBirth" type="date" defaultValue={editing.dateOfBirth ?? ""} data-testid="input-edit-rider-dob" />
+                </div>
+                <div>
+                  <Label>Riding Level</Label>
+                  <Select name="riderLevelId" defaultValue={editing.riderLevelId ?? undefined}>
+                    <SelectTrigger data-testid="select-edit-rider-level"><SelectValue placeholder="Select a level" /></SelectTrigger>
+                    <SelectContent>
+                      {riderLevels.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="mt-4">
+                <Button type="submit" disabled={updateMutation.isPending} data-testid="button-submit-edit-rider">Save</Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

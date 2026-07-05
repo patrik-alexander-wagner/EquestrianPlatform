@@ -108,15 +108,11 @@ export async function runMigration() {
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'users' AND column_name = 'sso_id'
     `);
-    if (ssoIdColCheck.rows.length === 0) {
-      console.log("Migration: Adding sso_id column to users...");
-      await client.query(`ALTER TABLE users ADD COLUMN sso_id TEXT`);
-      await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS users_sso_id_unique
-        ON users(sso_id)
-        WHERE sso_id IS NOT NULL
-      `);
-      console.log("Migration: sso_id column added to users");
+    if (ssoIdColCheck.rows.length > 0) {
+      console.log("Migration: Removing sso_id column from users (Unified Portal SSO module removed)...");
+      await client.query(`DROP INDEX IF EXISTS users_sso_id_unique`);
+      await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS sso_id`);
+      console.log("Migration: sso_id column removed from users");
     }
 
     const colCheck = await client.query(`

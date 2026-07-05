@@ -1,9 +1,10 @@
 import type { Express } from "express";
 import { requirePermission } from "../../permissions";
 import { requireAuth, validateBody, auditLog } from "../../route-helpers";
+import { storage } from "../../storage";
 import {
   insertLessonTemplateSchema, insertRsLessonRecurrenceSchema, insertRsScheduledLessonSchema,
-  insertRsRidingPackageSchema, insertRiderSchema,
+  insertRsRidingPackageSchema, insertRiderSchema, insertRsHorseStatusSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import { ridingSchoolStorage } from "./storage";
@@ -18,7 +19,9 @@ import { simulatedPaymentProvider } from "./payment-provider";
 export function registerRidingSchoolRoutes(app: Express) {
   // --- Lesson templates ---
   app.get("/api/riding-school/lesson-templates", requireAuth, async (_req, res) => {
-    res.json(await ridingSchoolStorage.getLessonTemplates());
+    const templates = await ridingSchoolStorage.getLessonTemplates();
+    const idsWithInstances = await ridingSchoolStorage.getLessonTemplateIdsWithInstances();
+    res.json(templates.map((t) => ({ ...t, hasInstances: idsWithInstances.has(t.id) })));
   });
 
   app.post("/api/riding-school/lesson-templates", requirePermission("riding_school.templates.manage"), async (req, res) => {
@@ -46,12 +49,16 @@ export function registerRidingSchoolRoutes(app: Express) {
   });
 
   app.delete("/api/riding-school/lesson-templates/:id", requirePermission("riding_school.templates.manage"), async (req, res) => {
-    const id = req.params.id as string;
-    const template = await ridingSchoolStorage.getLessonTemplate(id);
-    if (!template) return res.status(404).json({ message: "Lesson template not found" });
-    await ridingSchoolStorage.deleteLessonTemplate(id);
-    auditLog(req, "delete_lesson_template", "lesson_template", template.id, `Deleted lesson template: ${template.name}`);
-    res.json({ success: true });
+    try {
+      const id = req.params.id as string;
+      const template = await ridingSchoolStorage.getLessonTemplate(id);
+      if (!template) return res.status(404).json({ message: "Lesson template not found" });
+      await ridingSchoolStorage.deleteLessonTemplate(id);
+      auditLog(req, "delete_lesson_template", "lesson_template", template.id, `Deleted lesson template: ${template.name}`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // --- Calendar (scheduled lessons) ---
@@ -131,9 +138,71 @@ export function registerRidingSchoolRoutes(app: Express) {
     }
   });
 
+  // Preview for the delete-confirmation dialog: which dates "delete this and
+  // following events" would actually remove (same set updateFutureSeries
+  // would update — future, non-exception instances only).
+  app.get("/api/riding-school/recurrences/:id/future-instances", requireAuth, async (req, res) => {
+    res.json(await ridingSchoolStorage.getFutureNonExceptionInstances(req.params.id as string, new Date()));
+  });
+
+  // Deletes an instance ("this occurrence") or a whole future series ("this
+  // and following events"), refusing whenever any affected instance still
+  // has an active booking — the admin must cancel those first, or fall back
+  // to deleting only the unbooked occurrences individually.
+  app.delete("/api/riding-school/scheduled-lessons/:id", requirePermission("riding_school.calendar.manage"), async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const scope = (req.query.scope === "series" ? "series" : "instance") as "instance" | "series";
+      const lesson = await ridingSchoolStorage.getScheduledLesson(id);
+      if (!lesson) return res.status(404).json({ message: "Scheduled lesson not found" });
+
+      if (scope === "series") {
+        if (!lesson.recurrenceId) return res.status(400).json({ message: "This lesson is not part of a series" });
+        const instances = await ridingSchoolStorage.getFutureNonExceptionInstances(lesson.recurrenceId, new Date());
+        const ids = instances.map((i) => i.id);
+        const bookings = await ridingSchoolStorage.getActiveBookingsForLessons(ids);
+        if (bookings.length > 0) {
+          const blockedCount = new Set(bookings.map((b) => b.scheduledLessonId)).size;
+          return res.status(400).json({
+            message: `Cannot delete series: ${blockedCount} lesson(s) in this series have active bookings. Cancel those bookings first, or delete individual occurrences instead.`,
+          });
+        }
+        await ridingSchoolStorage.cancelScheduledLessons(ids);
+        auditLog(req, "delete_lesson_series", "recurrence", lesson.recurrenceId, `Deleted ${ids.length} future instance(s) of the series`);
+        return res.json({ deletedCount: ids.length });
+      }
+
+      const bookings = await ridingSchoolStorage.getActiveBookingsForLesson(id);
+      if (bookings.length > 0) {
+        return res.status(400).json({ message: `Cannot delete: ${bookings.length} rider(s) are booked on this lesson. Cancel their booking(s) first.` });
+      }
+      await ridingSchoolStorage.cancelScheduledLessons([id]);
+      auditLog(req, "delete_lesson_instance", "scheduled_lesson", id, "Deleted single lesson instance");
+      res.json({ deletedCount: 1 });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
   // --- Bookings ---
   app.get("/api/riding-school/scheduled-lessons/:id/bookings", requireAuth, async (req, res) => {
     res.json(await ridingSchoolStorage.getActiveBookingsForLesson(req.params.id as string));
+  });
+
+  // Bulk lookup for the calendar's Horses/Customers resource axes — avoids
+  // an N+1 fetch per lesson in the visible range.
+  app.get("/api/riding-school/bookings", requireAuth, async (req, res) => {
+    const from = req.query.from ? new Date(req.query.from as string) : new Date();
+    const to = req.query.to ? new Date(req.query.to as string) : new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
+    res.json(await ridingSchoolStorage.getConfirmedBookingsInRange(from, to));
+  });
+
+  // Admin Booking History list — every customer interaction (booked or
+  // cancelled) with a scheduled lesson, not just currently-confirmed ones.
+  app.get("/api/riding-school/bookings/history", requirePermission("riding_school.view"), async (req, res) => {
+    const from = req.query.from ? new Date(req.query.from as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const to = req.query.to ? new Date(req.query.to as string) : new Date(new Date().setDate(new Date().getDate() + 30));
+    res.json(await ridingSchoolStorage.getBookingHistoryInRange(from, to));
   });
 
   const bookLessonSchema = z.object({
@@ -170,6 +239,12 @@ export function registerRidingSchoolRoutes(app: Express) {
 
   // --- Riders (managed by staff on behalf of a customer; M5 adds the
   // customer-portal self-service surface on top of the same storage) ---
+  // All-riders lookup for the calendar's Customers resource axis (resolves
+  // a booking's riderId to its owning customerId).
+  app.get("/api/riding-school/riders", requireAuth, async (_req, res) => {
+    res.json(await ridingSchoolStorage.getAllRiders());
+  });
+
   app.get("/api/riding-school/customers/:customerId/riders", requireAuth, async (req, res) => {
     res.json(await ridingSchoolStorage.getRidersForCustomer(req.params.customerId as string));
   });
@@ -198,17 +273,27 @@ export function registerRidingSchoolRoutes(app: Express) {
     }
   });
 
-  // --- Riding packages (products) ---
+  // --- Riding packages ("Terms / Riding Package" products) ---
   app.get("/api/riding-school/packages", requireAuth, async (_req, res) => {
-    res.json(await ridingSchoolStorage.getRidingPackages());
+    const [packages, links] = await Promise.all([
+      ridingSchoolStorage.getRidingPackages(),
+      ridingSchoolStorage.getAllPackageTemplateLinks(),
+    ]);
+    const templateIdsByPackage: Record<string, string[]> = {};
+    for (const link of links) (templateIdsByPackage[link.packageId] ||= []).push(link.templateId);
+    res.json(packages.map((p) => ({ ...p, templateIds: templateIdsByPackage[p.id] || [] })));
   });
 
   app.post("/api/riding-school/packages", requirePermission("riding_school.packages.manage"), async (req, res) => {
     try {
-      const data = validateBody(insertRsRidingPackageSchema, req.body);
+      const { templateIds, ...body } = req.body;
+      const data = validateBody(insertRsRidingPackageSchema, body);
+      const ids: string[] = Array.isArray(templateIds) ? templateIds : [];
+      if (ids.length === 0) return res.status(400).json({ message: "At least one lesson template is required" });
       const pkg = await ridingSchoolStorage.createRidingPackage(data);
+      await ridingSchoolStorage.setPackageTemplates(pkg.id, ids);
       auditLog(req, "create_riding_package", "riding_package", pkg.id, `Created riding package: ${pkg.name}`);
-      res.status(201).json(pkg);
+      res.status(201).json({ ...pkg, templateIds: ids });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -217,23 +302,33 @@ export function registerRidingSchoolRoutes(app: Express) {
   app.patch("/api/riding-school/packages/:id", requirePermission("riding_school.packages.manage"), async (req, res) => {
     try {
       const id = req.params.id as string;
-      const data = validateBody(insertRsRidingPackageSchema.partial(), req.body);
+      const { templateIds, ...body } = req.body;
+      const data = validateBody(insertRsRidingPackageSchema.partial(), body);
       const pkg = await ridingSchoolStorage.updateRidingPackage(id, data);
       if (!pkg) return res.status(404).json({ message: "Riding package not found" });
+      if (templateIds !== undefined) {
+        const ids: string[] = Array.isArray(templateIds) ? templateIds : [];
+        if (ids.length === 0) return res.status(400).json({ message: "At least one lesson template is required" });
+        await ridingSchoolStorage.setPackageTemplates(id, ids);
+      }
       auditLog(req, "update_riding_package", "riding_package", pkg.id, `Updated riding package: ${pkg.name}`);
-      res.json(pkg);
+      res.json({ ...pkg, templateIds: templateIds ?? await ridingSchoolStorage.getTemplateIdsForPackage(id) });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
   });
 
   app.delete("/api/riding-school/packages/:id", requirePermission("riding_school.packages.manage"), async (req, res) => {
-    const id = req.params.id as string;
-    const pkg = await ridingSchoolStorage.getRidingPackage(id);
-    if (!pkg) return res.status(404).json({ message: "Riding package not found" });
-    await ridingSchoolStorage.deleteRidingPackage(id);
-    auditLog(req, "delete_riding_package", "riding_package", pkg.id, `Deleted riding package: ${pkg.name}`);
-    res.json({ success: true });
+    try {
+      const id = req.params.id as string;
+      const pkg = await ridingSchoolStorage.getRidingPackage(id);
+      if (!pkg) return res.status(404).json({ message: "Riding package not found" });
+      await ridingSchoolStorage.deleteRidingPackage(id);
+      auditLog(req, "delete_riding_package", "riding_package", pkg.id, `Deleted riding package: ${pkg.name}`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // --- Package purchases (simulated payment: Phase 1) ---
@@ -282,9 +377,65 @@ export function registerRidingSchoolRoutes(app: Express) {
     res.json(await ridingSchoolStorage.getCreditVouchersForCustomer(req.params.customerId as string));
   });
 
-  // --- Cancellation policy (read-only reference data, admin-seeded) ---
+  // --- Cancellation policy: single row, editable from Settings ---
   app.get("/api/riding-school/cancellation-policy", requireAuth, async (_req, res) => {
-    res.json(await ridingSchoolStorage.getCancellationPolicies());
+    const policy = await ridingSchoolStorage.getCancellationPolicy();
+    res.json(policy || { thresholdHours: 24 });
+  });
+
+  app.patch("/api/riding-school/cancellation-policy", requirePermission("riding_school.settings.manage"), async (req, res) => {
+    try {
+      const { thresholdHours } = validateBody(z.object({ thresholdHours: z.number().int().min(0) }), req.body);
+      const policy = await ridingSchoolStorage.upsertCancellationPolicy(thresholdHours);
+      auditLog(req, "update_cancellation_policy", "cancellation_policy", policy.id, `Set cancellation notice to ${thresholdHours}h`);
+      res.json(policy);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  // --- Riding School horse roster + status ---
+  // The full horse+owner catalog for the "Assign Riding School Horses" picker
+  // is served by the existing GET /api/horses-with-owners (already includes
+  // isRidingSchoolHorse); this endpoint is just the filtered, status-joined
+  // list for the Horse Management page itself.
+  app.get("/api/riding-school/horses", requireAuth, async (_req, res) => {
+    const allHorses = await storage.getHorsesWithOwners();
+    const rsHorses = allHorses.filter((h: any) => h.isRidingSchoolHorse);
+    const statusByHorse = await ridingSchoolStorage.getLatestHorseStatusForHorses(rsHorses.map((h: any) => h.horseId));
+    res.json(rsHorses.map((h: any) => ({ ...h, status: statusByHorse.get(h.horseId) || null })));
+  });
+
+  app.post("/api/riding-school/horses/assignments", requirePermission("riding_school.horses.manage"), async (req, res) => {
+    try {
+      const { horseIds } = validateBody(z.object({ horseIds: z.array(z.string().uuid()) }), req.body);
+      await storage.setRidingSchoolHorses(horseIds);
+      auditLog(req, "assign_riding_school_horses", "horse", "bulk", `Set Riding School roster to ${horseIds.length} horse(s)`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
+  });
+
+  app.get("/api/riding-school/horses/:horseId/status-history", requireAuth, async (req, res) => {
+    res.json(await ridingSchoolStorage.getHorseStatusHistory(req.params.horseId as string));
+  });
+
+  app.post("/api/riding-school/horses/:horseId/status", requirePermission("riding_school.horses.manage"), async (req, res) => {
+    try {
+      const horseId = req.params.horseId as string;
+      const user = req.user as any;
+      const data = validateBody(insertRsHorseStatusSchema, {
+        ...req.body,
+        horseId,
+        setBy: user?.id || null,
+      });
+      const entry = await ridingSchoolStorage.createHorseStatus(data);
+      auditLog(req, "set_riding_school_horse_status", "horse", horseId, `Set status: ${entry.mood}`);
+      res.status(201).json(entry);
+    } catch (e: any) {
+      res.status(e.status || 500).json({ message: e.message || "Server error" });
+    }
   });
 
   // --- Reports ---

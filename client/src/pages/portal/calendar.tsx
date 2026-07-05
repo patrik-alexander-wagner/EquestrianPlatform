@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Rider } from "@shared/schema";
@@ -140,12 +140,14 @@ export default function PortalCalendarPage() {
             <p className="text-sm text-muted-foreground">{bookingLesson && formatWhen(bookingLesson.startDatetime)}</p>
             <div>
               <Label>Rider</Label>
-              <Select value={selectedRiderId} onValueChange={setSelectedRiderId}>
-                <SelectTrigger data-testid="select-booking-rider"><SelectValue placeholder="Select a rider" /></SelectTrigger>
-                <SelectContent>
-                  {riders.map((r) => <SelectItem key={r.id} value={r.id}>{r.fullName}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedRiderId}
+                onValueChange={setSelectedRiderId}
+                options={riders.map((r) => ({ value: r.id, label: r.fullName }))}
+                placeholder="Select a rider"
+                searchPlaceholder="Search riders..."
+                testId="select-booking-rider"
+              />
               {riders.length === 0 && (
                 <p className="text-xs text-muted-foreground mt-1">Add a rider on the My Riders page first.</p>
               )}

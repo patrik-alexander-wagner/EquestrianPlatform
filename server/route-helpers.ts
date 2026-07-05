@@ -20,22 +20,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 // Gate for the Customer Portal — customer identity is orthogonal to the
-// staff role/permission catalog (shared/permissions.ts), so portal routes
-// check accountType directly rather than going through requirePermission.
-//
-// Two kinds of session can reach the portal: a real CUSTOMER account (its
-// own customerId), or a STAFF account that also has a linkedCustomerId (a
-// staff member who is also a member, using the "switch to Customer Portal"
-// option). Either way, this resolves one unambiguous effectiveCustomerId so
+// staff role/permission catalog (shared/permissions.ts): CUSTOMER is a role
+// like any other (held via user_roles, possibly alongside staff roles, e.g.
+// an admin who also wants to see the member-facing booking experience), and
+// it never appears in DEFAULT_ROLE_PERMISSIONS so it grants zero staff
+// actions on its own. This resolves one unambiguous effectiveCustomerId so
 // route handlers never have to re-derive which field to trust.
 export function requireCustomer(req: Request, res: Response, next: NextFunction) {
   if (!req.isAuthenticated()) return res.status(401).json({ message: "Authentication required" });
   const user = req.user as any;
-  const effectiveCustomerId = user.accountType === "CUSTOMER" ? user.customerId : user.linkedCustomerId;
-  if (!effectiveCustomerId) {
+  const roles = (user.roles as string[] | undefined) ?? [];
+  if (!roles.includes("CUSTOMER") || !user.customerId) {
     return res.status(403).json({ message: "Customer account required" });
   }
-  (req as any).effectiveCustomerId = effectiveCustomerId;
+  (req as any).effectiveCustomerId = user.customerId;
   next();
 }
 

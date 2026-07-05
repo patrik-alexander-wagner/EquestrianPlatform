@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 function formatBillingMonth(billingMonth: string | null | undefined): string {
   if (!billingMonth) return "-";
@@ -297,17 +298,15 @@ export default function InvoicesPage() {
       <div className="flex flex-wrap items-end gap-4 mb-4">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Customer</Label>
-          <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger className="w-56" data-testid="select-filter-customer">
-              <SelectValue placeholder="All customers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All customers</SelectItem>
-              {customerOptions.map((name) => (
-                <SelectItem key={name} value={name}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={customerFilter}
+            onValueChange={setCustomerFilter}
+            options={[{ value: "all", label: "All customers" }, ...customerOptions.map((name) => ({ value: name, label: name }))]}
+            placeholder="All customers"
+            searchPlaceholder="Search customers..."
+            className="w-56"
+            testId="select-filter-customer"
+          />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">NetSuite Status</Label>

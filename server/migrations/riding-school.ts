@@ -12,16 +12,11 @@ export async function runRidingSchoolMigration() {
   try {
     await client.query("SELECT pg_advisory_lock(20260701)");
 
-    // --- users: identity columns for the Riding School customer portal ---
-
-    const accountTypeCol = await client.query(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'account_type'
-    `);
-    if (accountTypeCol.rows.length === 0) {
-      console.log("RidingSchoolMigration: Adding account_type column to users...");
-      await client.query(`ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'STAFF'`);
-    }
+    // --- users: identity column for the Riding School customer portal ---
+    // account_type/linked_customer_id were also added here originally, but
+    // server/migrations/multi-role.ts now owns and retires those columns
+    // (superseded by the user_roles table) — adding them here again would
+    // just have that later migration re-drop them on every boot.
 
     const customerIdCol = await client.query(`
       SELECT column_name FROM information_schema.columns
@@ -30,15 +25,6 @@ export async function runRidingSchoolMigration() {
     if (customerIdCol.rows.length === 0) {
       console.log("RidingSchoolMigration: Adding customer_id column to users...");
       await client.query(`ALTER TABLE users ADD COLUMN customer_id UUID REFERENCES customers(id)`);
-    }
-
-    const linkedCustomerIdCol = await client.query(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'linked_customer_id'
-    `);
-    if (linkedCustomerIdCol.rows.length === 0) {
-      console.log("RidingSchoolMigration: Adding linked_customer_id column to users...");
-      await client.query(`ALTER TABLE users ADD COLUMN linked_customer_id UUID REFERENCES customers(id)`);
     }
 
     // --- shared resources (no interdependencies beyond users/horses) ---
@@ -68,16 +54,10 @@ export async function runRidingSchoolMigration() {
       )
     `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS horse_wellbeing_status (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        horse_id UUID NOT NULL REFERENCES horses(id),
-        status_tag TEXT NOT NULL,
-        note TEXT,
-        set_by UUID REFERENCES users(id),
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    // horse_wellbeing_status was created here originally, but has since been
+    // retired — superseded by rs_horse_status (Riding School-scoped,
+    // structured mood+lesson-limits). The table itself is dropped in
+    // server/migrations/riding-school-horses.ts.
 
     // --- riding-school identity: riders (depends on customers, rider_levels) ---
 

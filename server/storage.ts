@@ -5,7 +5,7 @@ import {
   users, customers, horses, stables, boxes, items, itemPrices,
   liveryAgreements, billingElements, invoices, appSettings, agreementDocuments, auditLogs, invoiceValidations,
   horseOwnership, horseMovements, monthlyBillingApprovals,
-  roles, rolePermissions,
+  roles, rolePermissions, userRoles, instructors,
   type Role, type InsertRole,
   type RolePermission,
   type User, type InsertUser,
@@ -53,10 +53,11 @@ function isExcludedReportCustomer(name: string | undefined | null): boolean {
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  getUserBySsoId(ssoId: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUserPassword(id: string, password: string, role?: string): Promise<void>;
-  getUsers(): Promise<Omit<User, "password">[]>;
+  createUser(user: InsertUser, roleKeys: string[]): Promise<User>;
+  updateUserPassword(id: string, password: string): Promise<void>;
+  getUsers(): Promise<(Omit<User, "password"> & { roles: string[] })[]>;
+  getUserRoles(userId: string): Promise<string[]>;
+  setUserRoles(userId: string, roleKeys: string[]): Promise<void>;
 
   getRoles(): Promise<Role[]>;
   getRole(key: string): Promise<Role | undefined>;
@@ -113,6 +114,7 @@ export interface IStorage {
   deleteBillingElement(id: string): Promise<boolean>;
   getHorsesWithActiveAgreements(): Promise<any[]>;
   getHorsesWithOwners(): Promise<any[]>;
+  setRidingSchoolHorses(horseIds: string[]): Promise<void>;
 
   getInvoices(): Promise<any[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
@@ -152,12 +154,13 @@ export interface IStorage {
 
   createInvoiceValidation(validation: InsertInvoiceValidation): Promise<InvoiceValidation>;
   getInvoiceValidations(invoiceId: string): Promise<any[]>;
-  updateUser(id: string, data: Partial<{ username: string; role: string }>): Promise<User | undefined>;
+  updateUser(id: string, data: Partial<{ username: string; customerId: string | null }>): Promise<User | undefined>;
 
   createHorseOwnership(ownership: InsertHorseOwnership): Promise<HorseOwnership>;
   getHorseOwnershipByHorseId(horseId: string): Promise<HorseOwnership | undefined>;
   getHorseOwnership(horseId: string): Promise<HorseOwnership[]>;
   getHorseOwnershipByCustomerId(customerId: string): Promise<HorseOwnership[]>;
+  getHorsesWithLocationForCustomer(customerId: string): Promise<any[]>;
 
   createHorseMovement(movement: InsertHorseMovement): Promise<HorseMovement>;
   updateHorseMovement(id: string, data: Partial<InsertHorseMovement>): Promise<HorseMovement | undefined>;
@@ -186,29 +189,60 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async getUserBySsoId(ssoId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.ssoId, ssoId));
-    return user;
-  }
-
-  async createUser(user: InsertUser): Promise<User> {
+  async createUser(user: InsertUser, roleKeys: string[]): Promise<User> {
     const hashedPassword = await hashPassword(user.password);
     const [created] = await db.insert(users).values({ ...user, password: hashedPassword }).returning();
+    await this.setUserRoles(created.id, roleKeys);
     return created;
   }
 
-  async updateUserPassword(id: string, password: string, role?: string): Promise<void> {
+  async updateUserPassword(id: string, password: string): Promise<void> {
     const hashedPassword = await hashPassword(password);
-    const updates: any = { password: hashedPassword };
-    if (role) updates.role = role;
-    await db.update(users).set(updates).where(eq(users.id, id));
+    await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id));
   }
 
-  async getUsers(): Promise<Omit<User, "password">[]> {
-    return await db.select({
-      id: users.id, username: users.username, role: users.role,
-      accountType: users.accountType, customerId: users.customerId, linkedCustomerId: users.linkedCustomerId,
+  async getUsers(): Promise<(Omit<User, "password"> & { roles: string[] })[]> {
+    const allUsers = await db.select({
+      id: users.id, username: users.username, customerId: users.customerId,
     }).from(users);
+    const allUserRoles = await db.select().from(userRoles);
+    const rolesByUser: Record<string, string[]> = {};
+    for (const ur of allUserRoles) (rolesByUser[ur.userId] ||= []).push(ur.roleKey);
+    return allUsers.map(u => ({ ...u, roles: rolesByUser[u.id] || [] })) as (Omit<User, "password"> & { roles: string[] })[];
+  }
+
+  async getUserRoles(userId: string): Promise<string[]> {
+    const rows = await db.select().from(userRoles).where(eq(userRoles.userId, userId));
+    return rows.map(r => r.roleKey);
+  }
+
+  async setUserRoles(userId: string, roleKeys: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(userRoles).where(eq(userRoles.userId, userId));
+      const unique = Array.from(new Set(roleKeys));
+      if (unique.length > 0) {
+        await tx.insert(userRoles).values(unique.map(roleKey => ({ userId, roleKey })));
+      }
+    });
+    await this.syncInstructorForUser(userId, roleKeys);
+  }
+
+  // Instructors are no longer created by hand — holding the INSTRUCTOR role
+  // is what instantiates (and retires) their row in the shared `instructors`
+  // table, keeping that table as the single source of truth lessons/
+  // recurrences reference, while user_roles stays the source of truth for
+  // "is this person an instructor".
+  async syncInstructorForUser(userId: string, roleKeys: string[]): Promise<void> {
+    const isInstructor = roleKeys.includes("INSTRUCTOR");
+    const [existing] = await db.select().from(instructors).where(eq(instructors.userId, userId));
+    if (isInstructor && !existing) {
+      const user = await this.getUser(userId);
+      await db.insert(instructors).values({ name: user?.username || "Instructor", status: "active", userId });
+    } else if (isInstructor && existing && existing.status !== "active") {
+      await db.update(instructors).set({ status: "active" }).where(eq(instructors.id, existing.id));
+    } else if (!isInstructor && existing && existing.status === "active") {
+      await db.update(instructors).set({ status: "inactive" }).where(eq(instructors.id, existing.id));
+    }
   }
 
   async getRoles(): Promise<Role[]> {
@@ -237,7 +271,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async countUsersByRole(roleKey: string): Promise<number> {
-    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.role, roleKey));
+    const [row] = await db.select({ count: sql<number>`count(distinct ${userRoles.userId})::int` })
+      .from(userRoles).where(eq(userRoles.roleKey, roleKey));
     return row?.count ?? 0;
   }
 
@@ -777,7 +812,21 @@ export class DatabaseStorage implements IStorage {
         boxId: box?.id || null,
         boxName: box?.name || null,
         stableName: stable?.name || null,
+        isRidingSchoolHorse: horse.isRidingSchoolHorse,
       };
+    });
+  }
+
+  // Bulk-sets the Riding School roster to exactly this set of horse ids
+  // (simple membership flag, no history — see shared/schema.ts comment on
+  // horses.isRidingSchoolHorse). Used by the "Assign Riding School Horses"
+  // dialog, which always submits the full desired roster rather than a delta.
+  async setRidingSchoolHorses(horseIds: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.update(horses).set({ isRidingSchoolHorse: false });
+      if (horseIds.length > 0) {
+        await tx.update(horses).set({ isRidingSchoolHorse: true }).where(inArray(horses.id, horseIds));
+      }
     });
   }
 
@@ -1789,7 +1838,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateUser(id: string, data: Partial<{ username: string; role: string }>): Promise<User | undefined> {
+  async updateUser(id: string, data: Partial<{ username: string; customerId: string | null }>): Promise<User | undefined> {
     const [updated] = await db.update(users).set(data).where(eq(users.id, id)).returning();
     return updated;
   }
@@ -1810,6 +1859,31 @@ export class DatabaseStorage implements IStorage {
 
   async getHorseOwnershipByCustomerId(customerId: string): Promise<HorseOwnership[]> {
     return await db.select().from(horseOwnership).where(eq(horseOwnership.customerId, customerId));
+  }
+
+  async getHorsesWithLocationForCustomer(customerId: string): Promise<any[]> {
+    const ownership = await this.getHorseOwnershipByCustomerId(customerId);
+    if (ownership.length === 0) return [];
+    const allBoxes = await db.select().from(boxes);
+    const allStables = await db.select().from(stables);
+    const allMovements = await db.select().from(horseMovements);
+
+    const result = [];
+    for (const o of ownership) {
+      const horse = await this.getHorse(o.horseId);
+      if (!horse) continue;
+      const activeMovement = allMovements.find(m => m.horseId === horse.id && !m.checkOut);
+      const box = activeMovement ? allBoxes.find(b => b.id === activeMovement.stableboxId) : null;
+      const stable = box ? allStables.find(s => s.id === box.stableId) : null;
+      result.push({
+        ...horse,
+        horseName: formatHorseName(horse),
+        stable: stable?.name || null,
+        box: box?.name || null,
+        since: activeMovement?.checkIn || null,
+      });
+    }
+    return result;
   }
 
   async createHorseMovement(movement: InsertHorseMovement): Promise<HorseMovement> {

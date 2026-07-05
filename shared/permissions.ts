@@ -84,12 +84,12 @@ export const ACTIONS: ActionDef[] = [
   { key: "riding_school.packages.manage", label: "Manage riding packages", group: "Riding School", type: "action" },
   { key: "riding_school.settings.manage", label: "Manage riding school settings", group: "Riding School", type: "action" },
   { key: "riding_school.bookings.manage", label: "Manage bookings on behalf of customers", group: "Riding School", type: "action" },
+  { key: "riding_school.horses.manage", label: "Assign riding school horses & record status", group: "Riding School", type: "action" },
 
   // Shared Resources
   { key: "shared_resources.view", label: "View Arenas / Instructors pages", group: "Shared Resources", type: "view" },
   { key: "shared_resources.instructors.manage", label: "Add / edit instructors", group: "Shared Resources", type: "action" },
   { key: "shared_resources.arenas.manage", label: "Add / edit arenas", group: "Shared Resources", type: "action" },
-  { key: "shared_resources.horse_wellbeing.manage", label: "Record horse wellbeing status", group: "Shared Resources", type: "action" },
 ];
 
 export const ACTION_KEYS = ACTIONS.map((a) => a.key);
@@ -112,6 +112,16 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
   { key: "FINANCE", name: "Finance", isAdmin: false },
   { key: "VIEWER", name: "Viewer (read-only)", isAdmin: false },
   { key: "RIDING_SCHOOL_ADMIN", name: "Riding School Admin", isAdmin: false },
+  // Deliberately zero default permissions: this role only grants Customer
+  // Portal access (via requireCustomer), never any staff action/view. A user
+  // can hold this alongside any staff role (see DEFAULT_ROLE_PERMISSIONS note).
+  { key: "CUSTOMER", name: "Customer", isAdmin: false },
+  // Deliberately zero default permissions too — holding this role is what
+  // instantiates/retires the user's row in the `instructors` table (see
+  // DatabaseStorage.syncInstructorForUser), it doesn't grant any staff
+  // action on its own. Combine with a staff role (e.g. RIDING_SCHOOL_ADMIN)
+  // if the instructor also needs to manage the schedule themselves.
+  { key: "INSTRUCTOR", name: "Instructor", isAdmin: false },
 ];
 
 // View actions that every non-admin operational role gets by default.
@@ -176,15 +186,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     ...ALL_OPERATIONAL_VIEWS,
   ],
   RIDING_SCHOOL_ADMIN: [
+    // The riding-school nav already links to Customers (customers.view) and
+    // Horse Management (fetches /api/horses, horses.view) — grant both so
+    // those pages actually load for a Riding School Admin who isn't also
+    // ADMIN/LIVERY_ADMIN. Also needed for the calendar's Horses/Customers
+    // resource-axis tabs.
+    "customers.view",
+    "horses.view",
     "riding_school.view",
     "riding_school.calendar.manage",
     "riding_school.templates.manage",
     "riding_school.packages.manage",
     "riding_school.settings.manage",
     "riding_school.bookings.manage",
+    "riding_school.horses.manage",
     "shared_resources.view",
     "shared_resources.instructors.manage",
     "shared_resources.arenas.manage",
-    "shared_resources.horse_wellbeing.manage",
   ],
 };

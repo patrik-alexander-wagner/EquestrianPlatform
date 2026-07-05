@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 export interface MeResponse {
   id: string;
   username: string;
-  role: string;
+  roles: string[];
   isAdmin: boolean;
   permissions: string[];
+  customerId: string | null;
 }
 
 export function usePermissions() {
@@ -13,7 +14,7 @@ export function usePermissions() {
     queryKey: ["/api/me"],
   });
   return {
-    role: data?.role ?? "",
+    roles: data?.roles ?? [],
     isAdmin: data?.isAdmin ?? false,
     permissions: data?.permissions ?? [],
     isLoading,
@@ -21,11 +22,14 @@ export function usePermissions() {
 }
 
 /**
- * Returns true if the current user may perform the given action key.
- * Admins (isAdmin) implicitly have every permission.
+ * Returns true if the current user may perform the given action key (or, if
+ * given an array, ANY one of them — matching the backend's requirePermission
+ * "any of these keys" semantics). Admins (isAdmin) implicitly have every
+ * permission.
  */
-export function useCan(actionKey: string): boolean {
+export function useCan(actionKey: string | string[]): boolean {
   const { isAdmin, permissions } = usePermissions();
   if (isAdmin) return true;
-  return permissions.includes(actionKey);
+  const keys = Array.isArray(actionKey) ? actionKey : [actionKey];
+  return keys.some((k) => permissions.includes(k));
 }

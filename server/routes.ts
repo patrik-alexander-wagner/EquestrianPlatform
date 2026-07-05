@@ -19,7 +19,7 @@ import { z, ZodError } from "zod";
 import { ACTIONS, ACTION_KEYS, isValidActionKey } from "@shared/permissions";
 import {
   requirePermission, loadPermissions, ensureLoaded,
-  isAdminRole, can, permissionsForRole,
+  isAdminRole, can, permissionsForRoles,
 } from "./permissions";
 import { validateBody, requireAuth, auditLog } from "./route-helpers";
 import { registerSharedResourcesRoutes } from "./modules/shared-resources/routes";
@@ -34,111 +34,10 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const ssoLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-  message: { message: "Too many SSO requests. Please try again in a minute." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-
-  app.get("/sso", ssoLimiter, async (req, res) => {
-    const token = req.query.token;
-    if (!token) return res.redirect("/login?error=missing_token");
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      let ssoResponse: globalThis.Response;
-      try {
-        ssoResponse = await fetch("https://aksportal.com/api/sso/verify-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!ssoResponse.ok) {
-        return res.redirect("/login?error=invalid_token");
-      }
-
-      const userData = await ssoResponse.json();
-
-      if (!userData.id || typeof userData.id !== "string") {
-        console.warn("SSO login rejected: missing or invalid external subject identifier");
-        return res.redirect("/login?error=sso_failed");
-      }
-
-      if (!userData.username || typeof userData.username !== "string") {
-        return res.redirect("/login?error=sso_failed");
-      }
-
-      const ssoRoleMap: Record<string, string> = {
-        "superadmin": "ADMIN", "admin": "ADMIN",
-        "livery_admin": "LIVERY_ADMIN", "veterinary": "VETERINARY",
-        "stores": "STORES", "finance": "FINANCE", "viewer": "VIEWER",
-      };
-      const incomingRole = userData.role?.toLowerCase();
-      const mappedRole = incomingRole ? ssoRoleMap[incomingRole] : undefined;
-      if (!mappedRole) {
-        console.warn(`SSO login rejected: unrecognized or missing role '${userData.role}' for SSO id '${userData.id}'`);
-        return res.redirect("/login?error=sso_role_unknown");
-      }
-
-      let localUser = await storage.getUserBySsoId(userData.id);
-      if (!localUser) {
-        const crypto = await import("crypto");
-        try {
-          localUser = await storage.createUser({
-            username: userData.username,
-            password: crypto.randomUUID(),
-            role: mappedRole,
-            ssoId: userData.id,
-          });
-        } catch (createErr: any) {
-          if (createErr?.code === "23505") {
-            console.warn(
-              `SSO provisioning blocked: username '${userData.username}' already exists as a local account ` +
-              `(SSO id '${userData.id}'). Manual account linking is required.`
-            );
-            return res.redirect("/login?error=sso_username_conflict");
-          }
-          throw createErr;
-        }
-      } else if (localUser.role !== mappedRole) {
-        const updated = await storage.updateUser(localUser.id, { role: mappedRole });
-        if (!updated) {
-          console.error(`SSO login rejected: failed to synchronize role for user id '${localUser.id}'`);
-          return res.redirect("/login?error=sso_failed");
-        }
-        localUser = updated;
-      }
-
-      const sessionUser = {
-        id: localUser.id, username: localUser.username, role: localUser.role,
-        accountType: localUser.accountType, customerId: localUser.customerId, linkedCustomerId: localUser.linkedCustomerId,
-      };
-      req.logIn(sessionUser, (err) => {
-        if (err) {
-          console.error("SSO login error:", err);
-          return res.redirect("/login?error=sso_failed");
-        }
-        auditLog(req, "sso_login", "user", localUser!.id, `SSO login via Unified Portal`);
-        return res.redirect("/");
-      });
-    } catch (error) {
-      console.error("SSO verification error:", error);
-      return res.redirect("/login?error=sso_failed");
-    }
-  });
 
   // Auth routes (public)
   app.post("/api/login", loginLimiter, (req, res, next) => {
@@ -147,7 +46,7 @@ export async function registerRoutes(
       if (!user) return res.status(401).json({ message: info?.message || "Invalid credentials" });
       req.logIn(user, (err) => {
         if (err) return res.status(500).json({ message: "Login failed" });
-        res.json({ id: user.id, username: user.username, role: user.role });
+        res.json({ id: user.id, username: user.username, roles: user.roles });
       });
     })(req, res, next);
   });
@@ -163,15 +62,14 @@ export async function registerRoutes(
     if (req.isAuthenticated()) {
       await ensureLoaded();
       const user = req.user as any;
+      const roles = (user.roles as string[] | undefined) ?? [];
       res.json({
         id: user.id,
         username: user.username,
-        role: user.role,
-        isAdmin: isAdminRole(user.role),
-        permissions: permissionsForRole(user.role),
-        accountType: user.accountType || "STAFF",
+        roles,
+        isAdmin: isAdminRole(roles),
+        permissions: permissionsForRoles(roles),
         customerId: user.customerId || null,
-        linkedCustomerId: user.linkedCustomerId || null,
       });
     } else {
       res.status(401).json({ message: "Not authenticated" });
@@ -197,13 +95,19 @@ export async function registerRoutes(
 
   app.post("/api/users", requirePermission("admin.users"), async (req, res) => {
     try {
-      const data = validateBody(insertUserSchema, req.body);
-      if (!(await storage.getRole(data.role))) {
-        return res.status(400).json({ message: `Invalid role: ${data.role}` });
+      const { roleKeys, ...body } = req.body;
+      const data = validateBody(insertUserSchema, body);
+      const keys: string[] = Array.isArray(roleKeys) ? roleKeys : [];
+      if (keys.length === 0) return res.status(400).json({ message: "At least one role is required" });
+      for (const key of keys) {
+        if (!(await storage.getRole(key))) return res.status(400).json({ message: `Invalid role: ${key}` });
       }
-      const user = await storage.createUser(data);
-      auditLog(req, "create_user", "user", user.id, `Created user: ${user.username} (role: ${user.role})`);
-      res.json({ id: user.id, username: user.username, role: user.role });
+      if (keys.includes("CUSTOMER") && !data.customerId) {
+        return res.status(400).json({ message: "A linked customer is required for the Customer role" });
+      }
+      const user = await storage.createUser(data, keys);
+      auditLog(req, "create_user", "user", user.id, `Created user: ${user.username} (roles: ${keys.join(", ")})`);
+      res.json({ id: user.id, username: user.username, roles: keys });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -211,27 +115,34 @@ export async function registerRoutes(
 
   app.patch("/api/users/:id", requirePermission("admin.users"), async (req, res) => {
     try {
-      const { role, password } = req.body;
-      if (role && !(await storage.getRole(role))) {
-        return res.status(400).json({ message: `Invalid role: ${role}` });
+      const userId = req.params.id as string;
+      const { roleKeys, password, customerId } = req.body;
+      if (roleKeys !== undefined) {
+        const keys: string[] = Array.isArray(roleKeys) ? roleKeys : [];
+        if (keys.length === 0) return res.status(400).json({ message: "At least one role is required" });
+        for (const key of keys) {
+          if (!(await storage.getRole(key))) return res.status(400).json({ message: `Invalid role: ${key}` });
+        }
+        if (keys.includes("CUSTOMER")) {
+          if (!customerId) return res.status(400).json({ message: "A linked customer is required for the Customer role" });
+          await storage.updateUser(userId, { customerId });
+        } else {
+          await storage.updateUser(userId, { customerId: null });
+        }
+        await storage.setUserRoles(userId, keys);
+        auditLog(req, "update_user", "user", userId, `Updated user roles to: ${keys.join(", ")}`);
       }
       if (password !== undefined && password !== null && password !== "") {
         if (typeof password !== "string" || password.length < 6) {
           return res.status(400).json({ message: "Password must be at least 6 characters" });
         }
-        await storage.updateUserPassword(req.params.id, password);
-        auditLog(req, "reset_password", "user", req.params.id, `Reset password for user`);
+        await storage.updateUserPassword(userId, password);
+        auditLog(req, "reset_password", "user", userId, `Reset password for user`);
       }
-      let updated;
-      if (role) {
-        updated = await storage.updateUser(req.params.id, { role });
-        if (!updated) return res.status(404).json({ message: "User not found" });
-        auditLog(req, "update_user", "user", req.params.id, `Updated user role to: ${role}`);
-      } else {
-        updated = await storage.getUser(req.params.id);
-        if (!updated) return res.status(404).json({ message: "User not found" });
-      }
-      res.json({ id: updated.id, username: updated.username, role: updated.role });
+      const updated = await storage.getUser(userId);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const roles = await storage.getUserRoles(updated.id);
+      res.json({ id: updated.id, username: updated.username, roles, customerId: updated.customerId });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }
@@ -913,7 +824,7 @@ export async function registerRoutes(
       }
       await ensureLoaded();
       const requiredAction = step === "VET" ? "approvals.vet" : "approvals.stores";
-      if (!isAdminRole(user.role) && !can(user.role, requiredAction)) {
+      if (!isAdminRole(user.roles) && !can(user.roles, requiredAction)) {
         return res.status(403).json({ message: `You do not have permission to manage ${step} approvals` });
       }
 
@@ -1559,31 +1470,6 @@ export async function registerRoutes(
       await storage.updateInvoice(req.params.id, updateData);
 
       res.json({ success: true, netsuiteId });
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
-  // Settings - N8N Webhook URL
-  app.get("/api/settings/n8n-webhook", requirePermission("admin.settings"), async (_req, res) => {
-    try {
-      const url = await storage.getSetting("n8n_webhook_url");
-      res.json({ url: url || "" });
-    } catch (e: any) {
-      res.status(e.status || 500).json({ message: e.message || "Server error" });
-    }
-  });
-
-  app.post("/api/settings/n8n-webhook", requirePermission("admin.settings"), async (req, res) => {
-    try {
-      const { url } = req.body;
-      if (typeof url !== "string") return res.status(400).json({ message: "URL must be a string" });
-      if (url.trim() && !/^https?:\/\/.+/i.test(url.trim())) {
-        return res.status(400).json({ message: "URL must start with http:// or https://" });
-      }
-      await storage.setSetting("n8n_webhook_url", url.trim());
-      auditLog(req, "update_setting", "setting", "n8n_webhook_url", `Updated N8N webhook URL`);
-      res.json({ success: true });
     } catch (e: any) {
       res.status(e.status || 500).json({ message: e.message || "Server error" });
     }

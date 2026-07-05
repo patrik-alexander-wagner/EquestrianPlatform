@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoveRight, X, Search, LogOut } from "lucide-react";
@@ -272,17 +272,15 @@ export default function HorseMovementsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={stableFilter} onValueChange={setStableFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-stable-filter">
-            <SelectValue placeholder="All Stables" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Stables</SelectItem>
-            {stables.map(s => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={stableFilter}
+          onValueChange={setStableFilter}
+          options={[{ value: "all", label: "All Stables" }, ...stables.map(s => ({ value: s, label: s }))]}
+          placeholder="All Stables"
+          searchPlaceholder="Search stables..."
+          className="w-[180px]"
+          testId="select-stable-filter"
+        />
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
           <Input
@@ -601,16 +599,14 @@ export default function HorseMovementsPage() {
             {customerMoveTargets.length === 0 ? (
               <p className="text-sm text-muted-foreground italic">No other available boxes under this customer's agreements.</p>
             ) : (
-              <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-                <SelectTrigger data-testid="select-target-box">
-                  <SelectValue placeholder="Select target box..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {customerMoveTargets.map(b => (
-                    <SelectItem key={b.id} value={b.id}>{b.name} — {b.stableName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={targetBoxId}
+                onValueChange={setTargetBoxId}
+                options={customerMoveTargets.map(b => ({ value: b.id, label: `${b.name} — ${b.stableName}` }))}
+                placeholder="Select target box..."
+                searchPlaceholder="Search boxes..."
+                testId="select-target-box"
+              />
             )}
           </div>
           <DialogFooter>
@@ -658,16 +654,14 @@ export default function HorseMovementsPage() {
           <div className="space-y-4">
             <div>
               <Label>Horse</Label>
-              <Select value={checkinHorseId} onValueChange={setCheckinHorseId}>
-                <SelectTrigger data-testid="select-checkin-horse">
-                  <SelectValue placeholder="Select a horse..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {eligibleCheckinHorses.map(h => (
-                    <SelectItem key={h.id} value={h.id}>{h.horseName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={checkinHorseId}
+                onValueChange={setCheckinHorseId}
+                options={eligibleCheckinHorses.map(h => ({ value: h.id, label: h.horseName }))}
+                placeholder="Select a horse..."
+                searchPlaceholder="Search horses..."
+                testId="select-checkin-horse"
+              />
               {eligibleCheckinHorses.length === 0 && (
                 <p className="text-sm text-muted-foreground mt-1">No available horses for this customer.</p>
               )}

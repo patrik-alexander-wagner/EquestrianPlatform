@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, type AdminMode } from "@/components/app-sidebar";
 import { PortalSidebar } from "@/components/portal-sidebar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { LogOut, ArrowLeftRight } from "lucide-react";
@@ -36,7 +36,7 @@ import RidingSchoolOverviewPage from "@/pages/riding-school/overview";
 import RidingSchoolCalendarPage from "@/pages/riding-school/calendar";
 import HorseManagementPage from "@/pages/riding-school/horse-management";
 import RidingSchoolReportsPage from "@/pages/riding-school/reports";
-import RidingSchoolSettingsPage from "@/pages/riding-school/settings";
+import BookingHistoryPage from "@/pages/riding-school/booking-history";
 import PortalDashboardPage from "@/pages/portal/dashboard";
 import PortalCalendarPage from "@/pages/portal/calendar";
 import MyRidersPage from "@/pages/portal/my-riders";
@@ -44,7 +44,7 @@ import PortalPackagesPage from "@/pages/portal/packages";
 import MyHorsesPage from "@/pages/portal/my-horses";
 import { usePermissions, useCan } from "@/hooks/use-permissions";
 
-function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string }) {
+function PermissionRoute({ component: Component, action }: { component: React.ComponentType; action: string | string[] }) {
   const { isLoading } = usePermissions();
   const allowed = useCan(action);
   if (isLoading) return null;
@@ -70,7 +70,7 @@ function Router() {
       <Route path="/reports/livery">{() => <PermissionRoute component={ReportsPage} action="reports.view" />}</Route>
       <Route path="/stable-management/horse-movements">{() => <PermissionRoute component={HorseMovementsPage} action="movements.view" />}</Route>
       <Route path="/admin/users">{() => <PermissionRoute component={AdminUsersPage} action="admin.users" />}</Route>
-      <Route path="/admin/settings">{() => <PermissionRoute component={AdminSettingsPage} action="admin.settings" />}</Route>
+      <Route path="/admin/settings">{() => <PermissionRoute component={AdminSettingsPage} action={["admin.settings", "riding_school.templates.manage", "riding_school.packages.manage", "riding_school.settings.manage"]} />}</Route>
       <Route path="/admin/audit-logs">{() => <PermissionRoute component={AdminAuditLogsPage} action="admin.audit_logs" />}</Route>
       <Route path="/admin/roles">{() => <PermissionRoute component={AdminRolesPage} action="admin.roles" />}</Route>
       <Route path="/riding-school/arenas">{() => <PermissionRoute component={ArenasPage} action="shared_resources.view" />}</Route>
@@ -80,7 +80,7 @@ function Router() {
       <Route path="/riding-school/calendar">{() => <PermissionRoute component={RidingSchoolCalendarPage} action="riding_school.view" />}</Route>
       <Route path="/riding-school/horse-management">{() => <PermissionRoute component={HorseManagementPage} action="riding_school.view" />}</Route>
       <Route path="/riding-school/reports">{() => <PermissionRoute component={RidingSchoolReportsPage} action="riding_school.view" />}</Route>
-      <Route path="/riding-school/settings">{() => <PermissionRoute component={RidingSchoolSettingsPage} action="riding_school.settings.manage" />}</Route>
+      <Route path="/riding-school/booking-history">{() => <PermissionRoute component={BookingHistoryPage} action="riding_school.view" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -112,25 +112,42 @@ function getInitials(username: string): string {
 function App() {
   const [, navigate] = useLocation();
   const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
-  const [userRole, setUserRole] = useState<string>("user");
   const [username, setUsername] = useState<string>("");
-  const [accountType, setAccountType] = useState<string>("STAFF");
-  const [linkedCustomerId, setLinkedCustomerId] = useState<string | null>(null);
-  // Only meaningful for STAFF users with linkedCustomerId set (a staff member
-  // who is also a member). CUSTOMER accountType always renders the portal —
-  // there is no admin identity to switch back to.
+  const [roles, setRoles] = useState<string[]>([]);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  // Only meaningful for a user who holds CUSTOMER alongside at least one
+  // staff role (e.g. an admin who also wants the member-facing view). A user
+  // who ONLY holds CUSTOMER always renders the portal — there is no admin
+  // identity to switch back to.
   const [viewMode, setViewMode] = useState<"admin" | "portal">("admin");
+  // Lifted out of AppSidebar so the whole shell (sidebar + header avatar) can
+  // theme together — Riding School uses a near-black accent everywhere
+  // Stable Management uses brand green.
+  const [adminMode, setAdminMode] = useState<AdminMode>(() => {
+    if (typeof window === "undefined") return "stable";
+    return (localStorage.getItem("saddlehub.sidebarMode") as AdminMode) || "stable";
+  });
+
+  const handleAdminModeChange = (next: AdminMode) => {
+    setAdminMode(next);
+    localStorage.setItem("saddlehub.sidebarMode", next);
+  };
+
+  const hasCustomerRole = roles.includes("CUSTOMER") && !!customerId;
+  const hasStaffRole = roles.some(r => r !== "CUSTOMER");
+  const canSwitchPortal = hasCustomerRole && hasStaffRole;
 
   const checkAuth = async () => {
     try {
       const res = await fetch("/api/me");
       if (res.ok) {
         const data = await res.json();
-        setUserRole(data.role || "user");
+        const fetchedRoles: string[] = data.roles || [];
         setUsername(data.username || "");
-        setAccountType(data.accountType || "STAFF");
-        setLinkedCustomerId(data.linkedCustomerId || null);
-        setViewMode(data.accountType === "CUSTOMER" ? "portal" : "admin");
+        setRoles(fetchedRoles);
+        setCustomerId(data.customerId || null);
+        const isPureCustomer = fetchedRoles.length > 0 && fetchedRoles.every((r: string) => r === "CUSTOMER");
+        setViewMode(isPureCustomer ? "portal" : "admin");
         setAuthState("authenticated");
       } else {
         setAuthState("unauthenticated");
@@ -157,10 +174,9 @@ function App() {
   const handleLogout = async () => {
     await fetch("/api/logout", { method: "POST" });
     setAuthState("unauthenticated");
-    setUserRole("user");
     setUsername("");
-    setAccountType("STAFF");
-    setLinkedCustomerId(null);
+    setRoles([]);
+    setCustomerId(null);
     setViewMode("admin");
     navigate("/");
     queryClient.clear();
@@ -191,14 +207,14 @@ function App() {
   };
 
   const showPortal = viewMode === "portal";
-  const canSwitchPortal = accountType === "STAFF" && !!linkedCustomerId;
+  const themeClass = showPortal ? "portal-theme" : adminMode === "riding-school" ? "riding-school-theme" : "";
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            {showPortal ? <PortalSidebar onLogout={handleLogout} /> : <AppSidebar onLogout={handleLogout} />}
+          <div className={`flex h-screen w-full ${themeClass}`}>
+            {showPortal ? <PortalSidebar onLogout={handleLogout} /> : <AppSidebar onLogout={handleLogout} mode={adminMode} onModeChange={handleAdminModeChange} />}
             <div className="flex flex-col flex-1 min-w-0">
               <header className="flex items-center gap-2 p-2 border-b shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />

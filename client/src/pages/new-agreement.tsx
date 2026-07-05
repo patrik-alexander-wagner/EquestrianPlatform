@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -324,16 +325,14 @@ export default function NewAgreementPage() {
 
                 <div>
                   <Label>Livery Package</Label>
-                  <Select value={selectedItemId} onValueChange={handleItemChange}>
-                    <SelectTrigger data-testid="select-agreement-item">
-                      <SelectValue placeholder="Select livery package..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {liveryItems.map(i => (
-                        <SelectItem key={i.id} value={i.id}>{i.name} (AED {i.price}/mo)</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={selectedItemId}
+                    onValueChange={handleItemChange}
+                    options={liveryItems.map(i => ({ value: i.id, label: `${i.name} (AED ${i.price}/mo)` }))}
+                    placeholder="Select livery package..."
+                    searchPlaceholder="Search packages..."
+                    testId="select-agreement-item"
+                  />
                 </div>
 
                 {selectedItem && (
